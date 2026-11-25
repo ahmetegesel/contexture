@@ -27,7 +27,7 @@ describe.skipIf(!fts5Available())('the fts5 store', { concurrent: true }, () => 
       }, 'fts5', 'fts5-docs'),
       seed(async (sb) => {
         dataFile(sb, 'extensions', 'docs', DOCS_SHAPED);
-        dataFile(sb, 'modules', 'exactonly', 'root: exact-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
+        dataFile(sb, 'modules', 'exactonly', 'root: exact-root\nsuffix: .txt\nkey: <a>/<b>\n');
         const s = store(sb, 'fts5');
         for (const ns of Object.keys(SEARCH_DATA)) {
           dataFile(sb, 'modules', ns, SEARCH_DATA[ns]);
@@ -61,113 +61,39 @@ describe.skipIf(!fts5Available())('the fts5 store', { concurrent: true }, () => 
     expect(rows(sb, "SELECT length(value) FROM store WHERE namespace = 'docs' AND key = 'workspace/empty';")).toEqual(['0']);
   });
 
-  describe('ranked search', () => {
-    async function ranked(ns: string, mode: string, query: string) {
-      const r = await store(fresh(searched), 'fts5').search(ns, mode, '20', q(query));
-      return answer(r, 'store.search');
-    }
-
-    it.each(['hybrid', 'trigram'])('[plugins-r8] answers %s over the derived documents with the entity identity and a positive score', async (mode) => {
-      const a = await ranked('searchdoc', mode, 'needle');
-      expect([a.namespace, a.query, a.mode, a.total_matches]).toEqual(['searchdoc', 'needle', mode, 3]);
-      expect(a.results).toContainEqual(expect.objectContaining({ key: 'u1/backlog', entity_type: 'task', entity_id: 'beta' }));
-      if (mode === 'hybrid') for (const r of a.results) expect(r.score).toBeGreaterThan(0);
-    });
-
-    it.each([['flatdoc', 'f1/x'], ['jsondoc', 'j1/x']])('[plugins-r8] ranks the %s module as one body document', async (ns, key) => {
-      const a = await ranked(ns, 'hybrid', 'needle');
-      expect(a.results).toEqual([expect.objectContaining({ key, entity_type: 'document', entity_id: key, section: 'body' })]);
-      expect(a.results[0].score).toBeGreaterThan(0);
-    });
-
-    it.each(['exactonly', 'genericdoc'])('[plugins-r8] refuses a ranked mode on the %s module, which declares no search schema, naming exact as the answerable mode', async (ns) => {
-      for (const mode of ['hybrid', 'trigram']) {
-        refused(await store(fresh(searched), 'fts5').search(ns, mode, '20', q('needle')), 'store.search', 1, 'ERR_CAPABILITY_UNSUPPORTED',
-          `mode '${mode}' needs a declared search schema; answerable modes: exact`);
+  describe('the contract 4 trim', () => {
+    it('[plugins-r8, the-engine-r8] refuses a ranked mode with posix\'s line, exact being the one registered mode, even on a namespace declaring a search schema', async () => {
+      const s = store(fresh(searched), 'fts5');
+      for (const mode of ['hybrid', 'trigram', 'fuzzy']) {
+        refused(await s.search('searchdoc', mode, '20', q('needle')), 'store.search', 1, 'ERR_CAPABILITY_UNSUPPORTED', `mode '${mode}' is not registered; registered modes: exact`);
       }
+      expect(answer(await s.search('searchdoc', 'exact', '20', q('needle')), 'store.search').total_matches).toBeGreaterThan(0);
     });
 
-    it('[the-engine-r8] refuses a mode the driver does not register, naming its registry', async () => {
-      refused(await store(fresh(searched), 'fts5').search('searchdoc', 'fuzzy', '20', q('needle')), 'store.search', 1, 'ERR_CAPABILITY_UNSUPPORTED',
-        "mode 'fuzzy' is not registered; registered modes: exact, hybrid, trigram");
-    });
-
-    it('[plugins-r8] answers a query holding a double quote on one line, a lone quote with no rows', async () => {
-      const quoted = await ranked('searchdoc', 'hybrid', 'needle"');
-      expect([quoted.query, quoted.total_matches]).toEqual(['needle"', 3]);
-      const lone = await ranked('searchdoc', 'hybrid', '"');
-      expect([lone.query, lone.total_matches, lone.results]).toEqual(['"', 0, []]);
-    });
-
-    it('[plugins-r8, modules-r10] re-derives a namespace whose search schema changed before it ranks', async () => {
-      const sb = fresh(searched);
-      const before = answer(await store(sb, 'fts5').search('searchdoc', 'hybrid', '20', q('ACTIVE')), 'store.search');
-      expect(before.results.map((r: { entity_type: string }) => r.entity_type)).toContain('session');
-      dataFile(sb, 'modules', 'searchdoc', SEARCH_DATA.searchdoc.replace('document: <unit>/state state session -', 'document: <unit>/state state unit_state -'));
-      const after = answer(await store(sb, 'fts5').search('searchdoc', 'hybrid', '20', q('ACTIVE')), 'store.search');
-      expect(after.results.map((r: { entity_type: string }) => r.entity_type)).toContain('unit_state');
-      expect(after.results.map((r: { entity_type: string }) => r.entity_type)).not.toContain('session');
-    });
-  });
-
-  describe('the change log', () => {
-    async function logged() {
+    it('[plugins-r8, the-engine-r19] refuses the retired stamps as posix refuses them: an extra argument to a put or a delete and a head= batch line', async () => {
       const sb = fresh(docs);
       const s = store(sb, 'fts5');
-      answer(await s.put('docs', 'workspace/x', 'x\n'), 'store.put');
-      answer(await s.put('docs', 'workspace/x', 'x2\n', '--op=replace', '--head=abc'), 'store.put');
+      refused(await s.put('docs', 'workspace/y', 'x\n', '--op=write'), 'store.put', 1, 'ERR_INVALID_ARGUMENT', "unknown argument '--op=write'");
+      refused(await s.del('docs', 'workspace/a', '--head=none'), 'store.delete', 1, 'ERR_INVALID_ARGUMENT', "unknown argument '--head=none'");
+      refused(await s.batch('docs', 'action=put\nkey=workspace/y\nhead=none\nvalue_b64=eA==\n'), 'store.batch', 1, 'ERR_INVALID_ARGUMENT', "action 1 (put 'workspace/y'): unknown payload line 'head=none'");
+      refused(await s.op('store.changes', ['docs']), 'store.changes', 2, 'ERR_CAPABILITY_UNSUPPORTED', "unknown function 'store.changes'");
+      refused(await s.get('docs', 'workspace/y'), 'store.get', 1, 'ERR_ENTITY_NOT_FOUND', "key 'workspace/y' not found in namespace 'docs'");
+    });
+
+    it('[plugins-r8] writes no change row: the schema 5 table stays empty across puts, deletes, and a batch, while the values land', async () => {
+      const sb = fresh(docs);
+      const s = store(sb, 'fts5');
+      answer(await s.put('docs', 'workspace/x', 'x1\n'), 'store.put');
+      answer(await s.put('docs', 'workspace/x', 'x2\n'), 'store.put');
       answer(await s.del('docs', 'workspace/x'), 'store.delete');
-      return { sb, s };
-    }
-    const strip = (a: { changes: Record<string, unknown>[] }) => a.changes.map(({ at, ...rest }) => (expect(at).toMatch(/^\d{4}-\d\d-\d\dT/), rest));
-
-    it('[plugins-r8] answers the rows of the asked heads in order with every field, a head window, and no heads as an empty list', async () => {
-      const { s } = await logged();
-      expect(strip(answer(await s.changes('docs'), 'store.changes'))).toEqual([]);
-      expect(strip(answer(await s.op('store.changes', ['docs'], 'head=none\nhead=abc\n'), 'store.changes'))).toEqual([
-        { seq: 1, key: 'workspace/a', op: 'write', head: 'none', prior: 'absent' },
-        { seq: 2, key: 'workspace/x', op: 'write', head: 'none', prior: 'absent' },
-        { seq: 3, key: 'workspace/x', op: 'replace', head: 'abc', prior: 'present' },
-        { seq: 4, key: 'workspace/x', op: 'remove', head: 'none', prior: 'present' },
-      ]);
-      expect(strip(answer(await s.op('store.changes', ['docs'], 'head=abc\n'), 'store.changes')).map((c) => c.seq)).toEqual([3]);
-    });
-
-    it('[plugins-r8, the-engine-r9] refuses a malformed head, an unknown payload line, and a namespace without a log', async () => {
-      const { sb, s } = await logged();
-      refused(await s.op('store.changes', ['docs'], 'head=zz\n'), 'store.changes', 1, 'ERR_INVALID_ARGUMENT', "a head is a commit id or none: 'zz'");
-      refused(await s.op('store.changes', ['docs'], 'what=1\n'), 'store.changes', 1, 'ERR_INVALID_ARGUMENT', "unknown payload line 'what=1' (head=<sha> lines only)");
-      dataFile(sb, 'modules', 'probe', 'root: probe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
-      refused(await s.changes('probe'), 'store.changes', 1, 'ERR_CAPABILITY_UNSUPPORTED', "the namespace 'probe' declares no change log (changes: false)");
-    });
-
-    it('[plugins-r8] logs nothing for a refused write', async () => {
-      const { sb, s } = await logged();
-      const n = changeCount(sb);
-      refused(await s.put('docs', 'a/b/c', 'x\n'), 'store.put', 1, 'ERR_INVALID_ARGUMENT', "key 'a/b/c' does not match the namespace pattern '<repo>/<slug>'");
-      refused(await s.put('docs', 'workspace/A', 'x\n'), 'store.put', 1, 'ERR_ENTITY_EXISTS',
-        "key 'workspace/A' folds onto 'workspace/a' under ASCII case; keys differing only by case never coexist in namespace 'docs'");
-      refused(await s.put('docs', 'workspace/y', 'x\n', '--op=bad/op'), 'store.put', 1, 'ERR_INVALID_ARGUMENT', "malformed op 'bad/op'");
-      expect(changeCount(sb)).toBe(n);
-    });
-
-    it('[plugins-r8] lands one change row per batch action in order, prior at its position', async () => {
-      const { sb, s } = await logged();
-      answer(await s.put('docs', 'workspace/bat1', 'one\n'), 'store.put');
-      const seq = Number(sqlite(db(sb), 'SELECT max(seq) FROM store_changes;'));
-      answer(await s.batch('docs', [
-        { action: 'put', key: 'workspace/bat3', head: '0123abcd', value: 'three\n' },
-        { action: 'delete', key: 'workspace/bat1', head: 'none' },
-        { action: 'put', key: 'workspace/bat1', head: 'none', value: 'again\n' },
-      ]), 'store.batch');
-      expect(rows(sb, `SELECT op || '|' || key || '|' || prior || '|' || head FROM store_changes WHERE seq > ${seq} ORDER BY seq;`)).toEqual([
-        'put|workspace/bat3|absent|0123abcd', 'delete|workspace/bat1|present|none', 'put|workspace/bat1|absent|none',
-      ]);
+      answer(await s.batch('docs', [{ action: 'put', key: 'workspace/b1', value: 'one\n' }, { action: 'delete', key: 'workspace/a' }]), 'store.batch');
+      expect(changeCount(sb)).toBe(0);
+      expect((await s.list('docs')).stdout).toBe(listAnswer('docs', ['workspace/b1']));
     });
   });
 
   describe('a planted trigger', () => {
-    it('[the-engine-r18, the-engine-r19] aborts a put whole: the old value and the log survive, and the retry lands', async () => {
+    it('[the-engine-r18, the-engine-r19] aborts a put whole: the old value survives, and the retry lands', async () => {
       const sb = fresh(docs);
       const s = store(sb, 'fts5');
       answer(await s.put('docs', 'workspace/atomic', 'atomic-old\n'), 'store.put');
@@ -181,12 +107,12 @@ describe.skipIf(!fts5Available())('the fts5 store', { concurrent: true }, () => 
       expect((await s.get('docs', 'workspace/atomic')).stdout).toBe('atomic-new\n');
     });
 
-    it('[the-engine-r18, the-engine-r19, the-engine-r21] rolls a batch back when its second action fails, names action 2, and logs nothing', async () => {
+    it('[the-engine-r18, the-engine-r19, the-engine-r21] rolls a batch back when its second action fails, names action 2, and writes nothing', async () => {
       const sb = fresh(docs);
       const s = store(sb, 'fts5');
       const n = changeCount(sb);
       sqlite(db(sb), "CREATE TRIGGER plant_store BEFORE INSERT ON store WHEN NEW.key = 'workspace/boom' BEGIN SELECT RAISE(ABORT, 'planted'); END;");
-      refused(await s.batch('docs', [{ action: 'put', key: 'workspace/bat5', head: 'none', value: 'one\n' }, { action: 'put', key: 'workspace/boom', head: 'none', value: 'two\n' }]),
+      refused(await s.batch('docs', [{ action: 'put', key: 'workspace/bat5', value: 'one\n' }, { action: 'put', key: 'workspace/boom', value: 'two\n' }]),
         'store.batch', 2, 'ERR_STORAGE_WRITE', "action 2 (put 'workspace/boom'): the storage write of key 'workspace/boom' failed");
       refused(await s.get('docs', 'workspace/bat5'), 'store.get', 1, 'ERR_ENTITY_NOT_FOUND', "key 'workspace/bat5' not found in namespace 'docs'");
       expect(changeCount(sb)).toBe(n);

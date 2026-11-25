@@ -26,7 +26,7 @@ function recorder(label: string): { sb: string; log: () => string[]; stdin: () =
   dataFile(sb, 'modules', 'flat', 'key: <c>/<id>\n');
   const dir = join(sb, '.contexture/extensions/storage/drivers/rec');
   mkdirSync(dir, { recursive: true });
-  const card = '{"driver":"rec","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":[{"name":"exact","description":"a substring"}],"optional":["store"]}';
+  const card = '{"driver":"rec","version":"4.0.0","contract":"4","store":["list","get","put","delete","batch","scan"],"search_modes":[{"name":"exact","description":"a substring"}],"optional":["store"]}';
   writeFileSync(join(dir, 'driver'), [
     '#!/bin/sh',
     `case "$1" in capability) printf '%s\\n' '${card}'; exit 0 ;; esac`,
@@ -75,14 +75,15 @@ describe('the key and value gate at the resolver\'s dispatch', { concurrent: tru
   it('[the-engine-r-kvr01] a line outside the wire\'s shape ends the gate\'s check there, so the driver names it first', async () => {
     const r = recorder('gate-structure');
     answer(await rsv(r.sb, ['store.batch', 'deep'], 'action=put\nkey=a/b\nbogus=1\naction=put\nkey=.z\nvalue_b64=eA==\n'), 'store.batch');
-    expect(r.log()).toEqual(['store.batch deep']);
+    answer(await rsv(r.sb, ['store.batch', 'deep'], 'action=put\nkey=a/b\nhead=none\naction=put\nkey=.z\nvalue_b64=eA==\n'), 'store.batch');
+    expect(r.log()).toEqual(['store.batch deep', 'store.batch deep']);
   });
 
   it('[the-engine-r-kvr01] a call inside the rule reaches the driver, a put\'s and a batch\'s stdin handed on byte for byte from a staged file that is gone after the exec', async () => {
     const r = recorder('gate-pass');
     const scratch = join(r.sb, '.contexture/tmp/verb');
     const bytes = Buffer.from([0, 1, 2, 0xff, 0x0a, 0x0d]);
-    answer(await rsv(r.sb, ['store.put', 'deep', 'u/a.md', '--op=write'], bytes, { CTX_SCRATCH_ROOT: scratch }), 'store.put');
+    answer(await rsv(r.sb, ['store.put', 'deep', 'u/a.md'], bytes, { CTX_SCRATCH_ROOT: scratch }), 'store.put');
     expect(r.stdin().equals(bytes)).toBe(true);
     const payload = batchPayload([{ action: 'put', key: 'u/b', value: 'b' }, { action: 'delete', key: 'u/a' }]);
     answer(await rsv(r.sb, ['store.batch', 'deep'], payload), 'store.batch');
@@ -90,7 +91,7 @@ describe('the key and value gate at the resolver\'s dispatch', { concurrent: tru
     for (const [fn, args] of [['store.get', ['deep', 'u/a', 'A0.z_-9/x']], ['store.list', ['deep', 'u/a']], ['store.list', ['deep', 'u/']], ['store.promote', ['deep', 'u/']], ['storage.sweep', ['deep', '--prefix=u/']], ['store.delete', ['flat', 'c/1']], ['store.scan', ['deep']]] as const) {
       answer(await rsv(r.sb, [fn, ...args]), fn);
     }
-    expect(r.log()).toEqual(['store.put deep u/a.md --op=write', 'store.batch deep', 'store.get deep u/a A0.z_-9/x', 'store.list deep u/a', 'store.list deep u/',
+    expect(r.log()).toEqual(['store.put deep u/a.md', 'store.batch deep', 'store.get deep u/a A0.z_-9/x', 'store.list deep u/a', 'store.list deep u/',
       'store.promote deep u/', 'storage.sweep deep --prefix=u/', 'store.delete flat c/1', 'store.scan deep']);
     expect([staged(scratch), staged(join(r.sb, '.contexture/tmp'))]).toEqual([[], []]);
   });

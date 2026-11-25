@@ -113,11 +113,13 @@ describe.concurrent('the SQLite smoke set: every command family lands in the fts
     await inSqliteStore(sb, 'unit', [`${U}/state`, 'sq-ref/state']);
   });
 
-  it('SF7 [the-record-r2, the-record-r10, the-record-r13, plugins-r8] search: exact, hybrid, and trigram each find the written task', async () => {
+  it('SF7 [the-record-r2, the-record-r10, the-record-r13, plugins-r8] search: exact finds the written task, and a ranked mode refuses naming exact', async () => {
     const sb = fresh(seeded);
     await must(unit(sb, 'task', 'add', U, 'sq-t7', '--objective=the sqlite search task'));
-    for (const [mode, query] of [['exact', 'sqlite search task'], ['hybrid', 'sqlite search task'], ['trigram', 'sqlite']]) {
-      expect(await show(sb, 'search', query, `--unit=${U}`, `--mode=${mode}`), mode).toContain(`task unit#${U}/task/sq-t7`);
+    expect(await show(sb, 'search', 'sqlite search task', `--unit=${U}`, '--mode=exact')).toContain(`task unit#${U}/task/sq-t7`);
+    for (const mode of ['hybrid', 'trigram']) {
+      const r = await unit(sb, 'search', 'sqlite', `--unit=${U}`, `--mode=${mode}`);
+      expect([r.code, r.stdout, r.stderr], mode).toEqual([1, '', `search.query: error: mode '${mode}' is not supported; answerable modes: exact (ERR_CAPABILITY_UNSUPPORTED)\n`]);
     }
     await inSqliteStore(sb, 'unit', [`${U}/backlog`]);
   });
@@ -127,7 +129,7 @@ describe.concurrent('the SQLite smoke set: every command family lands in the fts
     const d = JSON.parse(await show(sb, 'diagnose', '--json'));
     expect(d.driver.name).toBe('fts5');
     expect([d.storage.health, d.storage.store]).toEqual(['ok', 'present']);
-    expect(d.driver.descriptor.search_modes.map((m: { name: string }) => m.name)).toEqual(['exact', 'hybrid', 'trigram']);
+    expect(d.driver.descriptor.search_modes.map((m: { name: string }) => m.name)).toEqual(['exact']);
     const cap = await exec('.contexture/storage/scripts/driver-resolver', ['capability'], { cwd: sb });
     expect(cap.code, cap.stderr).toBe(0);
     expect(JSON.parse(cap.stdout)).toEqual(d.driver.descriptor);

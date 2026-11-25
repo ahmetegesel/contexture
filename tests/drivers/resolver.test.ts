@@ -10,6 +10,7 @@ import { fresh, seed } from '../support/snapshot';
 import { DRIVERS, type Driver, fts5Available, stage } from '../support/stage';
 import { answer } from '../support/wire';
 
+const SIX = ['list', 'get', 'put', 'delete', 'batch', 'scan'];
 const SEVEN = ['list', 'get', 'put', 'delete', 'changes', 'batch', 'scan'];
 const PAST = new Date('2020-01-01T00:00:00Z');
 const FUTURE = new Date('2030-01-01T00:00:00Z');
@@ -27,9 +28,9 @@ interface Card {
   extra?: string;
 }
 
-function wrap(path: string, target: string, { optional = [], contract = '3', store = SEVEN, mode = 'exact', modes, extra = '' }: Card = {}): string {
+function wrap(path: string, target: string, { optional = [], contract = '4', store = SIX, mode = 'exact', modes, extra = '' }: Card = {}): string {
   const list = modes ?? `[{"name":"${mode}","description":"the ${mode} rule"}]`;
-  const card = `{"driver":"planted","version":"3.0.0","contract":"${contract}","store":[${store.map((s) => `"${s}"`).join(',')}],"search_modes":${list},"optional":[${optional.map((s) => `"${s}"`).join(',')}]${extra}}`;
+  const card = `{"driver":"planted","version":"4.0.0","contract":"${contract}","store":[${store.map((s) => `"${s}"`).join(',')}],"search_modes":${list},"optional":[${optional.map((s) => `"${s}"`).join(',')}]${extra}}`;
   mkdirSync(join(path, '..'), { recursive: true });
   writeFileSync(path, `#!/bin/sh\nif [ "\${1:-}" = capability ]; then\n  echo '${card}'\n  exit 0\nfi\nexec "${target}" "$@"\n`, { mode: 0o755 });
   utimesSync(path, PAST, PAST);
@@ -53,13 +54,13 @@ describe('the resolver', { concurrent: true }, () => {
     expect(r.stdout).toBe('exact\ta case-insensitive substring of one line, the first matching line as the snippet, alike on every driver\n');
   });
 
-  it('[the-engine-r8] the pair reader reads a description holding a bracket, a brace, a comma, and an escaped quote whole, in the card\'s order', async () => {
+  it('[the-engine-r8] the pair reader reads a description holding a bracket, a brace, a comma, and an escaped quote whole, its keys in either order', async () => {
     const sb = fresh(posix);
-    const modes = '[{"name":"exact","description":"one ] line, with {a} \\"quote\\""},{"description":"second","name":"near"}]';
+    const modes = '[{"description":"one ] line, with {a} \\"quote\\"","name":"exact"}]';
     const w = wrap(join(sb, 'w-pairs'), driverPath(sb, 'posix'), { modes });
     const r = await rsv(sb, [`--driver=${w}`, 'modes']);
-    expect([r.code, r.stdout, r.stderr]).toEqual([0, 'exact\tone ] line, with {a} "quote"\nnear\tsecond\n', '']);
-    expect((await rsv(sb, [`--driver=${w}`, 'has', 'search.mode.near'])).code).toBe(0);
+    expect([r.code, r.stdout, r.stderr]).toEqual([0, 'exact\tone ] line, with {a} "quote"\n', '']);
+    expect((await rsv(sb, [`--driver=${w}`, 'has', 'search.mode.exact'])).code).toBe(0);
   });
 
   it('[modules-r1] the storage core is no module: ctx help --all never lists it', async () => {
@@ -70,13 +71,15 @@ describe('the resolver', { concurrent: true }, () => {
 
   it.each([
     ['require store', ['require', 'store'], 0],
+    ['require store.promote', ['require', 'store.promote'], 0],
     ['require store.changelog', ['require', 'store.changelog'], 2],
     ['has store', ['has', 'store'], 0],
     ['has store.changelog', ['has', 'store.changelog'], 1],
+    ['has search.schema', ['has', 'search.schema'], 1],
     ['has search.mode.exact', ['has', 'search.mode.exact'], 0],
     ['has search.mode.hybrid', ['has', 'search.mode.hybrid'], 1],
     ['require with no capability', ['require'], 1],
-    ['has with two capabilities', ['has', 'store', 'store.changelog'], 1],
+    ['has with two capabilities', ['has', 'store', 'store.promote'], 1],
     ['require a malformed token', ['require', 'Bad!'], 1],
   ])('[the-engine-r15] answers %s on the configured posix driver', async (_, args, rc) => {
     expect((await rsv(fresh(posix), args)).code).toBe(rc);
@@ -85,11 +88,11 @@ describe('the resolver', { concurrent: true }, () => {
   it.each([
     ['no store family', { store: [] }, ['require', 'store'], 2],
     ['no store family', { store: [] }, ['has', 'store'], 1],
-    ['the store token alone', { optional: ['store'], store: [] }, ['require', 'store.changelog'], 2],
-    ['a change log', { optional: ['store.changelog'] }, ['require', 'store.changelog'], 0],
-    ['the store family', {}, ['require', 'store', 'store.changelog'], 2],
+    ['the store token alone', { optional: ['store'], store: [] }, ['require', 'store.promote'], 2],
+    ['the promote token', { optional: ['store.promote'] }, ['require', 'store.promote'], 0],
+    ['the store family', {}, ['require', 'store', 'store.promote'], 2],
     ['the store family', {}, ['require', 'search.mode.hybrid'], 2],
-    ['the store family', {}, ['has', 'search.schema'], 1],
+    ['the store family', {}, ['has', 'store.promote'], 1],
   ] as const)('[the-engine-r15] a planted card with %s (%j) answers %j rc %i', async (_, card, args, rc) => {
     const sb = fresh(posix);
     const w = wrap(join(sb, 'w/driver'), driverPath(sb, 'posix'), card as Card);
@@ -131,6 +134,7 @@ describe('the resolver', { concurrent: true }, () => {
 
   it('[the-engine-r8] takes the dispatch verdict again when the workspace configuration changes', async () => {
     const sb = fresh(posix);
+    utimesSync(resolver(sb), PAST, PAST);
     const w = wrap(join(sb, 'w-conf'), driverPath(sb, 'posix'));
     answer(await rsv(sb, [`--driver=${w}`, 'store.list', 'unit']), 'store.list');
     const file = join(sb, '.contexture/tmp/driver-verdicts', verdicts(sb)[0]);
@@ -140,6 +144,23 @@ describe('the resolver', { concurrent: true }, () => {
     writeFileSync(join(sb, '.contexture/config'), '# touched\n');
     answer(await rsv(sb, [`--driver=${w}`, 'store.list', 'unit']), 'store.list');
     expect(statSync(file).mtime.getTime()).toBeGreaterThan(MID.getTime());
+  });
+
+  it('[the-engine-r8] a core update expires the dispatch verdict: a fresh verdict of a contract 3 driver serves until the resolver is newer, then the handshake refuses it', async () => {
+    const sb = fresh(posix);
+    utimesSync(resolver(sb), PAST, PAST);
+    if (existsSync(join(sb, '.contexture/config'))) utimesSync(join(sb, '.contexture/config'), PAST, PAST);
+    const w = wrap(join(sb, 'w-old'), driverPath(sb, 'posix'), { contract: '3', store: SEVEN });
+    const dir = join(sb, '.contexture/tmp/driver-verdicts');
+    mkdirSync(dir, { recursive: true });
+    const file = join(dir, w.replace(/\//g, '_'));
+    writeFileSync(file, `verified ${w}\n`);
+    utimesSync(file, MID, MID);
+    answer(await rsv(sb, [`--driver=${w}`, 'store.list', 'unit']), 'store.list');
+    utimesSync(resolver(sb), FUTURE, FUTURE);
+    const r = await rsv(sb, [`--driver=${w}`, 'store.list', 'unit']);
+    expect([r.code, r.stdout, r.stderr]).toEqual([2, '', `driver-resolver: ERROR: driver '${w}' declares contract '3', not 4 (ERR_DRIVER_PROTOCOL)\n`]);
+    expect(statSync(file).mtime.getTime()).toBe(MID.getTime());
   });
 
   function unwritableDrawer(onTestFinished: (fn: () => void) => void): [string, string] {
@@ -285,8 +306,9 @@ for (const driver of DRIVERS) {
     it('[the-engine-r15] resolves the configured driver and answers its optional capabilities', async () => {
       const sb = fresh(snap);
       expect((await rsv(sb, ['resolve'])).stdout).toBe(`${driverPath(sb, driver)}\n`);
-      expect((await rsv(sb, ['has', 'store.changelog'])).code).toBe(driver === 'fts5' ? 0 : 1);
-      expect((await rsv(sb, ['has', 'search.schema'])).code).toBe(driver === 'fts5' ? 0 : 1);
+      expect((await rsv(sb, ['has', 'store'])).code).toBe(0);
+      expect((await rsv(sb, ['has', 'search.mode.exact'])).code).toBe(0);
+      for (const retired of ['store.changelog', 'search.schema', 'search.mode.hybrid', 'search.mode.trigram']) expect([retired, (await rsv(sb, ['has', retired])).code]).toEqual([retired, 1]);
       expect((await rsv(sb, ['has', 'store.promote'])).code).toBe(driver === 'posix' ? 0 : 1);
     });
 
@@ -301,22 +323,28 @@ for (const driver of DRIVERS) {
 
     it('[the-engine-r8] serves a complete store card and lands a write through it', async () => {
       const sb = fresh(snap);
-      const w = wrap(join(sb, 'w-store'), driverPath(sb, driver), { optional: ['store.changelog'] });
+      const w = wrap(join(sb, 'w-store'), driverPath(sb, driver), { optional: ['store'] });
       answer(await rsv(sb, [`--driver=${w}`, 'store.put', 'unit', 'unit/probe/x'], 'resolver fixture\n'), 'store.put');
       expect((await rsv(sb, [`--driver=${w}`, 'store.list', 'unit'])).stdout).toBe('{"namespace":"unit","keys":["unit/probe/x"]}\n');
     });
 
     it.each([
-      ['a record-only card', { store: [] }, ['no store family', 'contract 3 serves the store family alone']],
-      ['contract 2', { contract: '2' }, ['contract', 'not 3']],
+      ['a record-only card', { store: [] }, ['no store family', 'contract 4 serves the store family alone']],
+      ['contract 2', { contract: '2' }, ["declares contract '2', not 4"]],
+      ['contract 3', { contract: '3' }, ["declares contract '3', not 4"]],
       ['a functions field', { extra: ',"functions":["session.list"]' }, ['record function family']],
       ['the store token without the family', { optional: ['store'], store: [] }, ['no store family']],
-      ['no exact mode', { mode: 'hybrid' }, ['exact']],
+      ['no exact mode', { mode: 'hybrid' }, ['declares the search modes [hybrid], not the exact mode alone']],
+      ['a ranked mode beside exact', { modes: '[{"name":"exact","description":"x"},{"name":"hybrid","description":"y"}]' }, ['declares the search modes [exact hybrid], not the exact mode alone']],
+      ['no mode at all', { modes: '[]' }, ['declares the search modes [], not the exact mode alone']],
       ['a bare name mode list', { modes: '["exact"]' }, ['not a list of name and description objects']],
       ['a mode without a description', { modes: '[{"name":"exact"}]' }, ['not a list of name and description objects']],
-      ['a partial family', { optional: ['store'], store: SEVEN.filter((s) => s !== 'batch') }, ['seven data names']],
-      ['a name outside the seven', { optional: ['store'], store: [...SEVEN, 'store.search'] }, ['seven data names']],
+      ['a partial family', { optional: ['store'], store: SIX.filter((s) => s !== 'batch') }, ['six data names in the fixed order (list get put delete batch scan)']],
+      ['a name outside the six', { optional: ['store'], store: [...SIX, 'store.search'] }, ['six data names']],
+      ['the contract 3 family, changes among the names', { optional: ['store'], store: SEVEN }, ['six data names']],
       ['an optional token outside the card', { optional: ['store', 'retired.token'] }, ['optional capability']],
+      ['the retired change log token', { optional: ['store', 'store.changelog'] }, ["optional capability 'store.changelog' outside store, store.promote"]],
+      ['the retired search schema token', { optional: ['search.schema'] }, ["optional capability 'search.schema' outside store, store.promote"]],
     ] as const)('[the-engine-r8] halts %s rc 2 ERR_DRIVER_PROTOCOL, naming what is wrong', async (_, card, words) => {
       const sb = fresh(snap);
       const w = wrap(join(sb, 'w-bad'), driverPath(sb, driver), card as Card);

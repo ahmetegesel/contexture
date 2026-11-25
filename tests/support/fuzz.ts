@@ -48,7 +48,7 @@ const DOCS_PAYLOADS: Record<string, Buffer> = {
 
 export const KEY_VALUE: Profile = {
   ns: 'fuzz',
-  data: 'root: fuzz-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\nformat: text\n',
+  data: 'root: fuzz-root\nsuffix: .txt\nkey: <a>/<b>\nsearch: flat\nformat: text\n',
   key: (k) => k,
   payload: (p) => DOCS_PAYLOADS[p],
   needle: 'needle',
@@ -64,7 +64,7 @@ function recordValue(i: number): Buffer {
 
 export const UNIT_SHAPED: Profile = {
   ns: 'fuzzu',
-  data: 'root: fuzzu-root\nsuffix: .md\nkey: <unit>/<path...>\nchanges: false\n',
+  data: 'root: fuzzu-root\nsuffix: .md\nkey: <unit>/<path...>\n',
   key: (k) => UNIT_KEYS[Number(k.slice(3)) - 1],
   payload: (p) => recordValue(Number(p.slice(1))),
   prefix: 'u1/',
@@ -94,7 +94,7 @@ export function calls(seq: readonly string[], profile: Profile): Call[] {
     } else {
       const actions = k.split(';').map((item) => {
         const [act, ik, ip] = item.split(':');
-        return act === 'put' ? { action: 'put' as const, key: key(ik), head: 'none', value: payload(ip) } : { action: 'delete' as const, key: key(ik), head: 'none' };
+        return act === 'put' ? { action: 'put' as const, key: key(ik), value: payload(ip) } : { action: 'delete' as const, key: key(ik) };
       });
       out.push({ fn: 'store.batch', args: [ns], input: batchPayload(actions) });
       touched = actions.map((a) => a.key);
@@ -134,7 +134,7 @@ export function firstDifference(a: readonly Run[], b: readonly Run[]): number {
 export function blindSpots(plan: readonly Call[], runs: readonly Run[]): string[] {
   const seen = (fn: string, ok: (out: string) => boolean) => runs.some((r, i) => plan[i].fn === fn && r.code === 0 && ok(r.stdout));
   const need: [string, string, (out: string) => boolean][] = [
-    ['a successful put', 'store.put', (o) => o.includes('"op":"write"')],
+    ['a successful put', 'store.put', (o) => o.startsWith('{"namespace":')],
     ['a successful get', 'store.get', (o) => o.length > 0],
     ['a non-empty list', 'store.list', (o) => o.includes('"keys":["')],
     ['a non-empty scan', 'store.scan', (o) => o.includes('"items":[{')],

@@ -94,7 +94,7 @@
 
 @rule docs/drift
   directive: must
-  statement: "Drift is reconciled from the change delta, never from memory: the status-prefixed delta feeds ctx docs check with BOTH halves in one stream (the code delta from git and the corpus delta: the corpus paths of the same git delta under the files driver, ctx docs changes under a store driver); every affected doc is updated through the ctx docs write verbs in the same change, uncovered paths widen a unit's sources or open a new unit, and the audit and the check re-run clean before the doc change lands."
+  statement: "Drift is reconciled from the change delta, never from memory: the status-prefixed delta feeds ctx docs check with BOTH halves in one stream (the code delta from git and the corpus delta: the corpus paths of the same git delta for a corpus git tracks, else the docs the reconciliation updated); every affected doc is updated through the ctx docs write verbs in the same change, uncovered paths widen a unit's sources or open a new unit, and the audit and the check re-run clean before the doc change lands."
   status: followed
   prevalence: universal
   layer: workspace
@@ -102,7 +102,7 @@
   scope: "Any code change inside a documented repository."
   evidence: ".contexture/extensions/modules/docs/scripts/docs-check.awk"
   enforced_at: [.contexture/extensions/modules/docs/scripts/docs-check.awk, .contexture/extensions/modules/docs/scripts/gate, .contexture/extensions/rhythms/docs-drift.md]
-  caution: "Two ways this check reports a result that is not the truth. A code-only stream can never pass: the check marks a file fresh only when a doc path appears in the SAME stdin, so omitting the docs half reports every claimed file stale forever, whatever the docs say; the stale count then says nothing about the work. And a name-only delta carries no deletion marker, so deleted files read as uncovered. Under a store driver the check runs in its store mode: a doc refreshes only the code its own sources name, and every doc can ride the driver-fed delta."
+  caution: "Two ways this check reports a result that is not the truth. A code-only stream can never pass: the check marks a file fresh only when a doc path appears in the SAME stdin, so omitting the docs half reports every claimed file stale forever, whatever the docs say; the stale count then says nothing about the work. And a name-only delta carries no deletion marker, so deleted files read as uncovered. An untracked corpus cannot ride a tracked delta, a store driver's corpus included: when all of a governed file's claimants are untracked the check reports UNTRACKED CLAIMANT with a process-owned clean, so the flow feeds its own doc list as the corpus half."
   anti: "Shipping a code change and deferring its doc update to a later commit; or verifying with a pipeline that feeds the check the code delta alone: it reads every claimed file stale where a claimant is tracked, and CLEAN (PROCESS-OWNED) where none is, so its verdict says nothing about the docs"
   good: "Both halves in one stream, records split so a rename's old path surfaces as a dead source (the working command is in ctx docs help check); for an uncommitted working tree, ctx docs gate composes both halves by itself on every driver and needs no pipeline"
 

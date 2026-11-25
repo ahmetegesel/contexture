@@ -47,7 +47,7 @@ ref_sessions: [design-notes]
 - `repos:` lists affected repositories.
 - `ref_sessions:` lists optional read-only reference units mounted at boot; boot loads their knowledge and active journal.
 
-The state is refreshed as the work moves, via `ctx unit stamp`, `ctx unit refs`, `ctx unit close`, and `ctx unit reopen`. A legacy `next_action` line already stored is ignored by the record reads (the load, `list`, and the exact search) and erased by the next state write; a new state never carries one. On an indexed backend the ranked search reads the storage layer's document derived from the raw value at write time, so an unwritten legacy line may still match there until a state write rewrites it.
+The state is refreshed as the work moves, via `ctx unit stamp`, `ctx unit refs`, `ctx unit close`, and `ctx unit reopen`. A legacy `next_action` line already stored is ignored by the record reads (the load, `list`, and the exact search) and erased by the next state write; a new state never carries one.
 
 The state carries no date. Recency is journal-derived: a unit's `last_event` is the date its last main-journal item carries, so the field stays current without a state write and `session.list` answers it. A unit whose last item carries no date answers null, and lane journals never enter the derivation. `ctx unit list` reads no journal, so it prints no date and orders its units bytewise by name.
 
@@ -195,11 +195,9 @@ The record's search speaks the shared search syntax: the query first (a query ca
 .contexture/ctx unit search "<query>" [--unit=<unit>] [--all] [--type=<type>] [--mode=<mode>] [--limit=N] [--json]
 ```
 
-Every row carries the same keys on every driver (`module`, `container`, `type`, `id`, `address`, `snippet`, `read`, and `label` on a closed unit's rows), so a caller never branches on the backend; `--type` keeps one entity type, `--limit` caps the rows merged across the units once (default 20), `--json` answers `{query, mode, total, rows}` with `total` counting every merged row, and zero hits is an answer, rc 0. A row's `read` is always `ctx unit get <path>`, the path being the address after `unit#`. `exact`, the one mode every driver implements, means one thing on every driver: a line matches when it carries the query as a substring, ASCII letters compared without case and a column-0 comment never matching; the answer is one row per matching entity and section, in record order, its snippet the first matching line. A mode the unit's records cannot answer refuses rc 1 naming the answerable ones (posix registers `exact` alone; fts5 adds the ranked `hybrid` and `trigram` modes, asked for by name). The unit state is never searched.
+Every row carries the same keys on every driver (`module`, `container`, `type`, `id`, `address`, `snippet`, `read`, and `label` on a closed unit's rows), so a caller never branches on the backend; `--type` keeps one entity type, `--limit` caps the rows merged across the units once (default 20), `--json` answers `{query, mode, total, rows}` with `total` counting every merged row, and zero hits is an answer, rc 0. A row's `read` is always `ctx unit get <path>`, the path being the address after `unit#`. `exact`, the one mode every driver implements, means one thing on every driver: a line matches when it carries the query as a substring, ASCII letters compared without case and a column-0 comment never matching; the answer is one row per matching entity and section, in record order, its snippet the first matching line. Any other mode refuses rc 1 naming `exact` as the answerable one, on every driver: the storage contract registers `exact` alone. The unit state is never searched.
 
-A backend may register ranked modes of its own beside `exact`; the storage-fts5 plugin registers `hybrid` and `trigram`, and its [driver README](plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5/README.md) describes the indexing and the relevance ranking behind them.
-
-On an indexed backend, a ranked mode returns high-density contextual snippets ordered by their rank. This cuts token consumption by more than 90 percent compared to dumping entire entity bodies.
+Each row's `container` is the row's artifact, which the unit module derives itself: `<unit>/backlog`, `<unit>/knowledge`, or `<unit>/journal`, and a lane row's address form `<unit>/lane/<lane>/<recipe|journal|report>`.
 
 Agents follow a snippet-first consumption protocol:
 1. Run `ctx unit search "<query>"` (with `--unit=<unit>`, `--all`, or `--mode=<mode>` as the question needs) to locate candidates.

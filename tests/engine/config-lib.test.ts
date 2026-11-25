@@ -44,7 +44,7 @@ async function until(test: () => boolean, ms = 30_000): Promise<void> {
 function fakeDriver(sb: string, relDir: string, name: string, valid = true): string {
   const path = join(sb, '.contexture', relDir, name, 'driver');
   const card = valid
-    ? `{"driver":"${name}","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":[{"name":"exact","description":"exact match"}],"optional":["store"]}`
+    ? `{"driver":"${name}","version":"4.0.0","contract":"4","store":["list","get","put","delete","batch","scan"],"search_modes":[{"name":"exact","description":"exact match"}],"optional":["store"]}`
     : '{"driver":"broken","version":"2.0.0","contract":"2","store":[]}';
   put(
     path,

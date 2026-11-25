@@ -14,7 +14,7 @@ function writeFakeDriver(sb: string, name: string, valid = true, schema = ''): v
         '#!/bin/sh',
         'case "$1" in',
         '  capability)',
-        '    printf \'%s\\n\' \'{"version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":[{"name":"exact","description":"exact match"}]}\'',
+        '    printf \'%s\\n\' \'{"version":"4.0.0","contract":"4","store":["list","get","put","delete","batch","scan"],"search_modes":[{"name":"exact","description":"exact match"}]}\'',
         '    exit 0 ;;',
         '  store.list) printf \'{"namespace":"unit","keys":[]}\\n\'; exit 0 ;;',
         '  *) exit 0 ;;',
@@ -106,7 +106,7 @@ describe.concurrent('ctx store config', () => {
     expect((await run(sb, ['store', 'config', 'get', 'cache_mb'])).stdout).toBe('64\n');
   });
 
-  it('[store-r-0s40c] validates driver via Contract 3 handshake before writing, discards resolver stdout, and emits migration notice only when effective driver changes', async () => {
+  it('[store-r-0s40c] validates driver via the contract 4 handshake before writing, discards resolver stdout, and emits migration notice only when effective driver changes', async () => {
     const sb = stage('posix', 'store-config-driver');
     writeFakeDriver(sb, 'alt', true);
     writeFakeDriver(sb, 'broken', false);
@@ -124,7 +124,7 @@ describe.concurrent('ctx store config', () => {
     expect(missing.stderr).toContain('ERR_DRIVER_NOT_FOUND');
     expect(existsSync(join(sb, '.contexture/config'))).toBe(false);
 
-    // Broken Contract 3 driver refuses rc 2 without writing
+    // Broken driver refuses rc 2 without writing
     const broken = await run(sb, ['store', 'config', 'set', 'driver', 'broken']);
     expect([broken.code, broken.stdout]).toEqual([2, '']);
     expect(broken.stderr).toContain("capability handshake failed for driver 'broken'");
@@ -203,6 +203,7 @@ describe.concurrent('ctx store config', () => {
 
     const midTime = new Date(baseSec - 10_000);
     utimesSync(join(sb, '.contexture/extensions/storage/drivers/reqdrv/driver'), oldTime, oldTime);
+    utimesSync(join(sb, '.contexture/storage/scripts/driver-resolver'), oldTime, oldTime);
     utimesSync(join(sb, '.contexture/config'), oldTime, oldTime);
     for (const f of reqFiles) utimesSync(join(verdictsDir, f), midTime, midTime);
 

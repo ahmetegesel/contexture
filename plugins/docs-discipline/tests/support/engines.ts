@@ -59,14 +59,18 @@ export function entities(dir: string, e: Entities, files: readonly string[] = do
 }
 
 export interface CheckOptions {
-  log?: boolean;
   files?: readonly string[];
   shebangs?: string;
+  // the corpus's declared folder (empty is docs) and whether a doc rides at its logical
+  // address too, as in a caller's list
+  corpusRoot?: string;
+  logical?: boolean;
 }
 
-export function check(dir: string, delta: string, { log = false, files = docFiles(dir), shebangs }: CheckOptions = {}): Promise<Run> {
+export function check(dir: string, delta: string, { files = docFiles(dir), shebangs, corpusRoot, logical }: CheckOptions = {}): Promise<Run> {
   const env = { ...ceiling(dir), ...(shebangs ? { DOCS_SHEBANG_LIST: shebangs } : {}) };
-  return awk(dir, [engine('docs-glob.awk'), engine('docs-check.awk')], { input: delta, args: files, env, vars: log ? { delta_source: 'log' } : {} });
+  const vars: Record<string, string> = { ...(corpusRoot !== undefined ? { corpus_root: corpusRoot } : {}), ...(logical ? { logical_rides: '1' } : {}) };
+  return awk(dir, [engine('docs-glob.awk'), engine('docs-check.awk')], { input: delta, args: files, env, vars });
 }
 
 export function nudge(dir: string, task: string, files: readonly string[] = docFiles(dir), env: Record<string, string> = {}): Promise<Run> {

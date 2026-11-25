@@ -1,14 +1,14 @@
 export const SEARCH_DATA: Record<string, string> = {
   searchdoc: [
-    'root: sd-root', 'suffix: .txt', 'key: <unit>/<path...>', 'changes: false', 'search: documents',
+    'root: sd-root', 'suffix: .txt', 'key: <unit>/<path...>', 'search: documents',
     'document: <unit>/state state session -', 'document: <unit>/backlog backlog session -', 'document: <unit>/backlog backlog task @task',
     'document: <unit>/journal journal session -', 'document: <unit>/journal journal entry @entry', 'document: <unit>/journal journal session @anchor',
     'document: <unit>/lanes/<lane>/recipe lane_recipe lane -', 'document: <unit>/lanes/<lane>/journal lane_journal lane -',
     'document: <unit>/lanes/<lane>/journal lane_journal lane_entry @entry', 'document: <unit>/lanes/<lane>/report lane_report lane -', '',
   ].join('\n'),
-  flatdoc: 'root: flat-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\nformat: text\n',
-  genericdoc: 'root: generic-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n',
-  jsondoc: 'root: json-root\nsuffix: .json\nkey: <a>/<b>\nchanges: false\nsearch: flat\nformat: json\nfields: title, body\ntitle: title\n',
+  flatdoc: 'root: flat-root\nsuffix: .txt\nkey: <a>/<b>\nsearch: flat\nformat: text\n',
+  genericdoc: 'root: generic-root\nsuffix: .txt\nkey: <a>/<b>\n',
+  jsondoc: 'root: json-root\nsuffix: .json\nkey: <a>/<b>\nsearch: flat\nformat: json\nfields: title, body\ntitle: title\n',
 };
 
 export const SEARCH_VALUES: Record<string, [string, string][]> = {
@@ -35,10 +35,8 @@ export const NEEDLE_ROWS = [
 ];
 
 
-// the mode registry the two drivers' descriptors carry: one name and one-line description per mode
+// the mode registry every driver's descriptor carries: exact alone, its one-line description
 export const MODE_DESCRIPTIONS: Record<string, string> = {
   exact: 'a case-insensitive substring of one line, the first matching line as the snippet, alike on every driver',
-  hybrid: 'ranked full-text search over the derived documents, the word index and the trigram index fused by reciprocal rank',
-  trigram: 'ranked substring search over the derived documents through the trigram index alone',
 };
 export const modeList = (...names: string[]) => names.map((name) => ({ name, description: MODE_DESCRIPTIONS[name] }));

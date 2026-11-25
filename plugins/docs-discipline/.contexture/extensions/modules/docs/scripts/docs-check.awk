@@ -12,14 +12,16 @@
 # does not track cannot ride a tracked delta: the check reports the state (UNTRACKED CLAIMANT)
 # and leaves reconciliation to the process (the docs-drift flow), never a false STALE; one
 # tracked claimant among several restores the delta rule.
-# delta_source (a bounded token, -v): git (the default, the files driver: the rules above) or
-# log (a store driver feeds the corpus half from its change log): a claimed file reads fresh only
-# when a doc whose own sources claim it rode the delta, so the blanket (a riding architecture or
-# overview doc freshening every claimed file of its repo, any riding workspace doc every claimed
-# file of every repo) is off, and every claimant can ride a driver-fed delta, so the trackedness
-# probe is off and UNTRACKED CLAIMANT never fires.
+# corpus_root (-v): the workspace relative folder the storage core declares for the docs
+# namespace (docs_corpus_root); empty is docs, the identity. A delta path under it names a
+# doc by where git sees it and rides as the logical address docs/<repo>/<slug>.md; the
+# logical spelling rides as well only when logical_rides (-v) is 1, a caller supplied list
+# (the check verb, gate --stdin), never in the deltas the gate builds from git, where a file
+# at a doc's logical address outside the declared folder is an ordinary file. The
+# trackedness probe asks git for a claimant at the declared folder.
 
 BEGIN {
+    CROOT = ((corpus_root == "") ? "docs" : corpus_root) "/"
     CODE_EXT_RE = "\\.(awk|cs|js|cjs|mjs|jsx|ts|tsx|vue|svelte|astro|dart|py|rb|php|java|kt|kts|go|rs|swift|c|h|cc|cpp|hpp|sh|bash|zsh|sql|proto|graphql|gql|html|css|scss|sass|less|lua|pl|r|ex|exs|erl|hs|cshtml)$"
     EXCLUDE_RE = "([.]spec[.]|/spec/|^spec/|\\.Test|\\.Tests|\\.min\\.|\\.generated\\.)"
     GUIDE_RE = "^docs/[^/]+\\.md$"
@@ -63,11 +65,15 @@ BEGIN {
         touched[line] = 1
         touched_count++
 
-        # a corpus doc rides the delta only at its logical address, the start of a delta path;
-        # a code path that merely ends in docs/<x>/<y>.md (a seed, a sample, a child
-        # repository's own guide under its prefix) is no doc touch
-        if (line ~ /^docs\/[^\/]+\/[^\/]+\.md$/) {
-            split(line, dparts, "/")
+        # a corpus doc rides the delta at the start of a delta path: under the declared
+        # folder, or at its logical address in a caller's list; a code path that merely ends
+        # in docs/<x>/<y>.md (a seed, a sample, a child repository's own guide under its
+        # prefix) is no doc touch
+        d_line = ""
+        if (index(line, CROOT) == 1) d_line = "docs/" substr(line, length(CROOT) + 1)
+        else if (logical_rides == 1) d_line = line
+        if (d_line ~ /^docs\/[^\/]+\/[^\/]+\.md$/) {
+            split(d_line, dparts, "/")
             d_repo = dparts[2]
             d_slug = dparts[3]
             sub(/\.md$/, "", d_slug)
@@ -78,8 +84,6 @@ BEGIN {
         }
     }
     if (input_src != "-") close(input_src)
-    # under a store's change log a doc refreshes only the code its own sources name
-    if (delta_source == "log") split("", arch_touched)
 
     # the verb's scratch list of the extensionless delta paths it read as regular files under
     # the workspace root, one <shebang|plain> TAB <path> line each; no engine line opens a
@@ -116,19 +120,19 @@ function is_governed_guide(t_file) {
 # Trackedness signal for the freshness of a governed file: a claimant the repository does not
 # track cannot ride the delta, so it is never counted stale (reconciliation is process-owned).
 # Memoized per path; a non-repository run reads every claimant untracked.
-function claimant_is_tracked(path,   cmd, rc, root) {
+function claimant_is_tracked(path,   cmd, rc, root, gpath) {
     if (path in tracked_cache) return tracked_cache[path]
     root = ENVIRON["DOCS_GIT_ROOT"]
-    if (root != "") cmd = "git -C \"" root "\" ls-files --error-unmatch -- \"" path "\" >/dev/null 2>&1"
-    else cmd = "git ls-files --error-unmatch -- \"" path "\" >/dev/null 2>&1"
+    gpath = path
+    if (index(path, "docs/") == 1) gpath = CROOT substr(path, 6)
+    if (root != "") cmd = "git -C \"" root "\" ls-files --error-unmatch -- \"" gpath "\" >/dev/null 2>&1"
+    else cmd = "git ls-files --error-unmatch -- \"" gpath "\" >/dev/null 2>&1"
     rc = system(cmd)
     tracked_cache[path] = (rc == 0) ? 1 : 0
     return tracked_cache[path]
 }
 
 function any_claimant_tracked(t_file,   n, parts, i) {
-    # a driver-fed delta carries every claimant: nothing to probe
-    if (delta_source == "log") return 1
     n = split(claimant_paths[t_file], parts, "\n")
     for (i = 1; i <= n; i++) {
         if (parts[i] != "" && claimant_is_tracked(parts[i])) return 1

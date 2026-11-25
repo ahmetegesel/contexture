@@ -15,8 +15,9 @@
 # self-planted matrix, files by construction); false-positive (an instrument B pattern
 # inside a word or a string). A new corpus read or path print outside the helper lands here only by an
 # explicit edit, which is the point: it stays visible.
-claimant-probe	docs-check.awk	    if (root != "") cmd = "git -C \"" root "\" ls-files --error-unmatch -- \"" path "\" >/dev/null 2>&1"
-claimant-probe	docs-check.awk	    else cmd = "git ls-files --error-unmatch -- \"" path "\" >/dev/null 2>&1"
+claimant-probe	docs-check.awk	    if (index(path, "docs/") == 1) gpath = CROOT substr(path, 6)
+claimant-probe	docs-check.awk	    if (root != "") cmd = "git -C \"" root "\" ls-files --error-unmatch -- \"" gpath "\" >/dev/null 2>&1"
+claimant-probe	docs-check.awk	    else cmd = "git ls-files --error-unmatch -- \"" gpath "\" >/dev/null 2>&1"
 claimant-probe	docs-check.awk	    rc = system(cmd)
 delta-read	docs-check.awk	    while ((getline raw_line < input_src) > 0) {
 scratch-list	docs-check.awk	        while ((getline sb_line < shebang_src) > 0) {
@@ -50,7 +51,8 @@ engine-path-logic	docs-audit.awk	        err(FILENAME, FNR, "evidence must be gr
 engine-path-logic	docs-audit.awk	        err(FILENAME, FNR, "duplicate id '" pid "' in repo '" curr_repo "' (first seen at " seen_ids[scope_pid] ")")
 engine-path-logic	docs-audit.awk	        seen_ids[scope_pid] = FILENAME ":" FNR
 engine-path-logic	docs-check.awk	    GUIDE_RE = "^docs/[^/]+\\.md$"
-engine-path-logic	docs-check.awk	        if (line ~ /^docs\/[^\/]+\/[^\/]+\.md$/) {
+engine-path-logic	docs-check.awk	        if (index(line, CROOT) == 1) d_line = "docs/" substr(line, length(CROOT) + 1)
+engine-path-logic	docs-check.awk	        if (d_line ~ /^docs\/[^\/]+\/[^\/]+\.md$/) {
 engine-path-logic	docs-check.awk	            sub(/\.md$/, "", d_slug)
 engine-path-logic	docs-check.awk	    curr_file = FILENAME
 engine-path-logic	docs-query.awk	    curr_file = FILENAME
@@ -77,15 +79,12 @@ git-delta	gate	                behind=$(git -C "$pdir" rev-list --count "HEAD..$
 helper-output	audit	docs_args 1 0 "$@" || exit $?
 helper-output	audit	docs_exec "$dir/docs-audit.awk"
 helper-output	check	docs_args 0 0 "$@" || exit $?
-helper-output	check	docs_exec awk -f "$dir/docs-glob.awk" -f "$dir/docs-check.awk" -v "$DOCS_DELTA_ARG"
-helper-output	check	  docs_exec awk -f "$dir/docs-glob.awk" -f "$dir/docs-check.awk" -v "$DOCS_DELTA_ARG" -v delta_source=log
-helper-output	changes	docs_changes "$@"
+helper-output	check	docs_exec awk -f "$dir/docs-glob.awk" -f "$dir/docs-check.awk" -v "$DOCS_DELTA_ARG" -v "corpus_root=$DOCS_CORPUS_ROOT" -v logical_rides=1
 helper-output	gate	        set -- "$@" "$doc_path"
 helper-output	gate	    done < "$DOCS_PATHS"
 helper-output	gate	    docs_engine_run awk "$@"
 helper-output	gate	    run_engine_over_corpus -f "$AWK_AUDIT"
-helper-output	gate	        run_engine_over_corpus -f "$AWK_GLOB" -f "$AWK_CHECK" -v "$DOCS_DELTA_ARG" -v delta_source=log
-helper-output	gate	        run_engine_over_corpus -f "$AWK_GLOB" -f "$AWK_CHECK" -v "$DOCS_DELTA_ARG"
+helper-output	gate	    run_engine_over_corpus -f "$AWK_GLOB" -f "$AWK_CHECK" -v "$DOCS_DELTA_ARG" -v "corpus_root=$DOCS_CORPUS_ROOT" -v "logical_rides=$GATE_LOGICAL"
 helper-output	nudge	  docs_args 0 1 "$@" || exit $?
 helper-output	nudge	  set -- "$@" "$nf_t"
 helper-output	nudge	docs_task_files "$first" "$@" || exit $?
@@ -95,7 +94,6 @@ helper-output	query	done < "$DOCS_PATHS"
 helper-output	query	    -f "$AWK_GLOB" \
 helper-output	query	    -f "$AWK_SCRIPT" "$@")
 helper-source	audit	. "$dir/docs-io.sh"
-helper-source	changes	. "$dir/docs-io.sh"
 helper-source	check	. "$dir/docs-io.sh"
 helper-source	gate	. "$dir/docs-io.sh"
 helper-source	nudge	. "$dir/docs-io.sh"
@@ -152,10 +150,8 @@ helper-source	section	. "$dir/docs-io.sh"
 helper-output	section	docs_parse "after first remove dry-run" 0 "$@" || exit $?
 helper-source	write	. "$dir/docs-io.sh"
 helper-output	write	docs_parse "replace dry-run" 0 "$@" || exit $?
-git-delta	gate	        aggregate_remote_drift_changes | docs_code_half | sort -u | docs_delta_stage
-git-delta	gate	        aggregate_remote_drift_changes | sort -u | docs_delta_stage
-git-delta	gate	        { aggregate_git_changes | docs_code_half; docs_changes_emit; } | sort -u | docs_delta_stage
-git-delta	gate	        aggregate_git_changes | sort -u | docs_delta_stage
+git-delta	gate	    aggregate_remote_drift_changes | sort -u | docs_delta_stage
+git-delta	gate	    aggregate_git_changes | sort -u | docs_delta_stage
 false-positive	query	      if [ $# -gt 0 ] && [ "$(echo "$1" | cut -c 1-2)" != "--" ]; then
 helper-output	query	QUERY_OUT=$(docs_engine_run awk -v mode="$MODE" \
 helper-source	get	. "$dir/docs-io.sh"

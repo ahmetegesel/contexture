@@ -48,7 +48,7 @@
 
 @append @query
   surfaces: universal search, reference resolution, the journal + knowledge.
-  search: the record entities in the shared search syntax: ctx unit search "<query>" [--unit=<unit>] [--all] [--type=<t>] [--mode=<m>] [--limit=N]; the active units by default, --all every unit, --unit=<unit> any one, closed ones included; --mode defaults to exact (one rule on every backend), a ranked mode where the configured backend registers it (ctx search --modes lists them); every row names its address and its read, ctx unit get <path>; the unit state is never searched.
+  search: the record entities in the shared search syntax: ctx unit search "<query>" [--unit=<unit>] [--all] [--type=<t>] [--mode=<m>] [--limit=N]; the active units by default, --all every unit, --unit=<unit> any one, closed ones included; --mode takes exact, the one mode and the default (one rule on every backend); every row names its address and its read, ctx unit get <path>; the unit state is never searched.
   resolution: ctx unit get <path> reads one record entity whole, the path everything after unit# in its address (<unit>/task/<slug>, <unit>/entry/<slug>, <unit>/finding/<NAME>, <unit>/lane/<lane>/<recipe|journal|report>[/<SECTION or slug>]); another owner's address reads through ctx <owner> get <path>.
   journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, across all anchors. anchors are period ordering, never liveness. .contexture/ctx unit board streams active entries with complete bodies in one shot, then the open threads with their targets and the open task slugs with their nudge; no per-entry Read tool loops, no range spanning.
     command:

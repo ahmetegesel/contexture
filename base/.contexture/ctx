@@ -2698,7 +2698,7 @@ usage: ctx search "<query>" [--type=<type>] [--mode=<mode>] [--limit=N] [--json]
        ctx search --modes [--json]
        ctx search config <subcommand> [args...]
 runs every module that carries a verb named search, in discovery order, with the shared flags only (a module's own scope flags are never forwarded), and prints one group per module: its rows (type, address, snippet, read, label), failed with its reason, or not searched; no ranking crosses modules, and zero hits is an answer; a query cannot begin with a dash, which reads as a flag and refuses (no end of options marker, a stated limit)
---limit= is a positive whole number per module (default 20); --mode= defaults to exact and takes a registered mode (ctx search --modes lists them), a module that cannot answer it falling back to exact, which its group says; --type= passes to every module; --module=<name> searches one module; only the --flag=value form is taken
+--limit= is a positive whole number per module (default 20); --mode= takes exact, the one registered mode and the default (ctx search --modes lists it); --type= passes to every module; --module=<name> searches one module; only the --flag=value form is taken
 each module runs bounded by search.timeout in the workspace configuration (a positive whole number of seconds, default 10); a module past it is stopped with every descendant one process snapshot finds, and reads failed (a process forked after the snapshot, or reparented before it by a double fork, may escape, a stated limit)
 ctx search config manages search settings (load, get, set, unset, schema) in the workspace configuration; to search for the literal word 'config', put a flag first (for example, ctx search --mode=exact config)
 exit codes: 0 every searched module answered (zero hits included, or no module carries a search verb); 1 a bad argument; 2 a module failed, the other groups still printed
@@ -2866,7 +2866,6 @@ END {
     exit
   }
   printf "%s%s: %d of %d", m, (ENVIRON["SG_ALIAS"] != "" ? " (alias of " ENVIRON["SG_ALIAS"] ")" : ""), NR_, TOTAL
-  if (MODE != ENVIRON["SG_ASKED"]) printf ", mode %s (asked %s)", MODE, ENVIRON["SG_ASKED"]
   printf "\n"
   for (i = 1; i <= NR_; i++) {
     printf "  %s %s%s: %s\n", txt(V[i, "type"]), txt(V[i, "address"]), (HAS[i, "label"] ? " [" txt(V[i, "label"]) "]" : ""), txt(V[i, "snippet"])

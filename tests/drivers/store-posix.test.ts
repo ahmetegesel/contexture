@@ -62,11 +62,6 @@ describe('the posix store on disk', { concurrent: true }, () => {
     expect((await s.list('unit')).stdout).toBe(listAnswer('unit', ['storage/lanes/foo/report', 'storage/state']));
   });
 
-  it('[the-engine-r19] keeps no change log, even for a namespace that declares one', async () => {
-    refused(await store(fresh(empty), 'posix').changes('docs'), 'store.changes', 1, 'ERR_CAPABILITY_UNSUPPORTED',
-      "the storage layer keeps no change log under the posix driver; namespace 'docs' reports its delta through its module (changes: true)");
-  });
-
   it('[the-engine-r8] refuses a ranked mode by its registry, exact alone, even on a namespace declaring a search schema', async () => {
     const sb = fresh(empty);
     dataFile(sb, 'modules', 'searchdoc', SEARCH_DATA.searchdoc);
@@ -76,7 +71,7 @@ describe('the posix store on disk', { concurrent: true }, () => {
 
   it('[the-engine-r19, modules-r10] scans planted files bytewise, admitting only the pattern\'s keys, a binary value in base64', async () => {
     const sb = fresh(empty);
-    dataFile(sb, 'modules', 'scanprobe', 'root: scan-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
+    dataFile(sb, 'modules', 'scanprobe', 'root: scan-root\nsuffix: .txt\nkey: <a>/<b>\n');
     const values: [string, Buffer][] = [['x/B', Buffer.from('B\n')], ['x/a', Buffer.from('a\n')], ['x/aa', Buffer.from('aa\n')], ['x/bin', Buffer.from([0x61, 0, 0x62, 0xff])]];
     for (const [key, value] of values) plant(sb, `scan-root/${key}.txt`, value);
     plant(sb, 'scan-root/x/y/z.txt', 'three segments\n');
@@ -87,7 +82,7 @@ describe('the posix store on disk', { concurrent: true }, () => {
 
   it.skipIf(ROOT_USER)('[the-engine-r21] refuses a scan meeting an unreadable file, naming its key, with no partial answer', async ({ onTestFinished }) => {
     const sb = fresh(empty);
-    dataFile(sb, 'modules', 'scanprobe', 'root: scan-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
+    dataFile(sb, 'modules', 'scanprobe', 'root: scan-root\nsuffix: .txt\nkey: <a>/<b>\n');
     plant(sb, 'scan-root/x/a.txt', 'a\n');
     plant(sb, 'scan-root/x/ro.txt', 'unreadable\n');
     chmodPlant(join(sb, 'scan-root/x/ro.txt'), 0o000, 0o600, onTestFinished);
@@ -165,7 +160,7 @@ describe('the posix store on disk', { concurrent: true }, () => {
     chmodPlant(join(sb, '.contexture/tmp'), 0o555, 0o755, onTestFinished);
     const r = await exec('env', ['-u', 'USER', driverPath(sb, 'posix'), 'store.put', 'minimal', 'a/b'], { cwd: sb, input: 'x\n', env: { TMPDIR: temp } });
     expect(r.stderr).toBe('');
-    expect(r.stdout).toBe('{"namespace":"minimal","key":"a/b","op":"write"}\n');
+    expect(r.stdout).toBe('{"namespace":"minimal","key":"a/b"}\n');
     expect(readFileSync(join(sb, 'minimal/a/b'), 'utf8')).toBe('x\n');
   });
 });

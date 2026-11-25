@@ -39,11 +39,9 @@ export function docs(sb: string, args: readonly string[], { input = '', env = {}
   return exec('./.contexture/ctx', ['docs', ...args], { cwd: sb, input, env: { GIT_CEILING_DIRECTORIES: dirname(sb), ...env }, timeout });
 }
 
-const SEED_HEAD = '0000000';
-
 export async function putDocs(sb: string, driver: Driver, docsByKey: Record<string, string | Buffer>): Promise<void> {
   const s = store(sb, driver);
-  for (const [key, value] of Object.entries(docsByKey)) answer(await s.put('docs', key, value, `--head=${SEED_HEAD}`), 'store.put');
+  for (const [key, value] of Object.entries(docsByKey)) answer(await s.put('docs', key, value), 'store.put');
 }
 
 export function stageSeed(driver: Driver, label: string, build: (sb: string) => Promise<void> = async () => undefined): Promise<string> {

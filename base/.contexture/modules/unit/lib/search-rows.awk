@@ -2,9 +2,9 @@
 # (the JSON string form). The input is, per searched unit in the board's unit order, one
 # line "@unit<TAB><unit><TAB><status>" followed by the flat lines (json.awk) of that unit's
 # search.query answer; then the rows map onto the shared search row shape:
-#   module unit; container the unit data declaration's key pattern of the row's section and
-#   entity type, the unit filled in (a lane row's the address form, the lane key naming the
-#   record's file layout); type the record's entity type; id the
+#   module unit; container the row's artifact, <unit>/<backlog|knowledge|journal> (a lane
+#   row's the address form <unit>/lane/<lane>/<recipe|journal|report>); type the record's
+#   entity type; id the
 #   address path after the type segment; address unit#<unit>/<kind>/<id>; snippet; read
 #   ctx unit get <path>; label closed on a CLOSED unit's rows.
 # A row with no addressable entity (an artifact preamble, an anchor line, a lane journal
@@ -13,15 +13,9 @@
 # (tasks, entries, findings, lane recipes and reports), never those rows nor a lane journal
 # entry. The type filter keeps one entity type, the limit applies once to the merged rows,
 # and total counts every merged row.
-# The environment: SR_QUERY, SR_MODE, SR_LIMIT, SR_TYPE, SR_FANOUT, SR_RULES (the document
-# rules, one "<key-pattern> TAB <section> TAB <entity type> TAB <marker>" line each).
+# The environment: SR_QUERY, SR_MODE, SR_LIMIT, SR_TYPE, SR_FANOUT.
 
 BEGIN {
-  SRNRULE = split(ENVIRON["SR_RULES"], SRRL, "\n")
-  for (i = 1; i <= SRNRULE; i++) {
-    split(SRRL[i], SRF, "\t")
-    SRRPAT[i] = SRF[1]; SRRSEC[i] = SRF[2]; SRRENT[i] = SRF[3]
-  }
   SRTYPE = ENVIRON["SR_TYPE"]
   if (SRTYPE == "all") SRTYPE = ""
   SRFAN = (ENVIRON["SR_FANOUT"] == "1")
@@ -62,20 +56,13 @@ END {
   printf "]}\n"
 }
 
-# container(sec, ty, lane): the declaration's key pattern for the row, its placeholders
-# filled: the rule naming the section and the entity type, else the section's first rule; a
-# lane artifact's key names the record's file layout, so a lane row's container takes the
-# address form <unit>/lane/<lane>/<recipe|journal|report> instead
-function container(sec, ty, lane,   i, p, at) {
+# container(sec, lane): the row's artifact in the unit module: <unit>/<section> for the
+# backlog, the knowledge, and the journal; a lane row's the address form
+# <unit>/lane/<lane>/<recipe|journal|report>, never the record's file layout
+function container(sec, lane) {
   if (lane != "" && sec ~ /^lane_/) return SRUNIT "/lane/" lane "/" substr(sec, 6)
-  at = 0
-  for (i = 1; i <= SRNRULE; i++) if (SRRSEC[i] == sec && SRRENT[i] == ty) { at = i; break }
-  if (!at) for (i = 1; i <= SRNRULE; i++) if (SRRSEC[i] == sec) { at = i; break }
-  if (!at) return SRUNIT
-  p = SRRPAT[at]
-  sub(/<unit>/, SRUNIT, p)
-  if (lane != "") sub(/<lane>/, lane, p)
-  return p
+  if (sec == "backlog" || sec == "knowledge" || sec == "journal") return SRUNIT "/" sec
+  return SRUNIT
 }
 
 function row(cont, ty, id, addr, snip, rd,   o) {
@@ -95,12 +82,12 @@ function flush(   i, ty, id, sec, lane, slug, art, path) {
     if (ty == "task" || ty == "entry" || ty == "finding") {
       path = SRUNIT "/" ty "/" id
       SRROWS++
-      SROUT[SRROWS] = row(container(sec, ty, ""), ty, id, "unit#" path, SRSNIP[i], "ctx unit get " path)
+      SROUT[SRROWS] = row(container(sec, ""), ty, id, "unit#" path, SRSNIP[i], "ctx unit get " path)
     } else if (ty == "lane" && (sec == "lane_recipe" || sec == "lane_report")) {
       art = (sec == "lane_recipe") ? "recipe" : "report"
       path = SRUNIT "/lane/" id "/" art
       SRROWS++
-      SROUT[SRROWS] = row(container(sec, ty, id), ty, id "/" art, "unit#" path, SRSNIP[i], "ctx unit get " path)
+      SROUT[SRROWS] = row(container(sec, id), ty, id "/" art, "unit#" path, SRSNIP[i], "ctx unit get " path)
     } else if (SRFAN) {
       continue
     } else if (ty == "lane_entry") {
@@ -108,13 +95,13 @@ function flush(   i, ty, id, sec, lane, slug, art, path) {
       slug = substr(id, length(lane) + 2)
       path = SRUNIT "/lane/" lane "/journal/" slug
       SRROWS++
-      SROUT[SRROWS] = row(container(sec, ty, lane), ty, lane "/journal/" slug, "unit#" path, SRSNIP[i], "ctx unit get " path)
+      SROUT[SRROWS] = row(container(sec, lane), ty, lane "/journal/" slug, "unit#" path, SRSNIP[i], "ctx unit get " path)
     } else if (ty == "lane") {
       SRROWS++
-      SROUT[SRROWS] = row(container(sec, ty, id), ty, id, "", SRSNIP[i], "ctx lane show " SRUNIT " " id " journal")
+      SROUT[SRROWS] = row(container(sec, id), ty, id, "", SRSNIP[i], "ctx lane show " SRUNIT " " id " journal")
     } else {
       SRROWS++
-      SROUT[SRROWS] = row(container(sec, ty, ""), ty, SRUNIT, "", SRSNIP[i], "ctx unit load " SRUNIT)
+      SROUT[SRROWS] = row(container(sec, ""), ty, SRUNIT, "", SRSNIP[i], "ctx unit load " SRUNIT)
     }
   }
   SRN = 0

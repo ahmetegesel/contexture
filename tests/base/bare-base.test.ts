@@ -99,14 +99,14 @@ describe.concurrent('the bare base: the rhythm list without rhythms (BG1)', () =
 
 const CARD = {
   driver: 'posix',
-  version: '3.0.0',
-  contract: '3',
-  store: ['list', 'get', 'put', 'delete', 'changes', 'batch', 'scan'],
+  version: '4.0.0',
+  contract: '4',
+  store: ['list', 'get', 'put', 'delete', 'batch', 'scan'],
   search_modes: [{ name: 'exact', description: 'a case-insensitive substring of one line, the first matching line as the snippet, alike on every driver' }],
   optional: ['store', 'store.promote'],
 };
 
-describe('the bare base: the posix descriptor, the contract 3 store-only card', () => {
+describe('the bare base: the posix descriptor, the contract 4 store-only card', () => {
   it('[the-engine-r19, the-engine-r24] diagnose names posix with the exact card and a healthy store after a bootstrap; a planted card reads against it', async () => {
     const sb = bare();
     expect((await ctx(sb, 'unit', 'bootstrap', 'baseonly', 'the base-only probe unit')).code).toBe(0);
@@ -118,7 +118,7 @@ describe('the bare base: the posix descriptor, the contract 3 store-only card', 
     const card = d.driver.descriptor;
     expect(isDeepStrictEqual(card, CARD)).toBe(true);
     const missing = { ...card, store: card.store.filter((s: string) => s !== 'batch') };
-    expect(missing.store).toHaveLength(6);
+    expect(missing.store).toHaveLength(5);
     expect(isDeepStrictEqual(missing, CARD)).toBe(false);
     expect(isDeepStrictEqual({ ...card, functions: ['session.list'] }, CARD)).toBe(false);
   });

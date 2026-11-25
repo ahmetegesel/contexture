@@ -1,9 +1,9 @@
 #!/bin/sh
 # store-data: the storage core's private reader and validator of a module's data file
 # (no summary line, so discovery ignores it). It answers one namespace with the effective
-# store fields on eleven lines, in this order: namespace, root, suffix, key pattern,
-# changes, the data file path, the search form, the format, the fields, the title, and the
-# snippet. The search form's document rules follow, one per line, as four
+# store fields on ten lines, in this order: namespace, root, suffix, key pattern, the data
+# file path, the search form, the format, the fields, the title, and the snippet. The
+# search form's document rules follow, one per line, as four
 # tab-separated values: the key pattern, the section, the entity type, and the head marker
 # (or - for none).
 #
@@ -21,8 +21,6 @@
 #         after the root and never writes>
 #   suffix: <suffix, at most 48 bytes; empty only beside a fixed depth key    (optional;
 #         pattern, one with no <name...> placeholder>                       default empty)
-#   changes: true|false                                                      (optional;
-#         default false)
 #   search: flat|documents                                                   (optional)
 #   format: text|json                                                        (optional;
 #         flat only; default text)
@@ -45,9 +43,10 @@
 # workspace modules root first, then the extension root, as discovery resolves a module
 # name (a workspace module shadows an extension module of its name). The script validates
 # the fields before any store function maps a key to a path. A data file names no
-# namespace and no search modes: a namespace line refuses as an unknown field naming the fix
-# (the namespace is the folder's name), and so does a modes line (the modes are the
-# configured driver's registry).
+# namespace, no search modes, and no change log: a namespace line refuses as an unknown
+# field naming the fix (the namespace is the folder's name), and so do a modes line (the
+# modes are the configured driver's registry) and a changes line (the change log left the
+# storage contract).
 #
 # A root the data file declares applies only under the module's own name: an extension
 # module that an install record names as installed under an alias (its module line
@@ -57,10 +56,10 @@
 # never installed by a package, so never aliased. An install record area that exists but
 # cannot be read leaves an extension module's root unknown and refuses rc 2.
 #
-# The plain answer never carries the fallback root, so a parser that reads the eleven lines
-# by position ignores the field by construction. store-data <namespace> --with-fallback
-# answers the fallback root as line 12 (an empty line when none is declared) and the
-# document rules from line 13; a file store asks for it, a store with no root never does.
+# The plain answer never carries the fallback root, so a parser that reads the ten lines by
+# position ignores the field by construction. store-data <namespace> --with-fallback
+# answers the fallback root as line 11 (an empty line when none is declared) and the
+# document rules from line 12; a file store asks for it, a store with no root never does.
 #
 # A field line declares one field of the module's container in the module library's field
 # grammar, the clauses in their fixed order, one blank apart with none trailing: the
@@ -168,7 +167,7 @@ case "$0" in */*) sd_dir=${0%/*} ;; *) sd_dir=. ;; esac
 # sd_parse <namespace> <data file>: the parse and the rule checks, one awk pass over the
 # owner file and, for an extension module, every install record after it, whose module
 # line naming the namespace under an alias drops the declared roots; the answer is the
-# eleven lines plus the document rules, a refusal is the one prefixed line and exit 1, an
+# ten lines plus the document rules, a refusal is the one prefixed line and exit 1, an
 # install record area that cannot be read exit 2. A data file holding a field line takes
 # two passes more: the pass that finds one exits 4 with nothing printed, the field lines
 # are read and checked, and a last pass prints the answer.
@@ -332,9 +331,9 @@ BEGIN {
   want = ENVIRON["SD_WANT_NS"]
   path = ENVIRON["SD_PATH"]
   fname = ENVIRON["SD_FNAME"]
-  seen_root = seen_suffix = seen_key = seen_changes = seen_fb = 0
+  seen_root = seen_suffix = seen_key = seen_fb = 0
   seen_search = seen_format = seen_fields = seen_title = seen_snippet = 0
-  ns = root = suffix = key = changes = search = format = fields = title = snippet = fb = ""
+  ns = root = suffix = key = search = format = fields = title = snippet = fb = ""
   docs = ""
   uns = ""
   doc_count = 0
@@ -371,8 +370,7 @@ FILENAME != path {
     if (seen_key) fail("duplicate field '\''key'\'' in the data file")
     seen_key = 1; key = value; key_line = lineno
   } else if (field == "changes") {
-    if (seen_changes) fail("duplicate field '\''changes'\'' in the data file")
-    seen_changes = 1; changes = value
+    fail("unknown field '\''changes'\'' in the data file: the change log left the storage contract, so remove the changes line")
   } else if (field == "search") {
     if (seen_search) fail("duplicate field '\''search'\'' in the data file")
     seen_search = 1; search = value
@@ -422,7 +420,6 @@ END {
   if (!seen_key) fail("the data file declares no key pattern")
   if (!seen_root) root = ns
   if (!seen_suffix) suffix = ""
-  if (!seen_changes) changes = "false"
 
   if (!ns_ok(ns)) fail("malformed namespace '\''" ns "'\''")
   if (!root_ok(root)) fail("malformed root '\''" root "'\'' (a workspace-relative folder inside the workspace)")
@@ -436,7 +433,6 @@ END {
   if (!key_pattern_ok(key)) fail("malformed key pattern '\''" key "'\'' (a <name> placeholder per slash-separated segment, the last optionally <name...>)")
   if (length(suffix) > 48) fail("line " suffix_line ": the suffix '\''" suffix "'\'' is longer than 48 bytes (a 200 byte key segment, the suffix, and the write temp'\''s 7 bytes fit a 255 byte file name)")
   if (suffix == "" && key ~ /\.\.\.>$/) fail("line " key_line ": the key pattern '\''" key "'\'' ends in a <name...> placeholder while the suffix is empty, so one key could be another key'\''s folder (declare a suffix, or a fixed depth pattern)")
-  if (changes != "true" && changes != "false") fail("malformed changes flag '\''" changes "'\'' (true or false)")
 
   form = ""
   if (seen_search) {
@@ -487,7 +483,6 @@ END {
   print root
   print suffix
   print key
-  print changes
   print path
   print form
   print format
@@ -533,7 +528,7 @@ if [ "$SD_LIST" -eq 1 ]; then
   while IFS="$sd_tab" read -r sd_ns sd_file; do
     [ -n "$sd_ns" ] || continue
     if sd_out=$(sd_parse "$sd_ns" "$sd_file" 2>&1); then
-      sd_fb=$(printf '%s\n' "$sd_out" | sed -n '12p')
+      sd_fb=$(printf '%s\n' "$sd_out" | sed -n '11p')
       printf '%s\t%s%s\n' "$sd_ns" "$(printf '%s\n' "$sd_out" | sed -n '2p')" "${sd_fb:+$sd_tab$sd_fb}"
     else
       printf 'store-data: namespace '\''%s'\'': %s\n' "$sd_ns" "${sd_out#store-data: }" >&2

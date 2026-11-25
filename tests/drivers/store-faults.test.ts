@@ -67,7 +67,7 @@ describe.skipIf(ROOT_USER)('posix write faults', { concurrent: true }, () => {
     mkdirSync(join(sb, 'docs/ro'), { recursive: true });
     chmodPlant(join(sb, 'docs/ro'), 0o500, 0o700, onTestFinished);
     const s = store(sb, 'posix');
-    refused(await s.batch('docs', [{ action: 'put', key: 'a/new', head: 'none', value: 'one\n' }, { action: 'put', key: 'ro/x', head: 'none', value: 'ro\n' }]),
+    refused(await s.batch('docs', [{ action: 'put', key: 'a/new', value: 'one\n' }, { action: 'put', key: 'ro/x', value: 'ro\n' }]),
       'store.batch', 2, 'ERR_STORAGE_WRITE', "action 2 (put 'ro/x'): the storage write of key 'ro/x' failed");
     refused(await s.get('docs', 'a/new'), 'store.get', 1, 'ERR_ENTITY_NOT_FOUND', "key 'a/new' not found in namespace 'docs'");
     expect(existsSync(join(sb, 'docs/a'))).toBe(false);

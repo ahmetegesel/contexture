@@ -29,8 +29,8 @@ describe.concurrent('the real catalog installs by catalog name through ctx packa
     expect(existsSync(extPath(sb, 'rhythms/work.md'))).toBe(false);
     expect(existsSync(join(sb, 'docs/workspace/conventions.md'))).toBe(true);
     const sd = (await exec('./.contexture/storage/scripts/store-data', ['docs'], { cwd: sb })).stdout.split('\n');
-    expect(sd.slice(0, 5)).toEqual(['docs', 'docs', '.md', '<repo>/<slug>', 'true']);
-    expect(sd[5]).toBe(join(realpathSync(sb), '.contexture/extensions/modules/docs/data'));
+    expect(sd.slice(0, 4)).toEqual(['docs', 'docs', '.md', '<repo>/<slug>']);
+    expect(sd[4]).toBe(join(realpathSync(sb), '.contexture/extensions/modules/docs/data'));
     expect((await ctx(sb, 'docs', 'query', 'workspace', 'conventions')).stdout).toContain('conventions: conventions');
     const starter = catalogCopy(sb, 'starter-rhythms');
     expect((await install(sb, starter)).code).toBe(0);
@@ -127,13 +127,13 @@ describe.concurrent('the real package manifests', () => {
     expect(await pkgv('storage-fts5', 'parts')).toBe('driver storage/drivers/fts5');
   });
 
-  it('[plugins-r9, the-engine-r23] the fts5 driver sits at its extension-relative driver path with no module file and declares fts5, 3.0.0, contract 3', async () => {
+  it('[plugins-r9, the-engine-r23] the fts5 driver sits at its extension-relative driver path with no module file and declares fts5, 4.0.0, contract 4', async () => {
     expect(existsSync(join(FTS5, 'module'))).toBe(false);
     expect(isExec(join(FTS5, 'driver'))).toBe(true);
     const cap = (await exec('sh', [join(FTS5, 'driver'), 'capability'], { cwd: sb })).stdout;
     expect(cap).toContain('"driver":"fts5"');
-    expect(cap).toContain('"version":"3.0.0"');
-    expect(cap).toContain('"contract":"3"');
+    expect(cap).toContain('"version":"4.0.0"');
+    expect(cap).toContain('"contract":"4"');
   });
 
   it('[plugins-r9, modules-r16] every real catalog plugin carries rich optional metadata and passes ctx package catalog and info', async () => {

@@ -6,11 +6,11 @@
 # usage: ctx docs gate --stdin
 # usage: ctx docs gate --test-matrix
 # help: runs the corpus audit, then feeds the aggregated status-prefixed delta to the check; it fails when either does; the default run also warns on stderr when a scanned repository is on a non-main branch or behind its last-fetched origin
-# help: the default delta is the working tree's (git diff, git diff --cached, the untracked files), so a clean tree hands the check nothing and a notice on stderr says so; --since=<rev> proves a committed range instead: the workspace root's repository from <rev> to the working tree (git diff <rev> plus the untracked files), the child repositories keeping their working delta (a notice names them); under the files driver git carries the corpus half only where the workspace tracks the corpus: the untracked files leave the corpus docs out, so an untracked doc never rides, ignored or not, and an untracked corpus under --since gets a notice naming the process-owned limit; --since joins the default form alone, and an unknown revision or a root outside a repository refuses rc 1
+# help: the default delta is the working tree's (git diff, git diff --cached, the untracked files), so a clean tree hands the check nothing and a notice on stderr says so; --since=<rev> proves a committed range instead: the workspace root's repository from <rev> to the working tree (git diff <rev> plus the untracked files), the child repositories keeping their working delta (a notice names them); under every driver git carries the corpus half only where the workspace tracks the corpus at its declared folder: the untracked files leave the corpus docs out, so an untracked doc never rides, ignored or not, and an untracked corpus under --since gets a notice naming the process-owned limit; a store driver keeps no corpus file, so every claimant reads untracked there; --since joins the default form alone, and an unknown revision or a root outside a repository refuses rc 1
 # help: git runs with core.quotePath=false, so a non-ASCII path arrives as its bytes; a path git still quotes is decoded (a quote, a backslash), and one holding a control character (a tab, a newline) cannot ride a status line, so it is left out and named in a notice; --stdin decodes the caller's delta the same way
-# help: under a store driver with a change log (store.changelog) the delta has two halves: the code from git (the workspace root's docs/<repo>/<slug>.md paths dropped, since those files are not the corpus) and the corpus from the storage layer (ctx docs changes: the docs written since the current HEAD, so a commit empties both halves together, or since <rev> under --since); the check runs in its store mode; --stdin takes the caller's delta as given, and --drift prints a deferral notice and checks the incoming code delta alone
+# help: in the deltas the gate builds from git (the default form, --since, --drift) a doc rides only at its path under the corpus's declared folder, so a tracked file at a doc's logical address elsewhere is an ordinary file; --stdin takes the caller's delta as given, where a doc rides at its logical address docs/<repo>/<slug>.md or at that path
 # help: the notices and warnings go to stderr with a bracketed prefix; stdout and the exit code stay the check's
-# help: exit codes: 0 the audit and the check are clean; 1 a violation or a bad argument; 2 unreadable input (an awk engine's own failure)
+# help: exit codes: 0 the audit and the check are clean; 1 a violation or a bad argument; 2 unreadable input (an awk engine's own failure) or store roots the storage core cannot list, its one line passed through
 # help: example: ctx docs gate --test-matrix (ends: TEST MATRIX VERDICT: ALL 8 SCENARIOS PASSED)
 #
 # Layout: lives at <workspace>/.contexture/extensions/modules/docs/scripts/gate. The
@@ -145,9 +145,9 @@ aggregate_git_changes() {
 }
 
 # The notices that name the delta's limits, on stderr after the staged delta: an empty
-# delta proves nothing (a clean tree, or an empty range), under the files driver a --since
-# range over a corpus git does not track (ignored or not) carries no corpus line, and a path
-# the decode left out is named
+# delta proves nothing (a clean tree, or an empty range), a --since range over a corpus git
+# does not track (ignored or not, every corpus a store driver holds) carries no corpus line,
+# and a path the decode left out is named
 gate_notices() {
     if docs_delta_empty; then
         if [ -n "$GATE_SINCE" ]; then
@@ -156,7 +156,7 @@ gate_notices() {
             printf "[GATE NOTICE] the delta is empty (a clean tree): the check proves nothing about coverage or freshness; prove a committed range with ctx docs gate --since=<rev>\n" >&2
         fi
     fi
-    if [ -n "$GATE_SINCE" ] && [ "$DOCS_DELTA" != log ]; then
+    if [ -n "$GATE_SINCE" ]; then
         docs_corpus_untracked
         if [ "$DOCS_UNTRACKED" -gt 0 ]; then
             printf "[GATE NOTICE] the corpus is untracked here (%s of %s docs not tracked by git): no corpus line rides the delta, so a changed file whose claimants are all untracked reads UNTRACKED CLAIMANT, its freshness process-owned through the docs-drift flow\n" "$DOCS_UNTRACKED" "$DOCS_NDOCS" >&2
@@ -269,11 +269,12 @@ check_drift_warnings() {
 
 # The corpus the audit and the check read: the whole corpus read once from the storage
 # layer through the configured driver into the module's scratch before any pipeline (so the
-# scratch and its cleanup stay with this shell); an empty corpus or a driver without the
-# store refuses
+# scratch and its cleanup stay with this shell), and the corpus's declared folder
+# (docs_corpus_root); an empty corpus, a driver without the store, or roots the storage core
+# cannot list refuses
 prepare_corpus() {
     if docs_corpus; then
-        docs_delta_source
+        docs_corpus_root || exit $?
         return 0
     else
         pc_rc=$?
@@ -298,15 +299,13 @@ run_audit() {
 }
 
 # Run coverage, freshness, and dead sources check on the staged delta (docs_delta_stage),
-# read by name with the shebang list drawn from its paths; under a store's change log the
-# engine runs in its log mode (no blanket, no trackedness probe)
+# read by name with the shebang list drawn from its paths; GATE_LOGICAL 1 lets a doc ride at
+# its logical address (the caller's --stdin list), 0 only at its path under the declared
+# folder (the deltas the gate builds from git)
+GATE_LOGICAL=0
 run_gate_check() {
     docs_delta_shebangs
-    if [ "$DOCS_DELTA" = log ]; then
-        run_engine_over_corpus -f "$AWK_GLOB" -f "$AWK_CHECK" -v "$DOCS_DELTA_ARG" -v delta_source=log
-    else
-        run_engine_over_corpus -f "$AWK_GLOB" -f "$AWK_CHECK" -v "$DOCS_DELTA_ARG"
-    fi
+    run_engine_over_corpus -f "$AWK_GLOB" -f "$AWK_CHECK" -v "$DOCS_DELTA_ARG" -v "corpus_root=$DOCS_CORPUS_ROOT" -v "logical_rides=$GATE_LOGICAL"
 }
 
 # Self-planted test matrix: builds its own fixture corpus in the verb's scratch
@@ -409,32 +408,19 @@ if [ "$1" = "-" ] || [ "$1" = "--stdin" ]; then
     run_audit
     docs_delta_decode | docs_delta_stage
     docs_delta_unread "[GATE NOTICE]"
+    GATE_LOGICAL=1
     run_gate_check
 elif [ "$1" = "--drift" ]; then
     prepare_corpus
     run_audit
-    if [ "$DOCS_DELTA" = log ]; then
-        # the store's corpus has no incoming half: the incoming code delta alone
-        echo "[DRIFT NOTICE] the storage layer's corpus carries no incoming changes; drift over a shared storage layer is deferred" >&2
-        aggregate_remote_drift_changes | docs_code_half | sort -u | docs_delta_stage
-    else
-        aggregate_remote_drift_changes | sort -u | docs_delta_stage
-    fi
+    aggregate_remote_drift_changes | sort -u | docs_delta_stage
     docs_delta_unread "[GATE NOTICE]"
     run_gate_check
 elif [ -z "$1" ]; then
     prepare_corpus
     run_audit
     check_drift_warnings
-    if [ "$DOCS_DELTA" = log ]; then
-        # the code half from git without the workspace root's corpus paths, the corpus half
-        # from the store's change log (the docs written since the current HEAD, or since
-        # <rev> under --since)
-        docs_changes_prepare ${GATE_SINCE:+"--since=$GATE_SINCE"} || exit $?
-        { aggregate_git_changes | docs_code_half; docs_changes_emit; } | sort -u | docs_delta_stage
-    else
-        aggregate_git_changes | sort -u | docs_delta_stage
-    fi
+    aggregate_git_changes | sort -u | docs_delta_stage
     gate_notices
     run_gate_check
 else

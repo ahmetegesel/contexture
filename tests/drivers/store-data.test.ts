@@ -36,23 +36,23 @@ async function refusal(sb: string, ns: string, rc: number, reason: string): Prom
 const probe = (fields: string) => `root: probe-root\nsuffix: .txt\nkey: <a>/<b>\n${fields}`;
 
 describe.concurrent('store-data, the data file reader', () => {
-  it('[modules-r10] answers a docs-shaped declaration from the extension root on eleven lines, the data file path among them', async () => {
+  it('[modules-r10] answers a docs-shaped declaration from the extension root on ten lines, the data file path among them', async () => {
     const sb = workspace();
     expect(await answerLines(sb, 'docs')).toEqual([
-      'docs', 'docs', '.md', '<repo>/<slug>', 'true', join(moduleDir(sb, 'extensions', 'docs'), 'data'), '', '', '', 'key', 'line',
+      'docs', 'docs', '.md', '<repo>/<slug>', join(moduleDir(sb, 'extensions', 'docs'), 'data'), '', '', '', 'key', 'line',
     ]);
   });
 
-  it('[modules-r10] a declaration of a key pattern alone takes the defaults: the namespace the folder\'s name, the root the namespace, an empty suffix, changes false', async () => {
+  it('[modules-r10] a declaration of a key pattern alone takes the defaults: the namespace the folder\'s name, the root the namespace, an empty suffix', async () => {
     const sb = workspace();
     const file = dataFile(sb, 'modules', 'minimal', 'key: <a>/<b>\n');
-    expect(await answerLines(sb, 'minimal')).toEqual(['minimal', 'minimal', '', '<a>/<b>', 'false', file, '', '', '', 'key', 'line']);
+    expect(await answerLines(sb, 'minimal')).toEqual(['minimal', 'minimal', '', '<a>/<b>', file, '', '', '', 'key', 'line']);
   });
 
   it('[modules-r10, the-engine-r-cj0ey] the namespace is the module folder\'s name: a folder\'s data file serves its own name and never another', async () => {
     const sb = workspace();
-    const file = dataFile(sb, 'modules', 'probe2', probe('changes: true\n'));
-    expect(await answerLines(sb, 'probe2')).toEqual(['probe2', 'probe-root', '.txt', '<a>/<b>', 'true', file, '', '', '', 'key', 'line']);
+    const file = dataFile(sb, 'modules', 'probe2', probe(''));
+    expect(await answerLines(sb, 'probe2')).toEqual(['probe2', 'probe-root', '.txt', '<a>/<b>', file, '', '', '', 'key', 'line']);
     await refusal(sb, 'probe', 3, "namespace 'probe' is declared by no module data file");
   });
 
@@ -65,14 +65,14 @@ describe.concurrent('store-data, the data file reader', () => {
   it('[modules-r10, modules-r14] a workspace module shadows an extension module of its name, as discovery resolves the name', async () => {
     const sb = workspace();
     const file = dataFile(sb, 'modules', 'docs', 'root: ws-docs\nkey: <repo>/<slug>\n');
-    expect(await answerLines(sb, 'docs')).toEqual(['docs', 'ws-docs', '', '<repo>/<slug>', 'false', file, '', '', '', 'key', 'line']);
+    expect(await answerLines(sb, 'docs')).toEqual(['docs', 'ws-docs', '', '<repo>/<slug>', file, '', '', '', 'key', 'line']);
   });
 
   const record = (sb: string, pkg: string, lines: string) => {
     mkdirSync(join(sb, '.contexture/extensions/.state'), { recursive: true });
     writeFileSync(join(sb, '.contexture/extensions/.state', `${pkg}.files`), `package ${pkg}\nversion 1.0.0\nkind feature\n${lines}`);
   };
-  const ROOTED = 'root: docs\nfallback_root: old-docs\nsuffix: .md\nkey: <repo>/<slug>\nchanges: true\n';
+  const ROOTED = 'root: docs\nfallback_root: old-docs\nsuffix: .md\nkey: <repo>/<slug>\n';
 
   it('[modules-r10, modules-r15, the-engine-r-cj0ey] an extension module installed under an alias answers its namespace as the root and no fallback root: a declared root applies only under the module\'s own name', async () => {
     const sb = workspace();
@@ -80,7 +80,7 @@ describe.concurrent('store-data, the data file reader', () => {
     record(sb, 'docs-pro', 'module docs2 docs\nfile rw-r--r-- 1:1 .contexture/extensions/modules/docs2/data\n');
     const aliased = await withFallback(sb, 'docs2');
     expect([aliased.code, aliased.stderr]).toEqual([0, '']);
-    expect(aliased.stdout.split('\n').slice(0, 12)).toEqual(['docs2', 'docs2', '.md', '<repo>/<slug>', 'true', file, '', '', '', 'key', 'line', '']);
+    expect(aliased.stdout.split('\n').slice(0, 11)).toEqual(['docs2', 'docs2', '.md', '<repo>/<slug>', file, '', '', '', 'key', 'line', '']);
     expect((await answerLines(sb, 'docs')).slice(0, 2)).toEqual(['docs', 'docs']);
     expect((await listing(sb)).stdout).toBe('docs\tdocs\ndocs2\tdocs2\n');
     const own = workspace();
@@ -88,7 +88,7 @@ describe.concurrent('store-data, the data file reader', () => {
     record(own, 'docs-pro', 'module docs2 docs2\nmodule other docs\n');
     const plain = await withFallback(own, 'docs2');
     expect(plain.stdout.split('\n').slice(0, 2)).toEqual(['docs2', 'docs']);
-    expect(plain.stdout.split('\n')[11]).toBe('old-docs');
+    expect(plain.stdout.split('\n')[10]).toBe('old-docs');
     expect((await listing(own)).stdout).toBe('docs\tdocs\ndocs2\tdocs\told-docs\n');
   });
 
@@ -143,17 +143,17 @@ describe.concurrent('store-data, the data file reader', () => {
   });
 
   it.each([
-    ['an unknown field', probe('mode: fast\nchanges: true\n'), "unknown field 'mode' in the data file"],
+    ['an unknown field', probe('mode: fast\n'), "unknown field 'mode' in the data file"],
     ['a root escaping the workspace', 'root: ../outside\nsuffix: .txt\nkey: <a>/<b>\n', "malformed root '../outside' (a workspace-relative folder inside the workspace)"],
     ['an absolute root', 'root: /abs\nsuffix: .txt\nkey: <a>/<b>\n', "malformed root '/abs' (a workspace-relative folder inside the workspace)"],
     ['a key without placeholders', 'key: a/b\n', "malformed key pattern 'a/b' (a <name> placeholder per slash-separated segment, the last optionally <name...>)"],
     ['a non-final multi-segment placeholder', 'key: <a>/<b...>/<c>\n', "malformed key pattern '<a>/<b...>/<c>' (a <name> placeholder per slash-separated segment, the last optionally <name...>)"],
-    ['a bad changes flag', probe('changes: maybe\n'), "malformed changes flag 'maybe' (true or false)"],
+    ['a changes line, the change log having left the contract', probe('changes: false\n'), "unknown field 'changes' in the data file: the change log left the storage contract, so remove the changes line"],
     ['a duplicate search key', probe('format: text\nformat: json\n'), "duplicate field 'format' in the data file"],
     ['a document form without a rule', probe('search: documents\n'), 'the document-set search form takes at least one document rule'],
     ['a document form with a format', probe('search: documents\nformat: text\ndocument: <a>/<b> body document -\n'), 'the document-set search form takes no format or fields'],
     ['a document rule on the flat form', probe('search: flat\ndocument: <a>/<b> body document -\n'), 'a document rule needs the document-set search form'],
-    ['a three-token document rule', probe('changes: false\nsearch: documents\ndocument: <a>/<b> body document\n'), 'line 6: a document rule takes the key pattern, the section, the entity type, and the head marker (or -)'],
+    ['a three-token document rule', probe('search: documents\ndocument: <a>/<b> body document\n'), 'line 5: a document rule takes the key pattern, the section, the entity type, and the head marker (or -)'],
     ['a modes line, the driver registering the modes', probe('search: flat\nmodes: exact\n'), "unknown field 'modes' in the data file: the search modes are the configured driver's registry, so remove the modes line"],
   ])('[modules-r10] %s refuses rc 1 naming the rule', async (_, text, reason) => {
     const sb = workspace();
@@ -166,14 +166,14 @@ describe.concurrent('store-data, the data file reader', () => {
     dataFile(sb, 'modules', 'nokey', 'root: r\nsuffix: .txt\n');
     const file = dataFile(sb, 'modules', 'keyonly', 'key: <a>/<b>\n');
     await refusal(sb, 'nokey', 1, 'the data file declares no key pattern');
-    expect(await answerLines(sb, 'keyonly')).toEqual(['keyonly', 'keyonly', '', '<a>/<b>', 'false', file, '', '', '', 'key', 'line']);
+    expect(await answerLines(sb, 'keyonly')).toEqual(['keyonly', 'keyonly', '', '<a>/<b>', file, '', '', '', 'key', 'line']);
   });
 
   it('[modules-r10] answers a variable-depth <unit>/<path...> declaration and refuses a non-final <unit...>', async () => {
     const sb = workspace();
-    dataFile(sb, 'modules', 'variable', `root: ${RECORD_ROOT}\nsuffix: .md\nkey: <unit>/<path...>\nchanges: false\n`);
-    expect((await answerLines(sb, 'variable')).slice(0, 5)).toEqual(['variable', RECORD_ROOT, '.md', '<unit>/<path...>', 'false']);
-    dataFile(sb, 'modules', 'variable', `root: ${RECORD_ROOT}\nsuffix: .md\nkey: <unit...>/<path>\nchanges: false\n`);
+    dataFile(sb, 'modules', 'variable', `root: ${RECORD_ROOT}\nsuffix: .md\nkey: <unit>/<path...>\n`);
+    expect((await answerLines(sb, 'variable')).slice(0, 4)).toEqual(['variable', RECORD_ROOT, '.md', '<unit>/<path...>']);
+    dataFile(sb, 'modules', 'variable', `root: ${RECORD_ROOT}\nsuffix: .md\nkey: <unit...>/<path>\n`);
     await refusal(sb, 'variable', 1, "malformed key pattern '<unit...>/<path>' (a <name> placeholder per slash-separated segment, the last optionally <name...>)");
   });
 
@@ -201,16 +201,16 @@ describe.concurrent('store-data, the data file reader', () => {
     for (const [module, file] of [['docs', 'plugins/docs-discipline/.contexture/extensions/modules/docs/data'], ['notes', 'tests/fixtures/worked-package/.contexture/extensions/modules/notes/data']] as const) {
       const sb = workspace();
       dataFile(sb, 'extensions', module, readFileSync(join(ROOT, file), 'utf8'));
-      expect([module, (await answerLines(sb, module)).length > 10]).toEqual([module, true]);
+      expect([module, (await answerLines(sb, module)).length >= 10]).toEqual([module, true]);
     }
   });
 
   it('[modules-r10] the optional flat search keys are accepted and answered on the schema lines', async () => {
     const sb = workspace();
-    dataFile(sb, 'modules', 'searchy', probe('changes: false\nformat: text\nfields: title, body\ntitle: title\nsnippet: line\n'));
+    dataFile(sb, 'modules', 'searchy', probe('format: text\nfields: title, body\ntitle: title\nsnippet: line\n'));
     const lines = await answerLines(sb, 'searchy');
-    expect(lines.slice(0, 5)).toEqual(['searchy', 'probe-root', '.txt', '<a>/<b>', 'false']);
-    expect(lines.slice(6)).toEqual(['flat', 'text', 'title,body', 'title', 'line']);
+    expect(lines.slice(0, 4)).toEqual(['searchy', 'probe-root', '.txt', '<a>/<b>']);
+    expect(lines.slice(5)).toEqual(['flat', 'text', 'title,body', 'title', 'line']);
   });
 
   it('[modules-r10, the-engine-r-cj0ey] refuses an argument beyond the namespace, --with-fallback, --with-fields, and --with-unsearched, a repeated flag, and an argument beyond the listing flag, rc 1', async () => {
@@ -233,26 +233,26 @@ describe.concurrent('store-data, the data file reader', () => {
   const legacy = (fallback: string, root = 'new-root') => `root: ${root}\nfallback_root: ${fallback}\nsuffix: .md\nkey: <u>/<path...>\nsearch: documents\ndocument: <u>/state state session -\n`;
   const withFallback = (sb: string, ns: string) => exec(STORE_DATA, [ns, '--with-fallback'], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
 
-  it('[modules-r10, the-engine-r-cj0ey] accepts a fallback root and keeps the plain answer byte identical: eleven lines, then the rules', async () => {
+  it('[modules-r10, the-engine-r-cj0ey] accepts a fallback root and keeps the plain answer byte identical: ten lines, then the rules', async () => {
     const sb = workspace();
     const file = dataFile(sb, 'modules', 'legacy', legacy('old-root'));
     const lines = await answerLines(sb, 'legacy');
-    expect(lines).toEqual(['legacy', 'new-root', '.md', '<u>/<path...>', 'false', file, 'documents', '', '', 'head', 'line', '<u>/state\tstate\tsession\t-']);
+    expect(lines).toEqual(['legacy', 'new-root', '.md', '<u>/<path...>', file, 'documents', '', '', 'head', 'line', '<u>/state\tstate\tsession\t-']);
     const other = workspace();
     dataFile(other, 'modules', 'legacy', legacy('old-root').replace('fallback_root: old-root\n', ''));
     const plain = await answerLines(other, 'legacy');
-    expect(lines.filter((_, i) => i !== 5)).toEqual(plain.filter((_, i) => i !== 5));
+    expect(lines.filter((_, i) => i !== 4)).toEqual(plain.filter((_, i) => i !== 4));
   });
 
-  it('[modules-r10, the-engine-r-cj0ey] --with-fallback answers the fallback root as line 12 and the rules from line 13, an empty line 12 when none is declared', async () => {
+  it('[modules-r10, the-engine-r-cj0ey] --with-fallback answers the fallback root as line 11 and the rules from line 12, an empty line 11 when none is declared', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'legacy', legacy('old-root'));
     const r = await withFallback(sb, 'legacy');
     expect([r.code, r.stderr]).toEqual([0, '']);
-    expect(r.stdout.split('\n').slice(11)).toEqual(['old-root', '<u>/state\tstate\tsession\t-', '']);
+    expect(r.stdout.split('\n').slice(10)).toEqual(['old-root', '<u>/state\tstate\tsession\t-', '']);
     const none = await withFallback(sb, 'docs');
     expect([none.code, none.stderr]).toEqual([0, '']);
-    expect(none.stdout.split('\n').slice(10)).toEqual(['line', '', '']);
+    expect(none.stdout.split('\n').slice(9)).toEqual(['line', '', '']);
   });
 
   it.each([
@@ -279,7 +279,7 @@ describe.concurrent('store-data, the data file reader', () => {
   it('[modules-r10] the listing mode answers every valid declaration of both roots, namespace TAB root, sorted by namespace, the default root the namespace', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'minimal', 'key: <a>/<b>\n');
-    dataFile(sb, 'modules', 'probe', probe('changes: false\n'));
+    dataFile(sb, 'modules', 'probe', probe(''));
     dataFile(sb, 'extensions', 'alpha', 'root: .contexture/alpha-root\nkey: <a>\n');
     const r = await listing(sb);
     expect([r.code, r.stderr]).toEqual([0, '']);
@@ -315,15 +315,15 @@ describe.concurrent('store-data, the data file reader', () => {
     expect(await listing(sb)).toMatchObject({ code: 0, stdout: '', stderr: '' });
   });
 
-  it('[modules-r10] the document-set form answers its rules after the eleven lines, one tab-separated rule per line', async () => {
+  it('[modules-r10] the document-set form answers its rules after the ten lines, one tab-separated rule per line', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'unitlike', [
       'key: <unit>/<path...>', 'suffix: .md', 'search: documents',
       'document: <unit>/state state session -', 'document: <unit>/journal journal entry @entry', '',
     ].join('\n'));
     const lines = await answerLines(sb, 'unitlike');
-    expect(lines.slice(6, 11)).toEqual(['documents', '', '', 'head', 'line']);
-    expect(lines.slice(11)).toEqual(['<unit>/state\tstate\tsession\t-', '<unit>/journal\tjournal\tentry\t@entry']);
+    expect(lines.slice(5, 10)).toEqual(['documents', '', '', 'head', 'line']);
+    expect(lines.slice(10)).toEqual(['<unit>/state\tstate\tsession\t-', '<unit>/journal\tjournal\tentry\t@entry']);
   });
 
   const STATUS = 'status: optional line one-of OPEN|PICKED|DROPPED default OPEN';
@@ -342,7 +342,7 @@ describe.concurrent('store-data, the data file reader', () => {
   it('[modules-r10, the-engine-r-cj0ey] a field line is accepted and answered under --with-fields alone: after the document rules, one @field line per field in declaration order, the blanks after field: dropped', async () => {
     const sb = workspace();
     const file = dataFile(sb, 'modules', 'ideas', FIELDED);
-    const fixed = ['ideas', 'idea-root', '', '<id>', 'false', file, 'documents', '', '', 'head', 'line'];
+    const fixed = ['ideas', 'idea-root', '', '<id>', file, 'documents', '', '', 'head', 'line'];
     const rule = '<id>\tbody\tidea\t-';
     const fieldLines = [`@field\t${STATUS}`, '@field\twhat: required block', '@field\tdumped: optional line default today'];
     expect((await okLines(sb, 'ideas', '--with-fields')).split('\n')).toEqual([...fixed, rule, ...fieldLines, '']);
@@ -369,7 +369,7 @@ describe.concurrent('store-data, the data file reader', () => {
   it('[modules-r10, the-engine-r-cj0ey] an unsearched line is answered under --with-unsearched alone: after the document rules and before any field line, one @unsearched line per line in declaration order', async () => {
     const sb = workspace();
     const file = dataFile(sb, 'modules', 'unitlike', UNSEARCHED);
-    const fixed = ['unitlike', 'unitlike', '.md', '<unit>/<path...>', 'false', file, 'documents', '', '', 'head', 'line'];
+    const fixed = ['unitlike', 'unitlike', '.md', '<unit>/<path...>', file, 'documents', '', '', 'head', 'line'];
     const rule = '<unit>/journal\tjournal\tentry\t@entry';
     const uns = ['@unsearched\t<unit>/state', '@unsearched\t<unit>/lanes/<lane>/notes'];
     expect((await okLines(sb, 'unitlike', '--with-unsearched')).split('\n')).toEqual([...fixed, rule, ...uns, '']);
@@ -401,10 +401,13 @@ describe.concurrent('store-data, the data file reader', () => {
     await refusal(sb, 'unitlike', 1, `line 2: ${reason}`);
   });
 
-  it('[modules-r10, the-engine-r-cj0ey] the unit module declares its state an unsearched document, so the state stays out of its document rules', async () => {
+  it('[modules-r10, the-engine-r-cj0ey, the-record-r-swp02] the unit module declares its document set as seven unsearched lines and no search schema', async () => {
     const lines = (await exec(STORE_DATA, ['unit', '--with-unsearched'], { cwd: join(ROOT, 'base'), env: { CTX_STORE_WORKSPACE: join(ROOT, 'base') } })).stdout.split('\n');
-    expect(lines.filter((l) => l.startsWith('@unsearched\t'))).toEqual(['@unsearched\t<unit>/state']);
-    expect(lines.filter((l) => l.startsWith('<unit>/state\t'))).toEqual([]);
+    expect(lines.slice(5, 6)).toEqual(['']);
+    expect(lines.filter((l) => l.startsWith('@unsearched\t'))).toEqual(
+      ['state', 'backlog', 'knowledge', 'journal', 'lanes/<lane>/recipe', 'lanes/<lane>/journal', 'lanes/<lane>/report'].map((p) => `@unsearched\t<unit>/${p}`),
+    );
+    expect(lines.filter((l) => l.startsWith('<unit>/') && l.includes('\t'))).toEqual([]);
   });
 
   it('[modules-r10, the-engine-r-cj0ey] a data file with no field line answers --with-fields exactly as without it, docs-shaped and unit-shaped alike', async () => {

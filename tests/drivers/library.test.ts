@@ -12,7 +12,7 @@ import { batchPayload } from '../support/store';
 import { answer, refused, refusedLike } from '../support/wire';
 
 const LIBRARY = '.contexture/storage/scripts/library';
-const LIBPROBE = 'root: libprobe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n';
+const LIBPROBE = 'root: libprobe-root\nsuffix: .txt\nkey: <a>/<b>\n';
 
 const own = (sb: string, fn: string, args: string[] = [], input = '', env: Record<string, string> = {}, module = 'libprobe') =>
   moduleCall(sb, module, join(sb, LIBRARY), fn, args, { input, env: { CTX_STORE_ROOT: sb, ...env } });
@@ -28,24 +28,17 @@ for (const driver of DRIVERS) {
 
     it('[the-engine-r19] answers the store five through the core resolver', async () => {
       const sb = fresh(snap);
-      expect((await own(sb, 'store_put', ['x/y'], 'library-value\n')).stdout).toBe('{"namespace":"libprobe","key":"x/y","op":"write"}\n');
+      expect((await own(sb, 'store_put', ['x/y'], 'library-value\n')).stdout).toBe('{"namespace":"libprobe","key":"x/y"}\n');
       expect((await own(sb, 'store_get', ['x/y'])).stdout).toBe('library-value\n');
       expect((await own(sb, 'store_list')).stdout).toBe('{"namespace":"libprobe","keys":["x/y"]}\n');
-      expect((await own(sb, 'store_delete', ['x/y'])).stdout).toBe('{"namespace":"libprobe","key":"x/y","op":"remove"}\n');
+      expect((await own(sb, 'store_delete', ['x/y'])).stdout).toBe('{"namespace":"libprobe","key":"x/y"}\n');
     });
 
-    it('[the-engine-r8] store_modes answers the registry, and with --own the modes the caller\'s namespace can answer: a ranked mode only under a declared search schema', async () => {
+    it('[the-engine-r8] store_modes answers the registry, exact alone, and takes no argument: --own is retired', async () => {
       const sb = fresh(snap);
-      dataFile(sb, 'modules', 'schemaprobe', 'root: schemaprobe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\n');
-      const names = (out: string) => out.split('\n').filter(Boolean).map((l) => l.split('\t')[0]);
-      const registry = driver === 'posix' ? ['exact'] : ['exact', 'hybrid', 'trigram'];
       const all = await own(sb, 'store_modes');
-      expect([all.code, all.stderr, names(all.stdout)]).toEqual([0, '', registry]);
-      for (const line of all.stdout.split('\n').filter(Boolean)) expect(line).toMatch(/^[a-z]+\t\S.*$/);
-      expect(names((await own(sb, 'store_modes', ['--own'], '', {}, 'schemaprobe')).stdout)).toEqual(registry);
-      expect(names((await own(sb, 'store_modes', ['--own'])).stdout)).toEqual(['exact']);
-      refusedLike(await own(sb, 'store_modes', ['--own'], '', {}, 'nosuchns'), 'store.modes', 1, 'ERR_ENTITY_NOT_FOUND');
-      refused(await own(sb, 'store_modes', ['libprobe']), 'store.modes', 1, 'ERR_INVALID_ARGUMENT', 'store.modes takes no argument but --own');
+      expect([all.code, all.stderr, all.stdout]).toEqual([0, '', 'exact\ta case-insensitive substring of one line, the first matching line as the snippet, alike on every driver\n']);
+      for (const args of [['--own'], ['libprobe']]) refused(await own(sb, 'store_modes', args), 'store.modes', 1, 'ERR_INVALID_ARGUMENT', 'store.modes takes no argument');
     });
 
     it('[the-engine-r-b3r6t] store_promote reaches the driver\'s optional promotion through the core resolver', async () => {
@@ -56,7 +49,7 @@ for (const driver of DRIVERS) {
 
     it('[the-engine-r9, the-engine-r19] answers the batch and the scan, and an escaped search query', async () => {
       const sb = fresh(snap);
-      expect((await own(sb, 'store_batch', [], batchPayload([{ action: 'put', key: 'x/y', head: 'none', value: 'library-value\n' }]))).stdout)
+      expect((await own(sb, 'store_batch', [], batchPayload([{ action: 'put', key: 'x/y', value: 'library-value\n' }]))).stdout)
         .toBe('{"namespace":"libprobe","actions":1}\n');
       expect((await own(sb, 'store_scan')).stdout).toBe(`{"namespace":"libprobe","items":[{"key":"x/y","value_b64":"${Buffer.from('library-value\n').toString('base64')}"}]}\n`);
       const found = answer(await own(sb, 'store_search', ['library-value', 'exact', '5']), 'store.search');
@@ -66,14 +59,15 @@ for (const driver of DRIVERS) {
     it('[the-engine-r21] keeps the driver\'s one refusal line, the batch\'s action context included', async () => {
       const sb = fresh(snap);
       refused(await own(sb, 'store_get', ['x/absent']), 'store.get', 1, 'ERR_ENTITY_NOT_FOUND', "key 'x/absent' not found in namespace 'libprobe'");
-      refused(await own(sb, 'store_batch', [], 'action=delete\nkey=x/absent\nhead=none\n'), 'store.batch', 1, 'ERR_ENTITY_NOT_FOUND',
+      refused(await own(sb, 'store_batch', [], 'action=delete\nkey=x/absent\n'), 'store.batch', 1, 'ERR_ENTITY_NOT_FOUND',
         "action 1 (delete 'x/absent'): key 'x/absent' not found in namespace 'libprobe'");
     });
 
     it('[the-engine-r15] asks the driver\'s capabilities through store_require and store_has', async () => {
       const sb = fresh(snap);
       expect((await own(sb, 'store_require', ['store'])).code).toBe(0);
-      expect((await own(sb, 'store_has', ['store.changelog'])).code).toBe(driver === 'fts5' ? 0 : 1);
+      expect((await own(sb, 'store_has', ['store.changelog'])).code).toBe(1);
+      expect((await own(sb, 'store_has', ['search.mode.exact'])).code).toBe(0);
     });
   });
 }
@@ -93,7 +87,7 @@ describe('the library\'s caller lookup', { concurrent: true }, () => {
 
   it('[the-engine-r26] a module\'s script reaches its own namespace alone: two modules write and list their own keys, and no call names a namespace', async () => {
     const sb = fresh(snap);
-    expect(answer(await own(sb, 'store_put', ['a/b'], 'one\n'), 'store.put')).toEqual({ namespace: 'libprobe', key: 'a/b', op: 'write' });
+    expect(answer(await own(sb, 'store_put', ['a/b'], 'one\n'), 'store.put')).toEqual({ namespace: 'libprobe', key: 'a/b' });
     expect(answer(await own(sb, 'store_list', [], '', {}, 'other'), 'store.list')).toEqual({ namespace: 'other', keys: [] });
     expect(answer(await own(sb, 'store_list'), 'store.list')).toEqual({ namespace: 'libprobe', keys: ['a/b'] });
   });

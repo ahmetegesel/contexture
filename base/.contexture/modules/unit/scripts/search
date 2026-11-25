@@ -3,9 +3,9 @@
 # usage: ctx unit search "<query>" [--unit=<unit>] [--all] [--type=<type>] [--mode=<mode>] [--limit=N] [--json]
 # help: the query comes first; the active units by default, --all every unit, --unit=<unit> any one unit, closed ones included; the rows of a CLOSED unit carry the label closed
 # help: a sole --help, -h, or help prints the usage; the word help with arguments after it is the query; a query cannot begin with a dash, which reads as a flag and refuses (no end of options marker, a stated limit)
-# help: --type= keeps one entity type (task, entry, finding, lane, lane_entry, session, all); --mode= defaults to exact (a case-insensitive ASCII substring of one line, a column-0 comment never matching, one row per matching entity and section, the first matching line as the snippet), or a ranked mode the configured driver registers (ctx search --modes lists them); --limit= is a positive whole number, default 20, applied once to the rows merged in the board's unit order; only the --flag=value form is taken
+# help: --type= keeps one entity type (task, entry, finding, lane, lane_entry, session, all); --mode= takes exact, the one mode and the default (a case-insensitive ASCII substring of one line, a column-0 comment never matching, one row per matching entity and section, the first matching line as the snippet); --limit= is a positive whole number, default 20, applied once to the rows merged in the board's unit order; only the --flag=value form is taken
 # help: each row carries module, container, type, id, address (unit#<unit>/<kind>/<id>), snippet, read (ctx unit get <path>), and label when the unit is closed; an artifact preamble or an anchor line carries no address, its read the unit's load; --json answers {query, mode, total, rows}, total counting every merged row before the limit; zero hits is rc 0
-# help: the unit state is never searched; an empty query, an unknown flag, a bare value form, --all beside --unit, the retired positional unit, --entity, and -l refuse rc 1 (ERR_INVALID_ARGUMENT), a mode the unit's records cannot answer rc 1 naming the answerable modes, a --unit no store holds rc 1 (ERR_ENTITY_NOT_FOUND)
+# help: the unit state is never searched; an empty query, an unknown flag, a bare value form, --all beside --unit, the retired positional unit, --entity, and -l refuse rc 1 (ERR_INVALID_ARGUMENT), any other mode rc 1 naming the answerable mode, a --unit no store holds rc 1 (ERR_ENTITY_NOT_FOUND)
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
@@ -16,7 +16,7 @@ usage() {
   printf '  --unit=<unit>       one unit, closed ones included\n'
   printf '  --all               every unit, closed ones included\n'
   printf '  --type=<type>       one entity type (task, entry, finding, lane, lane_entry, session, all)\n'
-  printf '  --mode=<mode>       exact (the default) or a ranked mode the configured driver registers\n'
+  printf '  --mode=<mode>       exact, the one mode (the default)\n'
   printf '  --limit=N           the rows shown, a positive whole number (default 20)\n'
   printf '  --json              the answer {query, mode, total, rows}\n'
 }
@@ -116,15 +116,6 @@ else
 fi
 [ "$none" -eq 0 ] || : > "$VB_DIR/scope"
 
-# the document rules of the unit's declaration: each pairs a container key pattern with
-# its entity type, read through the storage core's data reader (the rules follow its
-# eleven fixed lines)
-rules=""
-sd="${VB_RESOLVER%/*}/store-data"
-if [ -x "$sd" ]; then
-  rules=$(CTX_STORE_WORKSPACE="${CTX_ROOT:-$PWD}" "$sd" "$(store_namespace 2>/dev/null)" 2>/dev/null | sed -n '12,$p')
-fi
-
 : > "$VB_DIR/merged"
 while IFS="$tab" read -r su ss; do
   [ -n "$su" ] || continue
@@ -135,7 +126,7 @@ while IFS="$tab" read -r su ss; do
   awk -f "$VB_JSON" < "$VB_DIR/ans" >> "$VB_DIR/merged" || exit 2
 done < "$VB_DIR/scope"
 
-SR_QUERY=$query SR_MODE=$mode SR_LIMIT=$limit SR_TYPE=$type SR_FANOUT=${CTX_SEARCH_FANOUT:-} SR_RULES=$rules \
+SR_QUERY=$query SR_MODE=$mode SR_LIMIT=$limit SR_TYPE=$type SR_FANOUT=${CTX_SEARCH_FANOUT:-} \
   awk -f "$VB_LIB/canon.awk" -f "$VB_LIB/model.awk" -f "$VB_LIB/search-rows.awk" < "$VB_DIR/merged" > "$VB_DIR/ans" || exit 2
 if [ "$json_out" -eq 1 ]; then
   vb_json

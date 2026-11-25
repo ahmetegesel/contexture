@@ -635,7 +635,7 @@ case "$verb" in
     case "$sq" in *"
 "*|*"$(printf '\r')"*) die 1 ERR_INVALID_ARGUMENT 'a query holds no newline or carriage return' ;; esac
     case "$s_limit" in ''|*[!0123456789]*|0*) die 1 ERR_INVALID_ARGUMENT "--limit takes a positive whole number, not '$(store_lib_escape "$s_limit")'" ;; esac
-    lib_or_die store_modes --own > "$SCR/modes"
+    lib_or_die store_modes > "$SCR/modes"
     if ! cut -f 1 "$SCR/modes" | grep -Fqx -- "$s_mode"; then
       [ -n "${CTX_SEARCH_FANOUT:-}" ] || die 1 ERR_INVALID_ARGUMENT "mode '$(store_lib_escape "$s_mode")' cannot answer the store (it answers: $(cut -f 1 "$SCR/modes" | tr '\n' ' ' | sed 's/ $//; s/ /, /g'))"
     fi

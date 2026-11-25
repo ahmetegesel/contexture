@@ -120,7 +120,7 @@ Optional packages live in `.contexture/plugins/` (with `./plugins/` as fallback)
 | `ast-doc-graph` | feature | TypeScript AST and documentation graph for symbol, call-graph, rule, and pitfall queries | [plugins/ast-doc-graph/README.md](plugins/ast-doc-graph/README.md) |
 | `toolchain-filters` | feature | Test runner and compiler output filters (pytest, vitest, jest, cargo test, go test) for `ctx run` | [plugins/toolchain-filters/README.md](plugins/toolchain-filters/README.md) |
 | `starter-rhythms` | feature | Starter work and debug rhythms to copy and edit into your team's own | [plugins/starter-rhythms/README.md](plugins/starter-rhythms/README.md) |
-| `storage-fts5` | driver | Optional SQLite FTS5 storage driver with dual full-text indexing and exact, hybrid, and trigram search (requires `sqlite3` with FTS5) | [plugins/storage-fts5/README.md](plugins/storage-fts5/README.md) |
+| `storage-fts5` | driver | Optional interim SQLite storage driver: the record and the corpus in one database, exact search alike on every driver (requires `sqlite3` with FTS5) | [plugins/storage-fts5/README.md](plugins/storage-fts5/README.md) |
 | `git` | feature | Gitignore strategy, branch and worktree mechanics, and boot ground checks as a law-only module (explicit choice, never a default) | [plugins/git/README.md](plugins/git/README.md) |
 
 For full catalog notes, module aliasing, and reproducing declared packages on a fresh clone, see [docs/adoption.md#the-module-catalog](docs/adoption.md#the-module-catalog) and [docs/plugins.md](docs/plugins.md). To author your own module or package under the same contract, read [docs/modules.md](docs/modules.md).

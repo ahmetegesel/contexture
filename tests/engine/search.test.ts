@@ -307,11 +307,14 @@ describe.concurrent('the ctx search builtin', () => {
 });
 
 describe.skipIf(!fts5Available())('the ctx search builtin over the fts5 registry', () => {
-  it('[the-engine-r-ha7uc] a module that cannot answer a registered mode falls back to exact and its group says so', async () => {
-    const sb = stage('fts5', 'search-fallback');
+  it('[the-engine-r-ha7uc] the fts5 registry holds exact alone, so a ranked mode refuses before any module runs', async () => {
+    const sb = stage('fts5', 'search-exact-alone');
     writeModule(sb, 'modules', 'xmod', { manifest: MANIFEST('xmod'), files: { 'scripts/search': SEARCH(`printf '%s\\n' '${answer('xmod', 1, ['a'])}'`) } });
-    const r = await run(sb, ['search', 'needle', '--mode=hybrid', '--module=xmod']);
-    expect(r.code, r.stderr).toBe(0);
-    expect(r.stdout.split('\n')[0]).toBe('xmod: 1 of 1, mode exact (asked hybrid)');
+    const modes = await run(sb, ['search', '--modes']);
+    expect([modes.code, modes.stdout.split('\n').filter(Boolean).map((l) => l.split(/\s/)[0])]).toEqual([0, ['exact']]);
+    for (const mode of ['hybrid', 'trigram']) {
+      const r = await run(sb, ['search', 'needle', `--mode=${mode}`, '--module=xmod']);
+      expect([r.code, r.stdout, r.stderr]).toEqual([1, '', `ctx search: mode '${mode}' is not registered; registered modes: exact\n`]);
+    }
   });
 });

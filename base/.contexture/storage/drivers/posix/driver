@@ -1,8 +1,8 @@
 #!/bin/sh
-# driver: the zero-dependency POSIX storage driver (contract 3, docs/the-engine.md, The
+# driver: the zero-dependency POSIX storage driver (contract 4, docs/the-engine.md, The
 # descriptor and the handshake). The driver is store-only: it answers capability,
-# storage.health, storage.leftovers, and storage.sweep as its own methods and the seven generic module store functions
-# (store.list, store.get, store.put, store.delete, store.changes, store.batch, store.scan)
+# storage.health, storage.leftovers, and storage.sweep as its own methods and the six generic module store functions
+# (store.list, store.get, store.put, store.delete, store.batch, store.scan)
 # over a module's declared data file and root, plus the store.search entry. The record's
 # 35 operations live in the unit module's data script over this store; the driver keeps no
 # record function. store.list takes an optional literal key prefix; store.search carries
@@ -147,8 +147,8 @@ SCRATCH_FAILED="cannot write the driver's scratch file"
 # ==============================================================================
 # The generic module store (the storage core's store contract)
 # ==============================================================================
-# Seven data functions over a module's declared data file: store.list, store.get,
-# store.put, store.delete, store.changes, store.batch, and store.scan. The data file
+# Six data functions over a module's declared data file: store.list, store.get,
+# store.put, store.delete, store.batch, and store.scan. The data file
 # (modules/<module>/data) is read and validated by the storage core's private store-data
 # script; the posix mapping is <root>/<key><suffix> under the workspace root, the root
 # store-data answers (the declared one, or the namespace when none is declared or the
@@ -157,8 +157,7 @@ SCRATCH_FAILED="cannot write the driver's scratch file"
 # leading runs of segments fold onto each other under ASCII case, list is bytewise and
 # filtered by the key rule and the module pattern, put is a same-directory temp (a dot, the
 # key file name, then the mktemp tail, a name the key rule refuses) moved over the key
-# under one namespace scope lock, and the change log belongs to a store driver (posix
-# keeps none). The batch holds that same namespace lock once, validates its whole action
+# under one namespace scope lock. The batch holds that same namespace lock once, validates its whole action
 # list, stages a put value per action, and commits every key under one store-scope undo
 # log so it lands whole or not at all; the scan answers every admitted key with its raw
 # value in base64.
@@ -274,8 +273,8 @@ SD_NL='
 '
 
 # store_data <function> <namespace>: the validated fields of the namespace's data file in
-# SD_NS, SD_ROOT, SD_FALLBACK (empty when none is declared), SD_SUFFIX, SD_KEYPAT,
-# SD_CHANGES; the caller's function name frames the refusal. The storage core's store-data script owns the grammar (the core is
+# SD_NS, SD_ROOT, SD_FALLBACK (empty when none is declared), SD_SUFFIX, and SD_KEYPAT;
+# the caller's function name frames the refusal. The storage core's store-data script owns the grammar (the core is
 # base, so no module's parser enters base). The cleanup traps stand before the reader's
 # stderr file exists, so a HUP, INT, or TERM while the reader runs removes it. A scratch
 # file that cannot be made refuses as a write, and for the health probe, which writes
@@ -324,7 +323,7 @@ store_data() {
   esac
   sd_rest="$sd_out
 "
-  for sd_f in SD_NS SD_ROOT SD_SUFFIX SD_KEYPAT SD_CHANGES SD_FILE SD_FORM SD_FORMAT SD_FIELDS SD_TITLE SD_SNIPPET SD_FALLBACK; do
+  for sd_f in SD_NS SD_ROOT SD_SUFFIX SD_KEYPAT SD_FILE SD_FORM SD_FORMAT SD_FIELDS SD_TITLE SD_SNIPPET SD_FALLBACK; do
     case "$sd_rest" in
       *"$SD_NL"*) sd_v=${sd_rest%%"$SD_NL"*}; sd_rest=${sd_rest#*"$SD_NL"} ;;
       *) sd_v=$sd_rest; sd_rest="" ;;
@@ -668,27 +667,6 @@ store_fold_refusal() {
   refuse 1 ERR_ENTITY_EXISTS "key '$2' cannot be represented exactly beside '$3' under the filesystem's case folding; the two keys never coexist in namespace '$1'"
 }
 
-# store_flags <function> <default op> [flags]: --op=<op> and --head=<sha|none>, bounded
-store_flags() {
-  sf_fn=$1; SF_OP=$2
-  shift 2
-  SF_HEAD=none
-  for sf_a in "$@"; do
-    case "$sf_a" in
-      --op=*) SF_OP=${sf_a#--op=} ;;
-      --head=*) SF_HEAD=${sf_a#--head=} ;;
-      *) refuse 1 ERR_INVALID_ARGUMENT "unknown argument '$sf_a'" ;;
-    esac
-  done
-  case "$SF_OP" in
-    ''|*[!A-Za-z0-9._-]*) refuse 1 ERR_INVALID_ARGUMENT "malformed op '$SF_OP'" ;;
-  esac
-  case "$SF_HEAD" in
-    none) ;;
-    ''|*[!0-9a-fA-F]*) refuse 1 ERR_INVALID_ARGUMENT "--head takes a commit id or none: '$SF_HEAD'" ;;
-  esac
-}
-
 store_list() {
   FN=store.list
   [ $# -ge 1 ] && [ $# -le 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.list takes the namespace and an optional key prefix"
@@ -852,10 +830,9 @@ store_prune() {
 
 store_put() {
   FN=store.put
-  [ $# -ge 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.put takes the namespace, the key, and optional flags"
+  [ $# -ge 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.put takes the namespace and the key"
+  [ $# -eq 2 ] || refuse 1 ERR_INVALID_ARGUMENT "unknown argument '$3'"
   sp_ns=$1; sp_key=$2
-  shift 2
-  store_flags store.put write "$@"
   store_data store.put "$sp_ns"
   store_key_for store.put "$sp_ns" "$sp_key"
   trap 'store_cleanup' EXIT
@@ -897,15 +874,14 @@ store_put() {
     store_fold_refusal "$sp_ns" "$sp_key" "$sp_fold"
   fi
   store_unlock
-  printf '{"namespace":"%s","key":"%s","op":"%s"}\n' "$(escape_json "$sp_ns")" "$(escape_json "$sp_key")" "$(escape_json "$SF_OP")"
+  printf '{"namespace":"%s","key":"%s"}\n' "$(escape_json "$sp_ns")" "$(escape_json "$sp_key")"
 }
 
 store_delete() {
   FN=store.delete
-  [ $# -ge 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.delete takes the namespace, the key, and optional flags"
+  [ $# -ge 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.delete takes the namespace and the key"
+  [ $# -eq 2 ] || refuse 1 ERR_INVALID_ARGUMENT "unknown argument '$3'"
   sx_ns=$1; sx_key=$2
-  shift 2
-  store_flags store.delete remove "$@"
   store_data store.delete "$sx_ns"
   store_key_for store.delete "$sx_ns" "$sx_key"
   trap 'store_cleanup' EXIT
@@ -927,23 +903,15 @@ store_delete() {
   store_prune "$STORE_WS/$SD_ROOT" "$sx_key$SD_SUFFIX"
   [ -z "$SD_FALLBACK" ] || store_prune "$STORE_WS/$SD_FALLBACK" "$sx_key$SD_SUFFIX"
   store_unlock
-  printf '{"namespace":"%s","key":"%s","op":"%s"}\n' "$(escape_json "$sx_ns")" "$(escape_json "$sx_key")" "$(escape_json "$SF_OP")"
-}
-
-store_changes() {
-  FN=store.changes
-  [ $# -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "store.changes takes one argument, the namespace"
-  sc_ns=$1
-  store_data store.changes "$sc_ns"
-  refuse 1 ERR_CAPABILITY_UNSUPPORTED "the storage layer keeps no change log under the posix driver; namespace '$sc_ns' reports its delta through its module (changes: $SD_CHANGES)"
+  printf '{"namespace":"%s","key":"%s"}\n' "$(escape_json "$sx_ns")" "$(escape_json "$sx_key")"
 }
 
 # ==============================================================================
 # The transactional batch and the scan
 # ==============================================================================
 # The batch wire (stdin, the driver's escaped payload format): an action=put or
-# action=delete line opens an action, then key=<escaped key>, head=<sha|none> (default
-# none), and, for a put, value_b64=<base64>. The action list is validated whole under the
+# action=delete line opens an action, then key=<escaped key> and, for a put,
+# value_b64=<base64>; any other line refuses. The action list is validated whole under the
 # namespace lock, staged, and committed under one store-scope undo log; the first failure
 # prints store.batch: error: action <n> (<op> '<key>'): <message> (<CODE>), 1-based, and
 # nothing is written.
@@ -997,17 +965,13 @@ batch_key_for() {
 }
 
 # batch_close_action: validate the action being parsed and append it to the staging
-# manifest (n, op, key, head, value path, tab separated; a key never holds a tab)
+# manifest (n, op, key, value path, tab separated; a key never holds a tab)
 batch_close_action() {
   [ "$sb_open" -eq 1 ] || return 0
   sb_open=0
   SB_N=$((SB_N + 1))
   [ "$sb_seen_key" -eq 1 ] && [ -n "$sb_key" ] || batch_refuse 1 "$SB_N" "$sb_op" "?" ERR_INVALID_ARGUMENT "the action carries no key"
   batch_key_for "$SB_N" "$sb_op" "$sb_key"
-  case "$sb_head" in
-    none) ;;
-    ''|*[!0-9a-fA-F]*) batch_refuse 1 "$SB_N" "$sb_op" "$sb_key" ERR_INVALID_ARGUMENT "--head takes a commit id or none: '$sb_head'" ;;
-  esac
   case "$sb_op" in
     put)
       [ "$sb_seen_val" -eq 1 ] || batch_refuse 1 "$SB_N" put "$sb_key" ERR_INVALID_ARGUMENT "a put carries no value"
@@ -1018,12 +982,12 @@ batch_close_action() {
         1) batch_refuse 1 "$SB_N" put "$sb_key" ERR_INVALID_ARGUMENT "malformed base64 value" ;;
         *) batch_refuse 2 "$SB_N" put "$sb_key" ERR_STORAGE_WRITE "cannot stage the value" ;;
       esac
-      scratch_add "$STORE_BATCH_STAGE/man" '%s\t%s\t%s\t%s\t%s\n' "$SB_N" put "$sb_key" "$sb_head" "$sb_v" \
+      scratch_add "$STORE_BATCH_STAGE/man" '%s\t%s\t%s\t%s\n' "$SB_N" put "$sb_key" "$sb_v" \
         || batch_refuse 2 "$SB_N" put "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
       ;;
     delete)
       [ "$sb_seen_val" -eq 0 ] || batch_refuse 1 "$SB_N" delete "$sb_key" ERR_INVALID_ARGUMENT "a delete carries no value"
-      scratch_add "$STORE_BATCH_STAGE/man" '%s\t%s\t%s\t%s\t\n' "$SB_N" delete "$sb_key" "$sb_head" \
+      scratch_add "$STORE_BATCH_STAGE/man" '%s\t%s\t%s\t\n' "$SB_N" delete "$sb_key" \
         || batch_refuse 2 "$SB_N" delete "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
       ;;
   esac
@@ -1035,7 +999,7 @@ batch_parse() {
   scratch_new "$STORE_BATCH_STAGE/man" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   SB_N=0
   sb_open=0
-  sb_op=""; sb_key=""; sb_head=""; sb_val=""; sb_seen_key=0; sb_seen_head=0; sb_seen_val=0
+  sb_op=""; sb_key=""; sb_val=""; sb_seen_key=0; sb_seen_val=0
   while IFS= read -r sb_l || [ -n "$sb_l" ]; do
     case "$sb_l" in *"$cr_byte") sb_l=${sb_l%?} ;; esac
     case "$sb_l" in
@@ -1048,19 +1012,13 @@ batch_parse() {
           put|delete) ;;
           *) batch_refuse 1 "$((SB_N + 1))" "$sb_op" "?" ERR_INVALID_ARGUMENT "unknown action '$sb_op' (put or delete)" ;;
         esac
-        sb_key=""; sb_head=none; sb_val=""; sb_seen_key=0; sb_seen_head=0; sb_seen_val=0
+        sb_key=""; sb_val=""; sb_seen_key=0; sb_seen_val=0
         ;;
       key=*)
         [ "$sb_open" -eq 1 ] || batch_refuse 1 1 "?" "?" ERR_INVALID_ARGUMENT "a payload line outside an action"
         [ "$sb_seen_key" -eq 0 ] || batch_refuse 1 "$((SB_N + 1))" "$sb_op" "${sb_key:-?}" ERR_INVALID_ARGUMENT "duplicate payload line 'key='"
         sb_seen_key=1
         sb_key=$(batch_unescape "${sb_l#key=}")
-        ;;
-      head=*)
-        [ "$sb_open" -eq 1 ] || batch_refuse 1 1 "?" "?" ERR_INVALID_ARGUMENT "a payload line outside an action"
-        [ "$sb_seen_head" -eq 0 ] || batch_refuse 1 "$((SB_N + 1))" "$sb_op" "${sb_key:-?}" ERR_INVALID_ARGUMENT "duplicate payload line 'head='"
-        sb_seen_head=1
-        sb_head=${sb_l#head=}
         ;;
       value_b64=*)
         [ "$sb_open" -eq 1 ] || batch_refuse 1 1 "?" "?" ERR_INVALID_ARGUMENT "a payload line outside an action"
@@ -1092,7 +1050,7 @@ batch_validate() {
 batch_lift() {
   [ -n "$SD_FALLBACK" ] || return 0
   bl_last=""
-  while IFS='	' read -r sb_i sb_op sb_key sb_head sb_val; do
+  while IFS='	' read -r sb_i sb_op sb_key sb_val; do
     bl_top=${sb_key%%/*}
     [ "$bl_top" = "$bl_last" ] && continue
     bl_last=$bl_top
@@ -1152,7 +1110,7 @@ sb_backup() {
 batch_commit() {
   SB_ON=1
   SB_BAK_N=0
-  while IFS='	' read -r sb_i sb_op sb_key sb_head sb_val; do
+  while IFS='	' read -r sb_i sb_op sb_key sb_val; do
     sb_path=$(store_path "$sb_key")
     case "$sb_op" in
       put)
@@ -1172,7 +1130,7 @@ batch_commit() {
     esac
   done < "$STORE_BATCH_STAGE/man"
   # the write must list the key it echoes; a folded file name is refused and rolls back
-  while IFS='	' read -r sb_i sb_op sb_key sb_head sb_val; do
+  while IFS='	' read -r sb_i sb_op sb_key sb_val; do
     [ "$sb_op" = put ] || continue
     sb_fold=$(store_fold_twin "$sb_key" "$(store_path "$sb_key")")
     [ -z "$sb_fold" ] || batch_refuse 1 "$sb_i" put "$sb_key" ERR_ENTITY_EXISTS "key '$sb_key' cannot be represented exactly beside '$sb_fold' under the filesystem's case folding; the two keys never coexist in namespace '$SB_NS'"
@@ -1185,7 +1143,7 @@ batch_commit() {
 # by store_prune, under the namespace lock the batch still holds; a folder a later put of
 # the batch filled, or one holding anything else, stays
 batch_prune() {
-  while IFS='	' read -r sb_i sb_op sb_key sb_head sb_val; do
+  while IFS='	' read -r sb_i sb_op sb_key sb_val; do
     [ "$sb_op" = delete ] || continue
     store_prune "$STORE_WS/$SD_ROOT" "$sb_key$SD_SUFFIX"
     [ -z "$SD_FALLBACK" ] || store_prune "$STORE_WS/$SD_FALLBACK" "$sb_key$SD_SUFFIX"
@@ -1354,13 +1312,13 @@ store_search() {
 # ==============================================================================
 # The descriptor, the health, and the dispatch
 # ==============================================================================
-# capability: the contract 3 store-only card at driver version 3.0.0: the driver, the
-# version, contract 3, the seven data names in the fixed order, the search modes, and the
+# capability: the contract 4 store-only card at driver version 4.0.0: the driver, the
+# version, contract 4, the six data names in the fixed order, the exact search mode, and the
 # optional tokens (store, and store.promote for the fallback root move). The card carries
 # no record function family; capability and storage.health are the driver's own methods
 # the handshake and the diagnose call.
 capability() {
-  printf '{"driver":"posix","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":[{"name":"exact","description":"a case-insensitive substring of one line, the first matching line as the snippet, alike on every driver"}],"optional":["store","store.promote"]}\n'
+  printf '{"driver":"posix","version":"4.0.0","contract":"4","store":["list","get","put","delete","batch","scan"],"search_modes":[{"name":"exact","description":"a case-insensitive substring of one line, the first matching line as the snippet, alike on every driver"}],"optional":["store","store.promote"]}\n'
 }
 
 # store.promote <namespace> <prefix>: the optional move of one whole key prefix (whole key
@@ -2212,7 +2170,6 @@ case "$cmd" in
   store.get) store_get "$@"; exit $? ;;
   store.put) store_put "$@"; exit $? ;;
   store.delete) store_delete "$@"; exit $? ;;
-  store.changes) store_changes "$@"; exit $? ;;
   store.batch) store_batch "$@"; exit $? ;;
   store.scan) store_scan "$@"; exit $? ;;
   store.search) store_search "$@"; exit $? ;;

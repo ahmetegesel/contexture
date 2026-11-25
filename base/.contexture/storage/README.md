@@ -27,9 +27,9 @@ storage/
 
 ## The store contract
 
-The store-only driver card is contract 3: the driver answers `capability` and
-`storage.health <namespace>` as its own methods and the seven data functions plus the
-search entry, and the record's 35 operations live in the unit module's data script over
+The store-only driver card is contract 4, which describes posix exactly: the driver
+answers `capability` and `storage.health <namespace>` as its own methods and the six data
+functions plus the search entry, and the record's 35 operations live in the unit module's data script over
 the store. The health probes the named namespace's store, validated through `store-data`
 like any store function (a missing, extra, or malformed argument refuses rc 1
 `ERR_INVALID_ARGUMENT`, an undeclared namespace rc 1 `ERR_ENTITY_NOT_FOUND`, a
@@ -43,6 +43,15 @@ root) reads `error` with that presence, as do the fts5 checks (another schema re
 present, a failed integrity check, an sqlite3 older than 3.44 with the store by the
 file's existence); `locked` replaces `ok` whatever the presence; the detail names no
 folder, and the probe prints no fallback notice.
+
+The resolver holds every driver but the bundled posix one to the card at dispatch: the
+contract `4`, the six store names in the fixed order (`list get put delete batch scan`),
+the one search mode `exact`, and the optional tokens `store` and `store.promote` alone,
+each refusal rc 2 `ERR_DRIVER_PROTOCOL` naming the expectation; the version is never
+checked. Its verdict is cached under the drawer's scratch, one file per driver path, and
+stands only while it is newer than the driver, the workspace configuration, and the
+resolver itself, so a core update (a copy stamps the resolver anew) verifies every driver
+against the contract it brings at its next call.
 
 The posix driver answers a third method of its own, `storage.leftovers <namespace>`: what
 the named namespace's declared root and fallback root hold beyond the documents its
@@ -152,16 +161,15 @@ prefix, and both scopes refuse rc 1. The fts5 driver answers its unknown functio
 (per unit under its unit lock, `--prefix=<unit>/`, then `--loose` under `--all`) and
 `ctx store check --leftovers --sweep` (the store namespace whole).
 
-Seven data functions and the optional promotion, called through the resolver:
+Six data functions and the optional promotion, called through the resolver:
 
 | function | argv | stdin | answer |
 |---|---|---|---|
 | `store.list` | `<namespace> [<prefix>]` | none | `{"namespace","keys"}`: every key the module pattern admits, bytewise; the optional literal key prefix narrows it |
 | `store.get` | `<namespace> <key> [<key>...]` | none | one key: the raw bytes of the key, no JSON; absent rc 1 `ERR_ENTITY_NOT_FOUND`. Two or more: `{"namespace","items":[...]}`, one item per asked key in the asked order: `{"key","value"}`, `{"key","value_b64"}` for a value holding a NUL byte, or `{"key","missing":true}` |
-| `store.put` | `<namespace> <key> [--op=<op>] [--head=<sha\|none>]` | the raw bytes | `{"namespace","key","op"}`; atomic per key |
-| `store.delete` | `<namespace> <key> [--op=<op>] [--head=<sha\|none>]` | none | `{"namespace","key","op"}`; posix removes the folders it empties, never the root |
-| `store.changes` | `<namespace>` | `head=<sha\|none>` lines | `{"namespace","changes":[...]}` oldest first |
-| `store.batch` | `<namespace>` | the action lines (`action=put\|delete`, `key=<escaped>`, `head=<sha\|none>`, `value_b64=<base64>` for a put) | `{"namespace","actions":N}`; all or none |
+| `store.put` | `<namespace> <key>` | the raw bytes | `{"namespace","key"}`; atomic per key; an extra argument refuses rc 1 `ERR_INVALID_ARGUMENT` |
+| `store.delete` | `<namespace> <key>` | none | `{"namespace","key"}`; posix removes the folders it empties, never the root; an extra argument refuses rc 1 |
+| `store.batch` | `<namespace>` | the action lines (`action=put\|delete`, `key=<escaped>`, `value_b64=<base64>` for a put; any other line refuses as an unknown payload line) | `{"namespace","actions":N}`; all or none |
 | `store.scan` | `<namespace>` | none | `{"namespace","items":[{"key","value_b64"}]}`: every admitted key, bytewise, its raw value in base64 |
 | `store.search` | `<namespace> <mode> [<limit>]` | `query=<escaped>` | `{"namespace","query","mode","total_matches","results":[{key,entity_type,entity_id,section,snippet,score}]}`; limit 0 answers every result |
 | `store.promote` | `<namespace> <prefix>` | none | `{"namespace","prefix","state"}`: optional (the `store.promote` token); moves the prefix (whole key segments ending in a slash) from the fallback root to the root; `moved`, or `none` when the fallback holds nothing for it or none is declared; a move that empties the fallback root, or a `none` answer over an empty one, removes that root; the root already holding it refuses rc 1 `ERR_ENTITY_EXISTS` |
@@ -279,9 +287,9 @@ holds the named namespace's lock (`store-<namespace>.lock`), `storage.health <na
 reports `locked` in place of `ok` on either driver, and another namespace's lock leaves it
 unlocked; a pid-less lock counts as held, a lock whose holder pid
 is gone does not, since the next writer removes it. The scan answers the namespace's admitted keys with the raw value in
-base64, no limit; the module decodes and stops after the keys it needs. The change log is
-optional per namespace; a namespace declaring `changes: false`, or a driver without the
-log, refuses `store.changes` rc 1 `ERR_CAPABILITY_UNSUPPORTED`.
+base64, no limit; the module decodes and stops after the keys it needs. No driver keeps a
+change log: a module's delta is its own (the docs module's is git), and `store.changes` is
+an unknown function rc 2.
 
 Search answers one shape on every driver: `{"namespace","query","mode","total_matches",
 "results":[{"key","entity_type","entity_id","section","snippet","score"}]}`. `exact` is
@@ -296,19 +304,15 @@ unlimited read a module uses to sort into its own text order and cap there. The 
 text is the stored value: the canonical source is the module's canonical render, which the
 module writes through the storage layer, and the core never re-renders a module's grammar (a
 legacy value is searched as stored). The document set comes from the search schema: the
-flat form indexes one document per key (section `body`), the document-set form derives one
-document per entity at write time and ranks those documents in the fts5 store index; a
-module with no schema falls back to the generic raw value for exact. Search modes are
-registered by the driver, never declared by a module: the descriptor's `search_modes` is a
-list of `{name, description}` objects, `driver-resolver modes` prints the registry one
-`name<TAB>description` line per mode, and the library's `store_modes [--own]`
-answers it, or with `--own` the modes the caller's own namespace can answer. A ranked mode answers
-only where the configured driver registers it (fts5: `hybrid` and `trigram`) and only over
-a namespace whose data file declares a search schema; posix registers exact alone and
-refuses any other mode naming its registry. The driver declares the optional
-`search.schema` token when it consumes a declared schema. Posix declares the optional
-tokens `store` and `store.promote`; the resolver refuses any optional token outside
-`store`, `store.changelog`, `search.schema`, and `store.promote`.
+flat form reads one document per key (section `body`), the document-set form one document
+per entity; a module with no schema falls back to the generic raw value. The search mode
+is registered by the driver, never declared by a module: the descriptor's `search_modes`
+is a list of `{name, description}` objects, `exact` alone at contract 4, `driver-resolver
+modes` prints the registry one `name<TAB>description` line per mode, and the library's
+`store_modes` answers it (any argument refuses). Every driver refuses any other mode
+naming its registry, `exact`. Posix declares the optional tokens `store` and
+`store.promote`; the resolver refuses any optional token outside `store` and
+`store.promote`.
 
 ## Errors
 
@@ -337,24 +341,24 @@ check with a read before writing again.
 
 A module declares its data in a `data` file beside its `module` file, one `field: value`
 line per field and a line starting with `#` a comment. Only `key` is required; `root`,
-`fallback_root`, `suffix`, `changes`, the search keys, and the repeated `field` lines are
-optional. The namespace is never declared: it is the module's folder name, its installed
-module name, so a `namespace:` line refuses as an unknown field naming the fix (remove the
-line):
+`fallback_root`, `suffix`, the search keys, the repeated `unsearched` lines, and the
+repeated `field` lines are optional. The namespace is never declared: it is the module's
+folder name, its installed module name, so a `namespace:` line refuses as an unknown field
+naming the fix (remove the line), as does a `changes:` line (the change log left the
+storage contract at contract 4):
 
 ```text
 key: <segment>/<segment>            # or a final <segment...> for a variable-depth key
 root: <workspace-relative folder>   # optional; default: the namespace
 fallback_root: <folder>             # optional; a deprecated root read after the root
 suffix: <suffix>                    # optional; default: empty
-changes: true                       # optional; default: false
 search: flat|documents              # optional; the search schema form
 format: text|json                   # optional; flat only; default text
-fields: <field>, <field>            # optional; flat only; the JSON fields to rank
+fields: <field>, <field>            # optional; flat only; the JSON fields the search reads
 title: <field>|key|head             # optional; flat default key, documents default head
 snippet: line                       # optional; default line
 document: <key-pattern> <section> <entity-type> <head-marker|->   # repeatable
-unsearched: <key-pattern>           # repeatable; a document the search schema leaves out
+unsearched: <key-pattern>           # repeatable; a document no search schema names
 field: <name>: <required|optional> <line|block> [list] [one-of <A|B|...>] [default <value>]   # repeatable
 ```
 
@@ -375,10 +379,12 @@ malformed line, a reserved name, or a name declared twice rc 1 naming the data f
 `store-data: line <N>: <the validator's reason>`; a data file without a field line never
 runs the validator. The `fields` key above is the flat search schema's, a different key.
 
-An `unsearched` line names the key pattern of a document the module reads that its search
-schema leaves out (placeholders and literal segments, as a document rule's pattern): the
-unit module declares `unsearched: <unit>/state`, since every unit verb reads the state
-while no search returns it. The leftovers probe and the sweep count a key a document rule
+An `unsearched` line names the key pattern of a document the module reads that no search
+schema names (placeholders and literal segments, as a document rule's pattern): the unit
+module declares its whole document set this way, seven lines (`<unit>/state`,
+`<unit>/backlog`, `<unit>/knowledge`, `<unit>/journal`, and a lane's
+`<unit>/lanes/<lane>/recipe`, `journal`, and `report`), since its search is its own exact
+rule over the canonical render. The leftovers probe and the sweep count a key a document rule
 or an `unsearched` line names as a document; every other key the pattern admits is a key
 outside the document rules, which the sweep moves. A namespace declaring neither counts
 every key a document.
@@ -400,18 +406,18 @@ rc 2. The suffix defaults to empty, holds at most 48 bytes, and is empty only be
 fixed depth key pattern: the reader refuses rc 1 naming the key line a data file whose
 suffix is empty while its pattern ends in a `<name...>` placeholder (one key could be
 another key's folder) and naming the suffix line a suffix past 48 bytes (a 200 byte
-segment, the suffix, and the put temp's 7 bytes fit a 255 byte file name); `changes` is `true` or `false`
-and defaults to `false`. The search form is `flat` (one document per key, section `body`;
-`format`, `fields`, and `title` shape the ranked document) or `documents` (the repeated
+segment, the suffix, and the put temp's 7 bytes fit a 255 byte file name). The search
+form is `flat` (one document per key, section `body`; `format`, `fields`, and `title`
+shape the document) or `documents` (the repeated
 `document` rule names the key pattern, the section, the entity type, and the optional
 column-0 head marker that starts an entity; a key no rule covers stays searchable as one
 generic document). The reader refuses an unknown field. The namespace `<ns>` is served by
 the data file of the module folder named `<ns>`, the workspace modules root first, then
 the extension root, as discovery resolves a module name (a workspace module shadows an
-extension module of its name). `store-data <namespace>` answers one namespace on eleven fixed lines, then the document
+extension module of its name). `store-data <namespace>` answers one namespace on ten fixed lines, then the document
 rules, and never the fallback root, so a parser reading by position ignores the field;
-`store-data <namespace> --with-fallback` answers the fallback root as line 12 (an empty
-line when none applies) and the rules from line 13, the form the posix driver reads;
+`store-data <namespace> --with-fallback` answers the fallback root as line 11 (an empty
+line when none applies) and the rules from line 12, the form the posix driver reads;
 `store-data <namespace> --with-fields` (alone or beside `--with-fallback`, in either
 order) answers, after the rules, one tagged line per declared field,
 `@field<TAB><name>: <spec>`, in declaration order, the form the library's `fields_own`
@@ -477,10 +483,9 @@ is reached only through that module's `ctx` verbs (`get`, `search`). The library
 
 - `store_namespace`, the caller lookup's answer on stdout;
 - `store_list [<prefix>]`, `store_get <key>...`, `store_put <key>`, `store_delete <key>`,
-  `store_changes`, `store_batch`, `store_scan`, `store_search <query> <mode> [<limit>]`,
-  each over the caller's namespace;
-- `store_modes [--own]`, the mode registry, or with `--own` the modes the caller's
-  namespace can answer;
+  `store_batch`, `store_scan`, `store_search <query> <mode> [<limit>]`, each over the
+  caller's namespace;
+- `store_modes`, the mode registry, `exact` alone (any argument refuses);
 - `store_get_into <targets>`, the batched read into files: the targets file
   holds one `<key><TAB><path>` line per key in the asked order; one `store.get` call answers
   every key (the one key form for a single key), each present value lands in its path byte
@@ -495,7 +500,8 @@ is reached only through that module's `ctx` verbs (`get`, `search`). The library
   line after its root; the whole list or none: rc 2 with one `store.roots: error:` line,
   `ERR_DRIVER_NOT_FOUND` when no data reader is found and `ERR_STORAGE_READ` quoting the
   reader's first reason when the listing left a module out (a data file it cannot read)
-  or failed (no module drawer), never a partial list;
+  or failed (no module drawer), never a partial list; it reads its reader's exit inside an
+  or list, so a caller under `set -e` still gets the refusal line;
 - `store_leftovers`, the driver's `storage.leftovers` over the caller's own namespace, its
   one JSON line on stdout (a driver without the method passes its unknown function line
   through, rc 2), and `store_leftovers_text <answer> <summary|kinds>`, the one text form

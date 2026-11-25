@@ -8,13 +8,12 @@
 #   store.list [<prefix>]
 #   store.get <key> [<key>...]                                      (two or more: one JSON line)
 #   store.get.into <targets>                                        (the batched read into files)
-#   store.put <key> [--op=<op>] [--head=<sha|none>]                 (payload on stdin)
-#   store.delete <key> [--op=<op>] [--head=<sha|none>]
-#   store.changes                                                   (heads on stdin)
+#   store.put <key>                                                 (payload on stdin)
+#   store.delete <key>
 #   store.batch                                                     (actions on stdin)
 #   store.scan
 #   store.search <query> <mode> [<limit>]                           (query on stdin; 0 = all)
-#   store.modes [--own]
+#   store.modes
 #   store.promote <prefix>                                          (optional capability)
 #   store.require <capability>...
 #   store.has <capability>
@@ -48,8 +47,8 @@
 #
 # The store functions and the two probes reach the configured driver through the storage
 # core's resolver, passing it the caller's namespace; the caller uses the shell function
-# names store_list, store_get, store_put, store_delete, store_changes, store_batch,
-# store_scan, store_search, store_promote, store_require, and store_has. store_promote moves
+# names store_list, store_get, store_put, store_delete, store_batch, store_scan,
+# store_search, store_promote, store_require, and store_has. store_promote moves
 # a whole key prefix from the namespace's fallback root to its root on a driver that
 # declares store.promote (ask store_has store.promote first). store_get with one key answers
 # the raw value; with two or more it answers the driver's one batched line, which
@@ -218,7 +217,6 @@ store_list() { store_lib_own store.list "$@"; }
 store_get() { store_lib_own store.get "$@"; }
 store_put() { store_lib_own store.put "$@"; }
 store_delete() { store_lib_own store.delete "$@"; }
-store_changes() { store_lib_own store.changes "$@"; }
 store_require() { store_lib_call store.require require "$@"; }
 store_has() { store_lib_call store.has has "$@"; }
 store_promote() { store_lib_own store.promote "$@"; }
@@ -296,15 +294,16 @@ store_get_into() {
 # this library calls (the core scripts folder holds both), then under the drawer, then in
 # the base mirror, run from the workspace root. The reader's lines start with its name and a
 # row never does, so one capture holds both; a listing that left a module out (rc 1) or
-# failed refuses rc 2 with one line quoting the reader's first reason, never a partial list
+# failed refuses rc 2 with one line quoting the reader's first reason, never a partial list,
+# the reader's rc read inside an or list so a set -e caller still gets the refusal line
 store_roots() {
   sr_root=$(store_lib_root)
   sr_script=$(store_lib_data) || {
     printf 'store.roots: error: the storage core data reader is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
     return 2
   }
-  sr_out=$(CTX_STORE_WORKSPACE=$sr_root "$sr_script" --list 2>&1)
-  sr_rc=$?
+  sr_rc=0
+  sr_out=$(CTX_STORE_WORKSPACE=$sr_root "$sr_script" --list 2>&1) || sr_rc=$?
   if [ "$sr_rc" -ne 0 ]; then
     sr_why=$(printf '%s\n' "$sr_out" | LC_ALL=C awk 'index($0, "store-data: ") == 1 { print substr($0, 13); exit }')
     if [ "$sr_rc" -eq 1 ]; then
@@ -512,7 +511,7 @@ store_sweep_text() {
 
 # store_batch: the transactional batch over the caller's namespace; the action list travels
 # on stdin as the driver's escaped payload lines (action=<put|delete>, key=<escaped key>,
-# head=<sha|none>, value_b64=<base64> for a put), and the driver answers one compact JSON
+# value_b64=<base64> for a put), and the driver answers one compact JSON
 # line {"namespace","actions":N} or the first failure's one line with the action and key.
 store_batch() { store_lib_own store.batch "$@"; }
 
@@ -1038,39 +1037,16 @@ store_search() {
   printf 'query=%s\n' "$(store_lib_escape "$ss_q")" | store_lib_call store.search store.search "$STORE_LIB_NS" "$ss_mode" "$ss_lim"
 }
 
-# store_modes [--own]: the search mode registry, one name TAB description line per mode in
-# the configured driver's order, the modes being registered by the driver's descriptor and
-# never declared by a module (exact is always among them). With --own it answers the modes
-# the caller's own namespace can answer: exact always, a ranked mode only when its data file
-# declares a search schema, since a ranked mode reads the documents a schema derives. Any
-# other argument refuses rc 1 ERR_INVALID_ARGUMENT, a namespace no data file declares rc 1
-# ERR_ENTITY_NOT_FOUND, a missing reader or resolver rc 2.
+# store_modes: the search mode registry, one name TAB description line per mode in the
+# configured driver's order, the modes being registered by the driver's descriptor and
+# never declared by a module; contract 4 registers exact alone. Any argument refuses rc 1
+# ERR_INVALID_ARGUMENT, a missing resolver rc 2.
 store_modes() {
-  if [ $# -gt 1 ] || { [ $# -eq 1 ] && [ "$1" != --own ]; }; then
-    printf 'store.modes: error: store.modes takes no argument but --own (ERR_INVALID_ARGUMENT)\n' >&2
+  if [ $# -gt 0 ]; then
+    printf 'store.modes: error: store.modes takes no argument (ERR_INVALID_ARGUMENT)\n' >&2
     return 1
   fi
-  if [ $# -eq 1 ]; then store_lib_ns store.modes || return $?; fi
   sm_reg=$(store_lib_call store.modes modes < /dev/null) || return $?
-  if [ $# -eq 0 ]; then
-    [ -z "$sm_reg" ] || printf '%s\n' "$sm_reg"
-    return 0
-  fi
-  sm_script=$(store_lib_data) || {
-    printf 'store.modes: error: the storage core data reader is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
-    return 2
-  }
-  sm_out=$(CTX_STORE_WORKSPACE=$(store_lib_root) "$sm_script" "$STORE_LIB_NS" 2>&1)
-  sm_rc=$?
-  if [ "$sm_rc" -ne 0 ]; then
-    sm_msg=$(printf '%s\n' "$sm_out" | head -n 1)
-    sm_msg=${sm_msg#store-data: }
-    case "$sm_rc" in
-      3) printf 'store.modes: error: %s (ERR_ENTITY_NOT_FOUND)\n' "$sm_msg" >&2; return 1 ;;
-      2) printf 'store.modes: error: %s (ERR_STORAGE_READ)\n' "$sm_msg" >&2; return 2 ;;
-      *) printf 'store.modes: error: %s (ERR_INVALID_ARGUMENT)\n' "$sm_msg" >&2; return 1 ;;
-    esac
-  fi
-  sm_form=$(printf '%s\n' "$sm_out" | sed -n '7p')
-  printf '%s\n' "$sm_reg" | SM_FORM="$sm_form" LC_ALL=C awk -F '\t' '$1 != "" && ($1 == "exact" || ENVIRON["SM_FORM"] != "")'
+  [ -z "$sm_reg" ] || printf '%s\n' "$sm_reg"
+  return 0
 }

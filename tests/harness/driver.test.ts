@@ -11,7 +11,7 @@ describe('driver operation', () => {
         expect(answer(await driverOp(sb, driver, 'capability'), 'capability').driver).toBe(driver);
         const put = await driverOp(sb, driver, 'store.put', ['unit', 'smoke-unit/note'], 'one note\n');
         answer(put, 'store.put');
-        expect(put.stdout).toBe('{"namespace":"unit","key":"smoke-unit/note","op":"write"}\n');
+        expect(put.stdout).toBe('{"namespace":"unit","key":"smoke-unit/note"}\n');
         const got = await driverOp(sb, driver, 'store.get', ['unit', 'smoke-unit/note']);
         expect(got.code, got.stderr).toBe(0);
         expect(got.stdout).toBe('one note\n');

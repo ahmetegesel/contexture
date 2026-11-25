@@ -4,9 +4,9 @@
 # driver: fts5
 # part: driver storage/drivers/fts5
 # category: storage
-# pitch: fast ranked full-text search across units and docs in one SQLite FTS5 database
-# when: you want indexed hybrid and trigram search on a single machine instead of plain files
+# pitch: the record and the docs corpus in one SQLite database, exact search alike on every driver
+# when: you want the store in one database file on a single machine instead of plain files
 # needs: sqlite3 3.44 or later with FTS5 and trigram support
 # tags: storage sqlite fts5 search driver
 # description:
-# Contract 3 store-only SQLite driver using WAL mode, dual FTS5 virtual tables (unicode61 porter preserving diacritics plus trigram), and pure SQL Reciprocal Rank Fusion for hybrid and trigram search across units and docs.
+# Contract 4 store-only SQLite driver using WAL mode, the interim driver the sqlite rebuild replaces: exact search alone, as posix answers it, its schema 5 derived documents and FTS5 tables kept for that rebuild.

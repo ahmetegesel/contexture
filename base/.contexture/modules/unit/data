@@ -3,18 +3,12 @@ root: .contexture/units
 fallback_root: .contexture/sessions
 suffix: .md
 key: <unit>/<path...>
-changes: false
-search: documents
-document: <unit>/backlog backlog session -
-document: <unit>/backlog backlog task @task
-document: <unit>/knowledge knowledge session -
-document: <unit>/knowledge knowledge finding @finding
-document: <unit>/journal journal session -
-document: <unit>/journal journal entry @entry
-document: <unit>/journal journal session @anchor
-document: <unit>/lanes/<lane>/recipe lane_recipe lane -
-document: <unit>/lanes/<lane>/journal lane_journal lane -
-document: <unit>/lanes/<lane>/journal lane_journal lane_entry @entry
-document: <unit>/lanes/<lane>/report lane_report lane -
-# the state: a document every verb reads, left out of the search schema so no search returns it
+# the record's document set: every artifact a verb reads, none of them a search schema, so
+# the leftovers probe and the sweep count their keys as documents
 unsearched: <unit>/state
+unsearched: <unit>/backlog
+unsearched: <unit>/knowledge
+unsearched: <unit>/journal
+unsearched: <unit>/lanes/<lane>/recipe
+unsearched: <unit>/lanes/<lane>/journal
+unsearched: <unit>/lanes/<lane>/report

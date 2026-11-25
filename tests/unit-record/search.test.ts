@@ -69,6 +69,14 @@ describe.concurrent('the exact search through the unit data script', () => {
     refused(await data(sb, 'search.query', [EX, '--mode=nosuchmode'], query('needle')), 'search.query', 1, 'ERR_CAPABILITY_UNSUPPORTED', "mode 'nosuchmode' is not supported; answerable modes: exact");
   });
 
+  it('UD-11 [the-record-r13]: the data script refuses every mode but exact before any store call, a unit no store holds included', async () => {
+    const sb = await at('empty');
+    for (const [unit, mode] of [['nosuch-unit', 'hybrid'], ['nosuch-unit', 'trigram'], [TUNIT, 'hybrid']]) {
+      refused(await data(sb, 'search.query', [unit, `--mode=${mode}`], query('needle')), 'search.query', 1, 'ERR_CAPABILITY_UNSUPPORTED', `mode '${mode}' is not supported; answerable modes: exact`);
+    }
+    refusedLike(await data(sb, 'search.query', ['nosuch-unit', '--mode=exact'], query('needle')), 'search.query', 1, 'ERR_ENTITY_NOT_FOUND');
+  });
+
   it('TC69 [the-record-r13]: the exact query set over legacy text answers its fixed results under --mode=exact (posix plant)', async () => {
     const sb = await at('empty');
     plantUnit(sb, 'legacy-u');

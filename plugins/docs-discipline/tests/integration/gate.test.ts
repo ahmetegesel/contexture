@@ -53,10 +53,13 @@ describe('the gate through ctx on posix', { concurrent: true }, () => {
     expect(readdirSync(watch)).toEqual([]);
   });
 
-  it('S18 [docs-module-r15] changes refuses on the files driver, naming git', async () => {
-    const r = await docs(fresh(gw), ['changes']);
-    expect(r.code).toBe(1);
-    expect(r.stderr).toContain('the corpus delta comes from git');
+  it('S18 [docs-module-r4, docs-module-r15] the changes verb is retired: the module lists no such verb and a call refuses rc 1', async () => {
+    const sb = fresh(gw);
+    const help = await docs(sb, ['help']);
+    expect(help.code).toBe(0);
+    expect(help.stdout).not.toMatch(/^ {2}changes\b/m);
+    const r = await docs(sb, ['changes']);
+    expect([r.code, r.stdout]).toEqual([1, '']);
   });
 
   it('S19 [docs-module-r16] git mode: a code change alone reads STALE once the doc is committed', async () => {

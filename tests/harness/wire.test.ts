@@ -32,7 +32,7 @@ describe('wire round trip', () => {
   it('raw bytes travel in base64 through store.batch and back through store.get and store.scan', async () => {
     const sb = stage();
     const bytes = Buffer.from([0x61, 0x00, 0xff, 0x0a, 0x5c, 0x6e, 0xc3, 0xbc]);
-    const batch = payload().kv('action', 'put').kv('key', 'wire-unit/blob').kv('head', 'none').kv('value_b64', b64(bytes)).toString();
+    const batch = payload().kv('action', 'put').kv('key', 'wire-unit/blob').kv('value_b64', b64(bytes)).toString();
     expect(answer(await driverOp(sb, 'posix', 'store.batch', ['unit'], batch), 'store.batch')).toEqual({ namespace: 'unit', actions: 1 });
     const got = await driverOp(sb, 'posix', 'store.get', ['unit', 'wire-unit/blob']);
     expect(got.code, got.stderr).toBe(0);

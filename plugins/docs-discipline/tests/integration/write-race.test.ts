@@ -13,26 +13,27 @@ import { store } from '@support/store';
 import { docs, putDocs, stageSeed } from '../support/corpus';
 import { fixture } from '../support/edit';
 
-const GIT = spawnSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim();
+const MKTEMP = spawnSync('sh', ['-c', 'command -v mktemp'], { encoding: 'utf8' }).stdout.trim();
 
-// the barrier plant: the git rev-parse HEAD stub, which a write runs as it stores the doc
-// (docs_store reads the head after docs_lock returned, LIB_LOCK set), marks the barrier folder
-// with its pid and waits there until a second writer marks it too (up to 4 s), or, given a
-// release file, until the test writes that file (up to 60 s)
+// the barrier plant: the mktemp stub, which the storage core's dispatch gate runs as it
+// stages the doc's bytes for the put (docs_store calls store_put after docs_lock returned,
+// LIB_LOCK set), marks the barrier folder with its pid and waits there until a second writer
+// marks it too (up to 4 s), or, given a release file, until the test writes that file (up to
+// 60 s)
 const barrier = (dir = sandbox('write-race-barrier'), release = ''): Record<string, string> => {
   const wait = release
     ? `    while [ ! -e "${release}" ] && [ "$n" -lt 600 ]; do sleep 0.1; n=$((n + 1)); done`
     : `    while [ "$(ls "${dir}" | wc -l)" -lt 2 ] && [ "$n" -lt 40 ]; do sleep 0.1; n=$((n + 1)); done`;
   return {
-    ...pathPlant('git', [
+    ...pathPlant('mktemp', [
       'case " $* " in',
-      '  *" rev-parse "*" HEAD "*)',
+      '  *store-gate.*)',
       `    : > "${dir}/$$"`,
       '    n=0',
       wait,
       '    ;;',
       'esac',
-      `exec "${GIT}" "$@"`,
+      `exec "${MKTEMP}" "$@"`,
     ].join('\n')),
   };
 };
