@@ -21,7 +21,7 @@ The unit module owns the record: its data script stores one value per artifact u
 namespace `unit`, parses and renders the canonical record text, and reaches this driver
 only through the generic store. The driver never parses markdown; it keeps the bytes
 opaque and derives the search documents from the module's declared search schema at write
-time. The record's 35 operations, its rules, and its canonical layout are the unit
+time. The record's operations, its rules, and its canonical layout are the unit
 module's, not this driver's.
 
 ## The store

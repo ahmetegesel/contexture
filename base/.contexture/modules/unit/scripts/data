@@ -1,6 +1,6 @@
 #!/bin/sh
 # data: the unit module's data script (no summary line, so discovery lists no verb). It
-# answers the record's 35 operations over the storage core's generic module store, one
+# answers the record's operations over the storage core's generic module store, one
 # store value per artifact: <unit>/state, <unit>/backlog, <unit>/knowledge,
 # <unit>/journal, and <unit>/lanes/<lane>/<recipe|journal|report>. The artifact values are
 # the current file shapes, so the record order, the preambles, the anchors, the opaque
@@ -26,7 +26,7 @@
 # The store root moves gradually: the data file declares a fallback root the store reads
 # after its root, and the posix store's own write moves a unit's folder from the fallback
 # to the root, so a unit moves whole at its first landing write with no call of its own;
-# unit.migrate, outside the record's 35 operations, moves the named units or every unit for
+# unit.migrate, outside the record's operations, moves the named units or every unit for
 # ctx unit migrate through the store's optional store.promote, then rewrites their pointers;
 # unit.sweep, outside them too, sweeps what the record's storage holds beyond its documents
 # for ctx unit migrate --sweep through the storage layer's sweep. A run
@@ -573,7 +573,7 @@ u_awk() {
   return 0
 }
 
-# u_unit_migrate [--dry-run] <unit>...|--all: outside the record's 35 operations, the
+# u_unit_migrate [--dry-run] <unit>...|--all: outside the record's operations, the
 # record's migrations, applied per unit under its unit lock: the root move first (store.promote,
 # where the store keeps a fallback root), then the pointer rewrite (lib/migrate.awk) over every
 # artifact value as stored, the changed values written back through one store.batch, never
@@ -679,7 +679,7 @@ u_unit_migrate() {
   printf '{"promote":%s,"moved":%s,"rewritten":%s,"migrated":%s}\n' "$um_p" "$um_moved" "$um_rew" "$um_mig"
 }
 
-# u_unit_sweep [--dry-run] [--delete] <unit>...|--all: outside the record's 35 operations, the
+# u_unit_sweep [--dry-run] [--delete] <unit>...|--all: outside the record's operations, the
 # sweep of what the record's storage holds beyond its documents (the keys the unit verbs
 # read: the state, the backlog, the knowledge, the journal, and each lane's recipe, journal,
 # and report). Before any walk or write it refuses rc 1 unless the installed unit declaration,
@@ -1423,7 +1423,7 @@ case "$cmd" in
     u_want_unit "${1:-}"
     u_unit_call "$cmd" "$1" "backlog journal" 0
     ;;
-  session.stamp)
+  session.stamp|session.objective)
     u_extra 1 "$@"
     u_want_unit "${1:-}"
     u_unit_call "$cmd" "$1" "journal" 1

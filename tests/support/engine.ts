@@ -131,6 +131,7 @@ function plan(fn: string, argv: readonly string[]): Plan {
     case 'session.audit':
       return unitParts('backlog journal');
     case 'session.stamp':
+    case 'session.objective':
       return unitParts('journal', true);
     case 'session.close':
       return unitParts('backlog journal', true);

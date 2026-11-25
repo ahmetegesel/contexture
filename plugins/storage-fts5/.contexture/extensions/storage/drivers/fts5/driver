@@ -6,7 +6,7 @@
 # schema in a new or empty file, and refuses a store at any other schema). The driver is
 # store-only: it answers capability and storage.health as its own methods and the seven
 # generic store functions (list, get, put, delete, changes, batch, scan) plus the
-# store.search entry; the record's 35 operations live in the unit module's data script over
+# store.search entry; the record's operations live in the unit module's data script over
 # this store, and the docs corpus reaches the driver through the store too.
 #
 # The wire: argv carries the function and its bounded identifiers; values arrive on stdin as

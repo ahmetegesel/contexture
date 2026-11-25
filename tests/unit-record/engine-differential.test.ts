@@ -22,6 +22,7 @@ const OPS: Op[] = [
   ['session.board', [TUNIT]],
   ['session.audit', [TUNIT]],
   ['session.stamp', [TUNIT], p().kv('date', DATE).toString()],
+  ['session.objective', [TUNIT], p().kv('objective', 'a differential objective').kv('date', DATE).toString()],
   ['session.close', [TUNIT]],
   ['session.reopen', [UNIT]],
   ['session.refs', [TUNIT, UNIT]],
@@ -77,8 +78,8 @@ async function both(op: Op, engineInput = op[2]): Promise<{ engine: Run; script:
 
 describe.concurrent('the engine against the data script on the same fresh snapshot', () => {
   it('covers every function of the data script dispatch once', () => {
-    expect(new Set(OPS.map(([fn]) => fn)).size).toBe(35);
-    expect(OPS.length).toBe(35);
+    expect(new Set(OPS.map(([fn]) => fn)).size).toBe(36);
+    expect(OPS.length).toBe(36);
   });
 
   for (const op of OPS) {

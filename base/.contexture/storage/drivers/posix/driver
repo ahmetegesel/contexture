@@ -4,7 +4,7 @@
 # storage.health, storage.leftovers, and storage.sweep as its own methods and the seven generic module store functions
 # (store.list, store.get, store.put, store.delete, store.changes, store.batch, store.scan)
 # over a module's declared data file and root, plus the store.search entry. The record's
-# 35 operations live in the unit module's data script over this store; the driver keeps no
+# operations live in the unit module's data script over this store; the driver keeps no
 # record function. store.list takes an optional literal key prefix; store.search carries
 # the document rules' entity_type and entity_id, collects every match, and applies the
 # limit (0 = all) after the walk.

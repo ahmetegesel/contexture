@@ -2,7 +2,7 @@
 # The descriptor and the handshake). A verb sources this file, checks its input shape, calls
 # exactly one function per record act, and renders the answer with the storage core's
 # json.awk (the one flattener) and lib/render.awk (the one renderer). No verb reads or writes a record
-# artifact itself: the record's 35 operations are the unit module data script's over the
+# artifact itself: the record's operations are the unit module data script's over the
 # configured store, and its record rules (a CLOSED unit, a repeated key, the status
 # moves) are the module's; capability and storage.health stay the driver's,
 # reached through the storage core's resolver. A refusal passes through as its one fixed
@@ -359,6 +359,18 @@ vb_refuse_nl() {
     fi
     shift 2
   done
+}
+
+# vb_want_objective <objective>: one line, neither empty nor blank (bootstrap and objective);
+# a defect refuses rc 1 naming it before any call
+vb_want_objective() {
+  [ -n "$1" ] || { printf 'ERROR: empty objective\n' >&2; exit 1; }
+  vb_has_nl "$1" && { printf 'ERROR: embedded newline in objective\n' >&2; exit 1; }
+  vb_has_cr "$1" && { printf 'ERROR: embedded carriage return in objective (the dialect is LF)\n' >&2; exit 1; }
+  case "$1" in
+    *[!"$VB_CR"' 	']*) ;;
+    *) printf 'ERROR: whitespace-only objective\n' >&2; exit 1 ;;
+  esac
 }
 
 # vb_unknown <label> <argument>: an unknown flag or an extra argument refuses (D26)

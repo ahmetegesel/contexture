@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { data } from '../support/data';
-import { DATE, mk } from '../support/record';
-import { answer, answerLine, payload, refused } from '../support/wire';
+import { DATE, mk, ok, plantUnit, reads, receiptJson } from '../support/record';
+import { answer, answerLine, payload, refused, refusedLike } from '../support/wire';
 import { at, UNIT } from './chain';
 
 const U1STATE = '{"unit":"compliance-u1","status":"ACTIVE","current_anchor":"A1","objective":"Compliance test session","repos":["alpha","beta"],"ref_sessions":null,"extra_fields":[],"extra_lines":[]}';
@@ -69,5 +69,30 @@ describe.concurrent('the unit lifecycle through the unit data script', () => {
       '{"unit":"tc73-s","query":"@anchor A2","mode":"exact","total_matches":1,"results":[{"entity_type":"session","entity_id":"tc73-s","section":"journal","snippet":"@anchor A2 2026-09-27","score":0}]}',
     );
     expect(answer(await data(sb, 'session.load', ['tc73-s']), 'session.load').state.current_anchor).toBe('A2');
+  });
+
+  it('TC87 [the-record-r1, the-record-r-objv1]: session.objective rewords the state and writes its receipt in the same atomic write, the slug <date>-objective suffixed -1 while held; an unchanged objective and a CLOSED unit refuse, nothing written', async () => {
+    const sb = await at('empty');
+    const u = 'tc87-u';
+    const reword = (objective: string) => data(sb, 'session.objective', [u], payload().kv('objective', objective).kv('date', DATE).toString());
+    answer(await mk(sb, u), 'session.create');
+    const before = await reads(sb, u);
+    refused(await reword(`compliance unit ${u}`), 'session.objective', 1, 'ERR_INVALID_ARGUMENT', 'the objective is unchanged');
+    expect(await reads(sb, u)).toBe(before);
+    const receipt = receiptJson('2026-09-27-objective', 2, `objective reworded from \\"compliance unit ${u}\\" to \\"a \\"quoted\\" rewording\\"`);
+    expect(answerLine(await reword('a "quoted" rewording'), 'session.objective')).toBe(`{"unit":"tc87-u","previous_objective":"compliance unit tc87-u","objective":"a \\"quoted\\" rewording","receipt":${receipt}}`);
+    expect((await ok(sb, 'session.load', [u])).state.objective).toBe('a "quoted" rewording');
+    const { entry } = await ok(sb, 'entry.get', [u, '2026-09-27-objective']);
+    const { closed, closed_by, close_reason, ...stored } = entry;
+    expect([closed, closed_by, close_reason]).toEqual([false, null, null]);
+    expect(JSON.stringify(stored)).toBe(receipt);
+    expect((await ok(sb, 'session.objective', [u], payload().kv('objective', 'a second rewording').kv('date', DATE))).receipt.slug).toBe('2026-09-27-objective-1');
+    expect((await ok(sb, 'session.close', [u])).status).toBe('CLOSED');
+    const closedBefore = await reads(sb, u);
+    refused(await reword('a rewording after the close'), 'session.objective', 1, 'ERR_UNIT_CLOSED', "unit 'tc87-u' is CLOSED; a closed unit takes no writes");
+    expect(await reads(sb, u)).toBe(closedBefore);
+    plantUnit(sb, 'tc73-u');
+    refusedLike(await data(sb, 'session.objective', ['tc73-u'], payload().kv('objective', 'never lands').kv('date', DATE).toString()), 'session.objective', 2, 'ERR_STORAGE_CORRUPT');
+    expect((await ok(sb, 'session.load', ['tc73-u'])).state.objective).toBe('The malformed anchor fixture');
   });
 });

@@ -1,0 +1,33 @@
+#!/bin/sh
+# summary: reword an ACTIVE unit's objective; a receipt keeps the old and new wording
+# usage: ctx unit objective <slug> "<objective>"
+# help: the unit module rewrites the objective and appends its receipt, objective reworded from "<old>" to "<new>", in one atomic write (session.objective); prints objective: "<new>"
+# help: the objective is one line (an embedded double or single quote is text), checked as bootstrap checks it; an objective equal to the stored one refuses
+# help: exit codes: 0 objective reworded and printed; 1 a missing or CLOSED unit, an unchanged objective, missing arguments, or malformed input
+# help: example: ctx unit objective my-unit "Ship feature X behind a flag"
+
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
+
+usage() {
+  printf 'Usage: ctx unit objective <unit> "<objective>"\n' >&2
+  printf 'help: ctx unit help\n' >&2
+  exit 1
+}
+
+case "${1:-}" in
+  --help|-h|help) printf 'usage: ctx unit objective <unit> "<objective>"\n'; exit 0 ;;
+esac
+[ $# -eq 2 ] || usage
+slug=$1
+vb_slug_ok "$slug" || usage
+vb_want_objective "$2"
+
+vb_kv objective "$2"
+vb_kv date "$(vb_today)"
+vb_call session.objective "$slug"
+if [ "$VB_RC" -eq 1 ] && vb_err_has "unit '$slug' not found"; then
+  printf 'ERROR: missing state: unit %s\n' "$slug" >&2
+  exit 1
+fi
+vb_ok
+printf 'objective: "%s"\n' "$(vb_field objective)"

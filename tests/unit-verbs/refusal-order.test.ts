@@ -32,6 +32,7 @@ const ROWS: readonly [string[], string | RegExp][] = [
   [['unit', 'search', 'zzz', '--unit=lg', '--mode=nosuch'], "search.query: error: mode 'nosuch' is not supported; answerable modes: exact (ERR_CAPABILITY_UNSUPPORTED)\n"],
   [['unit', 'fold', 'lg', '--check'], "fold: error: no active fold for unit 'lg'; run 'ctx unit fold lg' without --lane to plan (ERR_INVALID_ARGUMENT)\n"],
   [['unit', 'reopen', 'lg'], "session.reopen: error: unit 'lg' is ACTIVE; session.reopen moves only from CLOSED (ERR_INVALID_TRANSITION)\n"],
+  [['unit', 'objective', 'lg', 'the legacy unit'], 'session.objective: error: the objective is unchanged (ERR_INVALID_ARGUMENT)\n'],
   [['unit', 'record', 'lg', '--what=x', `--closes=${D}-nosuch (done: x)`], `entry.record: error: entry '${D}-nosuch' not found in unit 'lg' (ERR_ENTITY_NOT_FOUND)\n`],
   [['lane', 'show', 'lg', 'nosuch-lane', 'report'], "lane.get: error: lane 'nosuch-lane' not found in unit 'lg' (ERR_ENTITY_NOT_FOUND)\n"],
   [['lane', 'record', 'lg', 'nosuch-lane', '--what=x'], "lane.record: error: lane 'nosuch-lane' not found in unit 'lg' (ERR_ENTITY_NOT_FOUND)\n"],

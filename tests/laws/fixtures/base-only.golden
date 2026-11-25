@@ -1,4 +1,4 @@
-# contexture v0.83.0: generated law layer; core cksum 967336781-16076; sources 2023728038-35755; never edit
+# contexture v0.83.0: generated law layer; core cksum 807592023-16073; sources 1560702335-35773; never edit
 @laws
   source-of-truth: the record is the work's durable memory, what a fresh context resumes from: the events that happened, the decisions made, and the state they left, across compaction, tool change, and break; because the work's continuity depends on it, it holds whatever else that continuity needs, the reasons, the open threads, and the evidence behind them; the workspace and the commands' results show what is, and the loaded layer and its sequences say what to do.
   load-only-needed: load only what you need: the active unit's live surfaces; closed units untouched unless the task needs them.
@@ -24,7 +24,7 @@
   workspace configuration = module-scoped settings, loaded at boot via .contexture/ctx config load (schemas via ctx config schema)
   .contexture/ctx             = the runtime (run .contexture/ctx help; --help and -h are the same table): ctx unit <verb>, ctx run <cmd>, ctx compose [--check], ctx package install|uninstall|list|catalog|info (install and uninstall only on the human's explicit go at the act; the verb checks no go), ctx <module>
   .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms
-  .contexture/storage/: the storage core, not a module: the driver resolver, the store-data reader, the module-facing library, the store contract, and the built-in posix driver; a driver serves only the store contract (contract 3), and the record's 35 operations are the unit module's (ctx unit help)
+  .contexture/storage/: the storage core, not a module: the driver resolver, the store-data reader, the module-facing library, the store contract, and the built-in posix driver; a driver serves only the store contract (contract 3), and the record's operations are the unit module's (ctx unit help)
 
 @module lane
   summary: subagent lane management: create, record, report, show
@@ -51,9 +51,9 @@
   help: ctx store help
 
 @module unit
-  summary: the unit module: the record's 35 operations over the storage layer, one value per artifact
+  summary: the unit module: the record's operations over the storage layer, one value per artifact
   The unit module owns the record: the state, the backlog, the journal, the knowledge,
-  and the lane artifacts, one record value per artifact. It answers the 35 record
+  and the lane artifacts, one record value per artifact. It answers the record's
   operations over the storage layer, and its verbs are the record's public surface, dispatched
   as ctx unit.
   help: ctx unit help
@@ -75,9 +75,9 @@
   dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts in value examples, never around field names; -> means flow; # starts a comment. lowercase keys on the state (status: ACTIVE); spellings are contractual; laws are slug-addressed: `slug: statement`, referenced @laws#<slug>; slugs are unique across the merged base + overlays.
   references: a pointer names its target exactly by its full address, <owner>#<path>, the owner the text before the first hash: unit#<unit>/entry/<slug>, unit#<unit>/task/<slug>, unit#<unit>/finding/<NAME>, a lane artifact as unit#<unit>/lane/<lane>/<recipe|journal|report>, a report or recipe section as unit#<unit>/lane/<lane>/<recipe|report>/<SECTION>, a lane journal entry as unit#<unit>/lane/<lane>/journal/<slug>, a store record as store#<container>/<id>, a corpus entity as docs#<repo>/<slug>/<id>, a workspace file as file#<path>[#<symbol>] (./README.md, base/x.sh#fn); one token without blanks, control characters, or double quotes; ctx <owner> get <path> reads it; a law points by section and step (@refresh, @close 1-3); the verbs refuse any other REF or REFS value on a new write, naming its full address, and a target that does not exist; a stored old form reads as stored until ctx unit migrate rewrites it; a vague prose mention is a defect
   unit status   = unit lifecycle (status: ACTIVE | CLOSED); journal entries and findings carry no status: closure and supersession by reference only.
-  the state    = where the unit stands: its status, current anchor, objective, repos, and optional ref_sessions; the only artifact updated directly; read WHOLE at boot via ctx unit load; terse by design, the map, not the content: detail lives behind refs; refreshed as the work moves via ctx unit stamp, refs, close, reopen; the next move is never stored: it is derived from the backlog at presentation (the first IN_PROGRESS task, else the first open task, the board's rule: every status but DONE; ctx unit list prints it).
+  the state    = where the unit stands: its status, current anchor, objective, repos, and optional ref_sessions; the only artifact updated directly; read WHOLE at boot via ctx unit load; terse by design, the map, not the content: detail lives behind refs; refreshed as the work moves via ctx unit stamp, objective, refs, close, reopen; the next move is never stored: it is derived from the backlog at presentation (the first IN_PROGRESS task, else the first open task, the board's rule: every status but DONE; ctx unit list prints it).
   the backlog  = the current declaration: actionable tasks (objective + status + description + acceptance criteria + implementation details + refs); the workflow in @backlog; written via ctx unit task (add, update, start, complete, reopen, drop, list, show).
-  the journal  = the single recording surface: append-only events + @anchor declarations; the workflow in @journal; written via ctx unit record, stamp.
+  the journal  = the single recording surface: append-only events + @anchor declarations; the workflow in @journal; written via ctx unit record, stamp, objective.
   knowledge    = settled findings: what is true, what was decided and why, what was ruled out; full lifecycle CRUD via ctx unit finding (add, show, update, supersede, drop, list); an intent to act takes the @task shape in the backlog (ctx unit task add), a developing idea stays a journal event; REF -> the full version in append-only artifacts: a full address (unit#<unit>/entry/<slug>, unit#<unit>/lane/<lane>/<recipe|journal|report>[/<SECTION>]), never a dynamic surface; no REF, no story = hypothesis, never base a task on it; claims outlive their anchors, unlike journal entries; every finding lands via the harvest (@refresh).
   lanes        = dispatch units, one lane per subagent; the dispatcher creates a lane via ctx lane create; subagents manage artifacts via ctx lane; re-dispatch resumes from the lane; the artifact shapes and contract in @subagents.
 

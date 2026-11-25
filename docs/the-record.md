@@ -12,7 +12,7 @@ The record comprises five distinct entity domains:
 
 | domain | role | how it changes |
 |---|---|---|
-| unit state | where the unit stands: its status, anchor, objective, repos, and mounts | overwritten freely; updated via stamp, refs, close, reopen; the next move is derived from the backlog at presentation |
+| unit state | where the unit stands: its status, anchor, objective, repos, and mounts | overwritten freely; updated via stamp, objective, refs, close, reopen; the next move is derived from the backlog at presentation |
 | backlog tasks | the declaration: the work declared ahead | mutated atomically via typed task commands; living queue |
 | journal events | the memory: what happened, as it happened | immutable append-only event stream; closed by later reference |
 | durable findings | the mind: settled architectural truths and decisions | full lifecycle CRUD; updated or superseded forward |
@@ -42,12 +42,12 @@ ref_sessions: [design-notes]
 
 - `status:` is `ACTIVE` or `CLOSED`.
 - `current_anchor:` is the current value of the anchor counter, `A<N>`. A fresh unit starts at `A1`, the bootstrap's folded first anchor, and each stamp adds one.
-- `objective:` is what the unit is for: one quoted line, an embedded double or single quote is text, an embedded newline refuses.
+- `objective:` is what the unit is for: one quoted line, an embedded double or single quote is text, an embedded newline refuses; bootstrap sets it and `ctx unit objective` rewords it, a journal receipt keeping the old and new wording.
 - the next move is not a state field: it is derived at presentation from the backlog, the first `IN_PROGRESS` task, else the first open task, open being the board's rule of every status but `DONE` (`ctx unit list` prints it); a unit with no open task has none.
 - `repos:` lists affected repositories.
 - `ref_sessions:` lists optional read-only reference units mounted at boot; boot loads their knowledge and active journal.
 
-The state is refreshed as the work moves, via `ctx unit stamp`, `ctx unit refs`, `ctx unit close`, and `ctx unit reopen`. A legacy `next_action` line already stored is ignored by the record reads (the load, `list`, and the exact search) and erased by the next state write; a new state never carries one. On an indexed backend the ranked search reads the storage layer's document derived from the raw value at write time, so an unwritten legacy line may still match there until a state write rewrites it.
+The state is refreshed as the work moves, via `ctx unit stamp`, `ctx unit objective`, `ctx unit refs`, `ctx unit close`, and `ctx unit reopen`. A legacy `next_action` line already stored is ignored by the record reads (the load, `list`, and the exact search) and erased by the next state write; a new state never carries one. On an indexed backend the ranked search reads the storage layer's document derived from the raw value at write time, so an unwritten legacy line may still match there until a state write rewrites it.
 
 The state carries no date. Recency is journal-derived: a unit's `last_event` is the date its last main-journal item carries, so the field stays current without a state write and `session.list` answers it. A unit whose last item carries no date answers null, and lane journals never enter the derivation. `ctx unit list` reads no journal, so it prints no date and orders its units bytewise by name.
 

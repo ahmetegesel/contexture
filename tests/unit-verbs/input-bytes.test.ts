@@ -49,6 +49,7 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     ['lane record --what', 'what', ['lane', 'record', 'in-unit', 'in-lane', flag('what', BAD)]],
     ['lane create --goal', 'goal', ['lane', 'create', 'in-unit', 'in-u8-lane', flag('goal', BAD), ...laneFlags(['--goal=']).slice(0, -1)]],
     ['bootstrap objective', 'objective', ['unit', 'bootstrap', 'in-u8-unit', BAD]],
+    ['objective objective', 'objective', ['unit', 'objective', 'in-unit', BAD]],
     ['search query', 'query', ['unit', 'search', BAD, '--unit=in-unit']],
     ['lane report --body', 'the report', ['lane', 'report', 'in-unit', 'in-lane', flag('body', BAD)]],
   ] as const)('E3-d [the-record-r9, the-record-r12]: %s refuses bytes that are not UTF-8 naming the field %s, nothing landed', async ([, field, argv]) => {

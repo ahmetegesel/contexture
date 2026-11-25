@@ -373,6 +373,21 @@ function f_session_stamp(   dt, ca, n, kj) {
   answer("{\"unit\":" jstr(U) ",\"previous_anchor\":" jstr(ca) ",\"current_anchor\":" jstr("A" n) ",\"receipt\":" anchor_json(kj, NI[kj]) "}")
 }
 
+# session.objective: the reworded objective and its receipt of the old and new wording
+function f_session_objective(   ob, old, dt, r) {
+  parse_unit(U, "journal")
+  not_closed()
+  need("objective"); ob = pv("objective"); oneline("objective", ob)
+  need("date"); dt = pv("date"); want_date(dt)
+  old = ST[U, "obj"]
+  if (ob == old) die(1, "ERR_INVALID_ARGUMENT", "the objective is unchanged")
+  ST[U, "obj"] = ob
+  st_write(U)
+  r = receipt("objective reworded from \"" old "\" to \"" ob "\"", dt "-objective")
+  stage(U "|state"); stage(U "|journal")
+  answer("{\"unit\":" jstr(U) ",\"previous_objective\":" jstr(old) ",\"objective\":" jstr(ob) ",\"receipt\":" entry_json(U "|journal", r, 0) "}")
+}
+
 function f_session_refs(   n, i, r, R, o) {
   parse_state(U)
   not_closed()
@@ -842,6 +857,7 @@ BEGIN {
   else if (FN == "session.board") f_session_board()
   else if (FN == "session.audit") f_session_audit()
   else if (FN == "session.stamp") f_session_stamp()
+  else if (FN == "session.objective") f_session_objective()
   else if (FN == "session.refs") f_session_refs()
   else if (FN == "session.close") f_session_close()
   else if (FN == "session.reopen") f_session_reopen()

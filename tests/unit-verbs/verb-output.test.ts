@@ -226,6 +226,7 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
       await u('fold', 'cu');
       const foldLane = /--lane=([A-Za-z0-9_-]+)/.exec(plan.stdout)?.[1] ?? '';
       await u('fold', 'cu', `--lane=${foldLane}`);
+      await u('objective', 'cu', 'the census unit, reworded');
       await u('close', 'cu');
       await u('reopen', 'cu');
     };

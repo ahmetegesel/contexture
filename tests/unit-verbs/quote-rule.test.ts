@@ -62,6 +62,16 @@ describe.concurrent('one quote rule for every one-line quoted field', () => {
     expect((await unit(sb, 'bootstrap', 'u-nl', 'first\nsecond')).code).toBe(1);
   });
 
+  it('U-a [the-record-r12]: objective rewords a state objective with double and single quotes; the state, the listing, and the receipt read it verbatim', async () => {
+    const sb = fresh(sb0);
+    const r = await unit(sb, 'objective', 'u-unit', OBJ);
+    expect([r.code, r.stdout, r.stderr]).toEqual([0, `objective: "${OBJ}"\n`, '']);
+    expect((await unit(sb, 'load', 'u-unit', '1')).stdout.split('\n')).toContain(`objective: "${OBJ}"`);
+    expect((await unit(sb, 'list')).stdout).toContain('objective: "the "quoted" objective of the human');
+    expect((await unit(sb, 'board', 'u-unit')).stdout).toContain(`WHAT: "objective reworded from "quote rule unit" to "${OBJ}""`);
+    expect((await unit(sb, 'audit', 'u-unit')).code).toBe(0);
+  });
+
   it('U-a [the-record-r12]: a task OBJECTIVE with double quotes from task add and task update reads back verbatim everywhere', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'task', 'show', 'u-unit', 'u-b')).stdout.split('\n')).toContain('  OBJECTIVE: "an "appended" objective"');

@@ -9,12 +9,12 @@ top README.
 `module` carries the discovery line and the package description:
 
 ```text
-# summary: the unit module: the record's 35 operations over the storage layer, one value per artifact
+# summary: the unit module: the record's operations over the storage layer, one value per artifact
 ```
 
 The engine discovers `.contexture/modules/unit/`, reads the summary for `ctx help`, and
 builds the verb table from `scripts/*`: an extension-less file with a `# summary:` header
-is a verb. `scripts/data` carries no summary and is private; the 20 verbs are the record's
+is a verb. `scripts/data` carries no summary and is private; the 21 verbs are the record's
 public surface, and `ctx session` is retired (a line naming `ctx unit`).
 
 ## Layout
@@ -28,8 +28,8 @@ laws              the sweep-consent law under @laws (no sweep that writes withou
 data              the storage declaration (the namespace is the folder name, unit):
                   root .contexture/units, fallback_root .contexture/sessions, suffix .md,
                   key <unit>/<path...>, changes false, the document rules
-scripts/<verb>    the 20 record verbs (sh), each sourcing lib/verb.sh
-scripts/data      the 35 record operations over the storage layer (sh, private), and
+scripts/<verb>    the 21 record verbs (sh), each sourcing lib/verb.sh
+scripts/data      the record operations over the storage layer (sh, private), and
                   unit.migrate, the record's migrations behind migrate, outside them
 lib/migrate.awk   the pointer rewrite: the tokenizer, the class table, the census, NOTE
 lib/verb.sh       the shared verb shell: the payload wire, the call, the rendering
@@ -59,11 +59,11 @@ current file shapes, so the record order, the preambles, the anchors, the opaque
 the legacy shapes, and the positional liveness survive unchanged. The storage layer is the
 configured driver; the module never names it.
 
-The data script answers the 35 record operations: 13 session (`create`, `list`, `active`, `load`,
-`refload`, `board`, `audit`, `stamp`, `refs`, `close`, `reopen`, `units`,
-`refs_to`), 8 task (`add`, `update`, `start`, `complete`, `reopen`, `drop`, `list`,
-`get`), 4 entry (`record`, `get`, `list`, `closure`), 6 finding (`add`, `update`,
-`supersede`, `drop`, `get`, `list`), and 4 lane (`create`, `record`, `write_report`,
+The data script answers the record operations: session (`create`, `list`, `active`, `load`,
+`refload`, `board`, `audit`, `stamp`, `objective`, `refs`, `close`, `reopen`, `units`,
+`refs_to`), task (`add`, `update`, `start`, `complete`, `reopen`, `drop`, `list`,
+`get`), entry (`record`, `get`, `list`, `closure`), finding (`add`, `update`,
+`supersede`, `drop`, `get`, `list`), and lane (`create`, `record`, `write_report`,
 `get`), plus `search.query`. `capability` and `storage.health` stay the driver's, and so
 do the posix driver's `storage.leftovers`, which `diagnose --leftovers` reads through the
 storage layer's library (`store_leftovers`) for the unit namespace, and `storage.sweep`,
@@ -103,7 +103,8 @@ changed artifacts with the record engine, and lands them through one `store.batc
 none. The multi-key writes are the batch's: `session.create`
 the four fresh artifacts, `task.start` the backlog alone (the state no longer holds a
 next action), `task.complete` and
-`task.drop` the backlog and the journal, `session.stamp` the state and the journal,
+`task.drop` the backlog and the journal, `session.stamp` and `session.objective` the state
+and the journal,
 `lane.create` the recipe and the lane journal, `lane.record` the lane journal. The driver's
 namespace-scope batch lock (`store-unit.lock`, taken inside the unit lock at the commit)
 serializes the batches; the unit lock serializes the read to the commit, the single-user
@@ -173,7 +174,7 @@ relay, so a child ending rc 0 hands its held warning to that hold instead of pri
 and refresh's exit prints the merged relay once, deduplicated, after its answer, only when
 refresh ends rc 0.
 
-`unit.migrate [--dry-run|--collect] <unit>...|--all` stands outside the 35 operations: it
+`unit.migrate [--dry-run|--collect] <unit>...|--all` stands outside the record's operations: it
 checks every named unit is held (or lists every unit by its state key under `--all`),
 then per unit under its unit lock promotes it through `store.promote unit <unit>/` (asking
 `store_has store.promote` once first; never under `--dry-run`) and rewrites its pointers
@@ -206,7 +207,7 @@ a fully moved store prints `migrated: 0` and leaves no empty deprecated root (a 
 listing no unit reaches no promotion, and its fallback root stays). `ctx unit migrate` is
 its verb.
 
-`unit.sweep [--dry-run] [--delete] <unit>...|--all`, outside the 35 operations too, is the
+`unit.sweep [--dry-run] [--delete] <unit>...|--all`, outside the record's operations too, is the
 sweep behind `ctx unit migrate --sweep`. Before any walk or write it reads the installed
 unit declaration through the storage core's data reader (`store-data unit
 --with-unsearched`, the reader the driver takes the document rules from) and refuses rc 1

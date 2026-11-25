@@ -27,7 +27,7 @@ storage/
 
 The store-only driver card is contract 3: the driver answers `capability` and
 `storage.health <namespace>` as its own methods and the seven data functions plus the
-search entry, and the record's 35 operations live in the unit module's data script over
+search entry, and the record's operations live in the unit module's data script over
 the store. The health probes the named namespace's store, validated through `store-data`
 like any store function (a missing, extra, or malformed argument refuses rc 1
 `ERR_INVALID_ARGUMENT`, an undeclared namespace rc 1 `ERR_ENTITY_NOT_FOUND`, a

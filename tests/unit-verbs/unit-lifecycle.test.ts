@@ -1,8 +1,9 @@
 import { appendFileSync, readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { artifactPath } from '../support/record';
+import { fresh, seed } from '../support/snapshot';
 import { stage } from '../support/stage';
-import { createLane, lane, must, seedUnit, unit } from '../support/unit';
+import { createLane, lane, must, seedUnit, unit, unitChecksum } from '../support/unit';
 
 const anchor = async (sb: string, u: string): Promise<string | undefined> => (await unit(sb, 'load', u)).stdout.split('\n').find((l) => l.startsWith('current_anchor: '));
 
@@ -93,5 +94,71 @@ describe.concurrent('the unit lifecycle verbs: bootstrap, stamp, close, reopen, 
     expect((await lane(sb, 'record', 'x-closed', 'x-cl', '--what=Lane event while closed', '--slug=2026-09-27-x-late')).code).toBe(1);
     const shown = await lane(sb, 'show', 'x-closed', 'x-cl', 'journal');
     expect(shown.stdout + shown.stderr).not.toContain('while closed');
+  });
+});
+
+const USAGE = 'Usage: ctx unit objective <unit> "<objective>"\nhelp: ctx unit help\n';
+const OBJECTIVE_LINES = [
+  ['an empty objective', '', 'ERROR: empty objective\n'],
+  ['an embedded newline', 'first\nsecond', 'ERROR: embedded newline in objective\n'],
+  ['an embedded carriage return', 'carriage\rreturn', 'ERROR: embedded carriage return in objective (the dialect is LF)\n'],
+  ['a whitespace-only objective', ' \t ', 'ERROR: whitespace-only objective\n'],
+] as const;
+
+describe.concurrent('the objective verb', () => {
+  let sb0: string;
+  const picture = async (sb: string): Promise<string> => (await unitChecksum(sb, 'ob-unit')) + (await unitChecksum(sb, 'ob-closed'));
+  beforeAll(async () => {
+    sb0 = await seed(async (sb) => {
+      await seedUnit(sb, 'ob-unit', 'the first wording');
+      await seedUnit(sb, 'ob-closed', 'the closed wording');
+      await must(unit(sb, 'close', 'ob-closed'));
+    }, 'posix', 'objective');
+  });
+
+  it('OB-a [the-record-r1, the-record-r-objv1]: objective rewords an ACTIVE unit, prints the new wording, and lands its receipt of the old and new wording with no thread', async () => {
+    const sb = fresh(sb0);
+    const r = await unit(sb, 'objective', 'ob-unit', 'the second wording');
+    expect([r.code, r.stdout, r.stderr]).toEqual([0, 'objective: "the second wording"\n', '']);
+    expect((await unit(sb, 'load', 'ob-unit', '1')).stdout.split('\n')).toContain('objective: "the second wording"');
+    const board = (await unit(sb, 'board', 'ob-unit')).stdout;
+    expect(board).toMatch(/^@entry \d{4}-\d{2}-\d{2}-objective\n {2}ANCHOR: A1\n {2}WHAT: "objective reworded from "the first wording" to "the second wording""\n {2}THREAD: none$/m);
+    expect((await unit(sb, 'audit', 'ob-unit')).code).toBe(0);
+  });
+
+  it.for([
+    ...OBJECTIVE_LINES.map(([why, text, line]) => [why, ['ob-unit', text], line] as const),
+    ['a malformed slug', ['bad slug', 'a wording'], USAGE],
+    ['one argument', ['ob-unit'], USAGE],
+    ['three arguments', ['ob-unit', 'a wording', 'extra'], USAGE],
+    ['a missing unit', ['nosuch', 'a wording'], 'ERROR: missing state: unit nosuch\n'],
+    ['an unchanged objective', ['ob-unit', 'the first wording'], 'session.objective: error: the objective is unchanged (ERR_INVALID_ARGUMENT)\n'],
+    ['a CLOSED unit', ['ob-closed', 'a wording'], "session.objective: error: unit 'ob-closed' is CLOSED; a closed unit takes no writes (ERR_UNIT_CLOSED)\n"],
+  ] as const)('OB-b [the-record-r-objv1]: objective refuses %s rc 1 by its exact line, nothing written', async ([, args, line]) => {
+    const sb = fresh(sb0);
+    const before = await picture(sb);
+    const r = await unit(sb, 'objective', ...args);
+    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', line]);
+    expect(await picture(sb)).toBe(before);
+  });
+
+  it.for(OBJECTIVE_LINES)('OB-c [the-record-r12, the-record-r-objv1]: bootstrap and objective refuse %s by the same line through the shared check, no unit created', async ([, text, line]) => {
+    const sb = fresh(sb0);
+    const boot = await unit(sb, 'bootstrap', 'ob-new', text);
+    expect([boot.code, boot.stdout, boot.stderr]).toEqual([1, '', line]);
+    expect((await unit(sb, 'objective', 'ob-unit', text)).stderr).toBe(line);
+    expect((await unit(sb, 'load', 'ob-new')).code).toBe(1);
+  });
+
+  it('OB-d [the-engine-r7]: objective --help, -h, and help print the one usage line rc 0; unit help objective prints its usage, the function, the exit codes, and an example', async () => {
+    const sb = fresh(sb0);
+    for (const flag of ['--help', '-h', 'help']) expect(await unit(sb, 'objective', flag).then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, 'usage: ctx unit objective <unit> "<objective>"\n', '']);
+    const table = await unit(sb, 'help', 'objective');
+    expect(table.code).toBe(0);
+    expect(table.stdout).toMatch(/^ctx unit objective: /);
+    expect(table.stdout).toMatch(/^ {2}ctx unit objective <slug> "<objective>"$/m);
+    expect(table.stdout).toContain('(session.objective)');
+    expect(table.stdout).toMatch(/^ {2}exit codes: 0 /m);
+    expect(table.stdout).toMatch(/^ {2}example: ctx unit objective /m);
   });
 });

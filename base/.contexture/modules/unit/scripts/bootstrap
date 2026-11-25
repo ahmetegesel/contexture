@@ -37,13 +37,7 @@ esac
 slug=$1
 objective=$2
 vb_slug_ok "$slug" || usage
-[ -n "$objective" ] || fail "ERROR: empty objective"
-vb_has_nl "$objective" && fail "ERROR: embedded newline in objective"
-vb_has_cr "$objective" && fail "ERROR: embedded carriage return in objective (the dialect is LF)"
-case "$objective" in
-  *[!"$VB_CR"' 	']*) ;;
-  *) fail "ERROR: whitespace-only objective" ;;
-esac
+vb_want_objective "$objective"
 repos=""
 if [ $# -eq 3 ]; then
   repos=$3
