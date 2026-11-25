@@ -35,7 +35,7 @@ The unit is also the memory boundary. A returning session loads that one unit, n
 
 `lanes/` holds delegated work, one folder per dispatch; its own section follows.
 
-The record files share one design rule: each is written as a creation act, never as a maintenance sweep, and each write rides its command; no one edits them by hand, and under the posix driver the driver is the only code that touches them. `state.md` is refreshed as the work moves (`ctx unit stamp`, `refs`, `close`, `reopen`); `backlog.md` evolves in place as tasks move (`ctx unit task add`, `update`, `start`, `complete`, `reopen`, `drop`); `journal.md` only grows (`ctx unit record`, the receipts `task complete` and `task drop` write, the anchors `stamp` appends), which is why it survives every compaction intact; `knowledge.md` changes through `ctx unit finding` (add, update, supersede, drop).
+The record files share one design rule: each is written as a creation act, never as a maintenance sweep, and each write rides its command; no one edits them by hand, and under the posix driver the driver is the only code that touches them. `state.md` is refreshed as the work moves (`ctx unit stamp`, `objective`, `refs`, `close`, `reopen`); `backlog.md` evolves in place as tasks move (`ctx unit task add`, `update`, `start`, `complete`, `reopen`, `drop`); `journal.md` only grows (`ctx unit record`, the receipts `task complete`, `task drop`, and `objective` write, the anchors `stamp` appends), which is why it survives every compaction intact; `knowledge.md` changes through `ctx unit finding` (add, update, supersede, drop).
 
 ## The unit's life
 

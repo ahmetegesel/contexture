@@ -196,7 +196,7 @@ Filters declare themselves with their own header vocabulary; see Filters.
 - `ctx <module>` prints the module's help at rc0. `ctx <module> help` prints the verb table; `ctx <module> help <verb>` prints that verb's summary, usage lines, and help lines.
 - `ctx help --all` prints the top summary plus every module's block.
 - A duplicate verb name inside one module shadows: the engine warns and the first file name in byte order wins.
-- Reserved names cannot be module names: the unit verb set (its twenty-one verbs plus `help`, so twenty-two names), plus `run` and `hooks`, plus the retired record verbs (`append`, `amend`, `query`, `flip`, `drop`, and `next`), a static list in the engine so a retired name stays unclaimed and a call to it prints its replacement. A directory carrying one is refused at discovery with a warning and never listed; the builtin `unit`, `run`, `lane`, `rhythm`, and `store` directories are exempt.
+- Reserved names cannot be module names: the unit verb set (its twenty-one verbs plus `help`, so twenty-two names), plus `run`, `hooks`, `compose`, `package`, `search`, and `config`, plus the retired record verbs (`append`, `amend`, `query`, `flip`, `drop`, `next`, and `resolve`), a static list in the engine so a retired name stays unclaimed and a call to it prints its replacement. A directory carrying one is refused at discovery with a warning and never listed; the builtin `unit`, `run`, `lane`, `rhythm`, and `store` directories are exempt.
 - Help is engine-owned: no module ships a help script.
 
 ## Dispatch

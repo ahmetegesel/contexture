@@ -3,7 +3,7 @@
 # usage: ctx unit objective <slug> "<objective>"
 # help: the unit module rewrites the objective and appends its receipt, objective reworded from "<old>" to "<new>", in one atomic write (session.objective); prints objective: "<new>"
 # help: the objective is one line (an embedded double or single quote is text), checked as bootstrap checks it; an objective equal to the stored one refuses
-# help: exit codes: 0 objective reworded and printed; 1 a missing or CLOSED unit, an unchanged objective, missing arguments, or malformed input
+# help: exit codes: 0 objective reworded and printed; 1 a missing or CLOSED unit, an unchanged objective, missing arguments, or malformed input; 2 a malformed stored anchor
 # help: example: ctx unit objective my-unit "Ship feature X behind a flag"
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
@@ -15,7 +15,7 @@ usage() {
 }
 
 case "${1:-}" in
-  --help|-h|help) printf 'usage: ctx unit objective <unit> "<objective>"\n'; exit 0 ;;
+  --help|-h) printf 'usage: ctx unit objective <unit> "<objective>"\n'; exit 0 ;;
 esac
 [ $# -eq 2 ] || usage
 slug=$1

@@ -130,6 +130,7 @@ describe.concurrent('the objective verb', () => {
     ...OBJECTIVE_LINES.map(([why, text, line]) => [why, ['ob-unit', text], line] as const),
     ['a malformed slug', ['bad slug', 'a wording'], USAGE],
     ['one argument', ['ob-unit'], USAGE],
+    ['the bare help word alone', ['help'], USAGE],
     ['three arguments', ['ob-unit', 'a wording', 'extra'], USAGE],
     ['a missing unit', ['nosuch', 'a wording'], 'ERROR: missing state: unit nosuch\n'],
     ['an unchanged objective', ['ob-unit', 'the first wording'], 'session.objective: error: the objective is unchanged (ERR_INVALID_ARGUMENT)\n'],
@@ -150,15 +151,24 @@ describe.concurrent('the objective verb', () => {
     expect((await unit(sb, 'load', 'ob-new')).code).toBe(1);
   });
 
-  it('OB-d [the-engine-r7]: objective --help, -h, and help print the one usage line rc 0; unit help objective prints its usage, the function, the exit codes, and an example', async () => {
+  it('OB-d [the-engine-r7]: objective --help and -h print the one usage line rc 0; unit help objective prints its usage, the function, the exit codes with rc 2 for a malformed stored anchor, and an example', async () => {
     const sb = fresh(sb0);
-    for (const flag of ['--help', '-h', 'help']) expect(await unit(sb, 'objective', flag).then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, 'usage: ctx unit objective <unit> "<objective>"\n', '']);
+    for (const flag of ['--help', '-h']) expect(await unit(sb, 'objective', flag).then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, 'usage: ctx unit objective <unit> "<objective>"\n', '']);
     const table = await unit(sb, 'help', 'objective');
     expect(table.code).toBe(0);
     expect(table.stdout).toMatch(/^ctx unit objective: /);
     expect(table.stdout).toMatch(/^ {2}ctx unit objective <slug> "<objective>"$/m);
     expect(table.stdout).toContain('(session.objective)');
-    expect(table.stdout).toMatch(/^ {2}exit codes: 0 /m);
+    expect(table.stdout).toMatch(/^ {2}exit codes: 0 .*; 2 a malformed stored anchor$/m);
     expect(table.stdout).toMatch(/^ {2}example: ctx unit objective /m);
+  });
+
+  it('OB-e [the-engine-r7, the-record-r-objv1]: a bare help is the unit, never the flag: objective rewords a unit named help rc 0 and lands its receipt', async () => {
+    const sb = fresh(sb0);
+    await seedUnit(sb, 'help', 'the help wording');
+    const r = await unit(sb, 'objective', 'help', 'the help unit, reworded');
+    expect([r.code, r.stdout, r.stderr]).toEqual([0, 'objective: "the help unit, reworded"\n', '']);
+    expect((await unit(sb, 'load', 'help', '1')).stdout.split('\n')).toContain('objective: "the help unit, reworded"');
+    expect((await unit(sb, 'board', 'help')).stdout).toMatch(/^ {2}WHAT: "objective reworded from "the help wording" to "the help unit, reworded""\n {2}THREAD: none$/m);
   });
 });
