@@ -971,9 +971,9 @@ function f_unit_transfer(   src, tgt, dry, kbS, kkS, kjS, kbT, kkT, kjT, TS, nts
     for (i = 1; i <= NI[kjS]; i++) if (IK[kjS, i] == "entry" && X[kjS, i, "group"] == GS[j] && CLBY[kjS, i] == 0) { SEL[i] = 1; n++ }
     if (n == 0) die(1, "ERR_ENTITY_NOT_FOUND", "group '" GS[j] "' selects no open entry in unit '" src "'")
   }
-  nen = 0
-  for (i = 1; i <= NI[kjS]; i++) if (i in SEL) E[++nen] = i
-  xf_sort(TI, ntk); xf_sort(FI, nfd)
+  nen = 0; split("", XSEEN)
+  for (i = NI[kjS]; i >= 1; i--) if ((i in SEL) && !(X[kjS, i, "slug"] in XSEEN)) { XSEEN[X[kjS, i, "slug"]] = 1; E[++nen] = i }
+  xf_sort(E, nen); xf_sort(TI, ntk); xf_sort(FI, nfd)
   for (j = 1; j <= nen; j++) if (held(kjT, X[kjS, E[j], "slug"])) ex("entry", X[kjS, E[j], "slug"], tgt)
   for (j = 1; j <= ntk; j++) if (find_task(kbT, X[kbS, TI[j], "slug"])) ex("task", X[kbS, TI[j], "slug"], tgt)
   for (j = 1; j <= nfd; j++) if (find_finding(kkT, X[kkS, FI[j], "name"])) ex("finding", X[kkS, FI[j], "name"], tgt)

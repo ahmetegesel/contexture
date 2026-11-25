@@ -196,6 +196,17 @@ describe.concurrent('ctx unit transfer through the data function unit.transfer',
     expect(text(sb, S, 'journal')).toBe([`@entry ${PTR}`, '  ANCHOR: A1', '  WHAT: "moved to unit xb: tasks t10"', '  THREAD: none', '  REF: "unit#xb/task/t10"', ''].join('\n'));
   });
 
+  it('[the-record-r-xfer1] a legacy duplicate slug its group selects twice is copied once, from its last selected occurrence, so the target never holds a repeated slug', async () => {
+    const sb = fresh(sb0);
+    const dup = `${DATE}-event-1790000106`;
+    const occ = (what: string): string => `\n@entry ${dup}\n  ANCHOR: A1\n  WHAT: "${what}"\n  GROUP: g4\n  THREAD: none\n`;
+    appendArtifact(sb, S, 'journal', occ('the first occurrence') + occ('the second occurrence'));
+    const r = answer(await transfer(sb, [S, T], move(payload().kl('groups', 'g4').kl('entries', dup))), 'unit.transfer');
+    expect(r.entries).toEqual([dup]);
+    expect(text(sb, T, 'journal')).toBe(`${before[`${T}/journal`]}\n${[`@entry ${dup}`, '  ANCHOR: A2', '  WHAT: "the second occurrence"', '  GROUP: g4', '  THREAD: none', `  REF: "unit#xa/entry/${dup}"`, ''].join('\n')}`);
+    expect(text(sb, S, 'journal')).toContain(`  CLOSES: ${dup} (superseded: moved to unit xb)\n`);
+  });
+
   it('[the-record-r-xfer1] --dry-run takes no lock, writes nothing, and answers the same plan', async () => {
     const sb = fresh(sb0);
     const was = await both(sb);
