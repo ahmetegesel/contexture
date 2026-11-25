@@ -121,7 +121,7 @@ describe.concurrent('the verb help census: the engine owns a sole -h or --help a
     expect(bad).toEqual([]);
   });
 
-  it('[the-engine-r7] the census reads the five planted help arms and none of the five non help arms', async () => {
+  it('[the-engine-r7] the census reads the seven planted help arms, blanks around a bar or before the paren included, and none of the five non help arms', async () => {
     const plant = put(
       join(sandbox('help-census-plant'), 'plant.sh'),
       [
@@ -130,6 +130,8 @@ describe.concurrent('the verb help census: the engine owns a sole -h or --help a
         'case "$1" in -h) z ;; esac',
         '  a) b ;; help|x) c ;;',
         '  "$x"|-h) d ;;',
+        '  --help | -h) a ;;',
+        '  -h|--help ) b ;;',
         '  --helpx|-hh) n ;;',
         '  # --help|-h) a comment',
         '  printf "-h)"',
@@ -139,8 +141,8 @@ describe.concurrent('the verb help census: the engine owns a sole -h or --help a
       ].join('\n'),
     );
     const r = await census([plant]);
-    expect(r.stdout.split('\n').filter((l) => l.includes('plant.sh:')).map((l) => l.split(':')[1])).toEqual(['1', '2', '3', '4', '5']);
-    expect(r.stdout).toContain('files 1 arms 5');
+    expect(r.stdout.split('\n').filter((l) => l.includes('plant.sh:')).map((l) => l.split(':')[1])).toEqual(['1', '2', '3', '4', '5', '6', '7']);
+    expect(r.stdout).toContain('files 1 arms 7');
   });
 
   it('[the-engine-r7] every shipped verb\'s sole -h and --help print ctx <module> help <verb> byte for byte on stdout rc 0 with an empty stderr', async () => {
@@ -174,7 +176,7 @@ describe.concurrent('the verb help census: the engine owns a sole -h or --help a
     }
   });
 
-  it('[the-engine-r7, the-engine-r-helpm] a scratch workspace\'s git status and store listing are unchanged after every hook verb\'s -h', async () => {
+  it('[the-engine-r7] a scratch workspace\'s git status and store listing are unchanged after every hook verb\'s -h', async () => {
     const w = staged('help-census-quiet');
     writeFileSync(join(w, '.gitignore'), '.contexture/tmp/\n');
     const git = (...args: string[]) => exec('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', ...args], { cwd: w, input: '' });

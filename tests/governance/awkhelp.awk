@@ -3,8 +3,8 @@
 # verb script carries no help arm. Prints <file>:<line>: <the line> per arm and a closing line
 # "files <n> arms <n>"; reads the files named on the command line; a heuristic over one line:
 # each ;; separated segment that opens with a pattern list closed by ")" (a leading "(" and a
-# leading "case <word> in" dropped) is split at "|", and an alternative equal to help, --help,
-# or -h once its quotes are stripped counts.
+# leading "case <word> in" dropped, the blanks around a bar and before the ")" dropped) is split
+# at "|", and an alternative equal to help, --help, or -h once its quotes are stripped counts.
 function arm(seg,   p, pat, n, a, i, t) {
   sub(/^[ \t]+/, "", seg)
   if (seg ~ /^#/) return 0
@@ -13,6 +13,8 @@ function arm(seg,   p, pat, n, a, i, t) {
   if (!p) return 0
   pat = substr(seg, 1, p - 1)
   sub(/^\(/, "", pat)
+  gsub(/[ \t]*\|[ \t]*/, "|", pat)
+  sub(/[ \t]+$/, "", pat)
   if (pat == "" || pat ~ /[ \t`(]/) return 0
   n = split(pat, a, /\|/)
   for (i = 1; i <= n; i++) {

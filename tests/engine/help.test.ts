@@ -1,7 +1,7 @@
 import { cpSync, existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { exec, launch } from '../support/exec';
+import { launch } from '../support/exec';
 import { shVerb, writeModule } from '../support/modules';
 import { alive } from '../support/procs';
 import { ROOT } from '../support/root';
@@ -196,12 +196,15 @@ describe.concurrent('the help hook: a verb declaring # help-from: code appends i
     expect(listing.stdout).toMatch(/^ {2}badval +an unknown value$/m);
   });
 
-  it('[the-engine-r7]: a hook past its 5 s bound is stopped with its descendants, the table stands with one warning, and no folder is left', async () => {
+  it('[the-engine-r7]: a hook past its 5 s wall clock bound is stopped with its descendants within 6.5 s of its start, the table stands with one warning, and no folder is left', async () => {
+    const { result } = launch('./.contexture/ctx', ['hk', 'slow1', '-h'], { cwd: sb, timeout: 60_000 });
     const started = Date.now();
-    const r = await exec('./.contexture/ctx', ['hk', 'slow1', '-h'], { cwd: sb, timeout: 60_000 });
-    const elapsed = Date.now() - started;
-    expect(elapsed).toBeGreaterThanOrEqual(5000);
-    expect(elapsed).toBeLessThan(30_000);
+    while (traced('slow1').length < 3 && Date.now() - started < 30_000) await new Promise((done) => setTimeout(done, 20));
+    const hooked = Date.now();
+    const r = await result;
+    const ended = Date.now();
+    expect(ended - started).toBeGreaterThanOrEqual(5000);
+    expect(ended - hooked).toBeLessThan(6500);
     expect([r.code, r.stdout, r.stderr]).toEqual([0, table('slow1', 'a hook past the bound'), 'ctx: hk slow1: the help hook passed its 5 s bound; the header table stands\n']);
     const [bg, sh, scratch] = traced('slow1');
     expect([bg, sh].filter((p) => p && alive(Number(p)))).toEqual([]);

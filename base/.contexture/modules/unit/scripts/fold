@@ -147,6 +147,14 @@ modes=$((lane_given + do_check + do_finish))
 vb_tmp
 tab=$(printf '\t')
 
+read_board() {
+  vb_call session.board "$unit"
+  vb_ok
+  LC_ALL=C awk -f "$VB_JSON" < "$VB_DIR/ans" > "$VB_DIR/board.flat" || fold_corrupt "cannot flatten the board answer"
+}
+
+read_board
+
 has_payload=0
 : > "$VB_DIR/stdin"
 if [ ! -t 0 ]; then
@@ -154,12 +162,6 @@ if [ ! -t 0 ]; then
   [ -s "$VB_DIR/stdin" ] && has_payload=1
 fi
 [ "$has_payload" -eq 0 ] || fold_fail "fold takes no payload; write the consolidated entry with ctx unit record"
-
-read_board() {
-  vb_call session.board "$unit"
-  vb_ok
-  LC_ALL=C awk -f "$VB_JSON" < "$VB_DIR/ans" > "$VB_DIR/board.flat" || fold_corrupt "cannot flatten the board answer"
-}
 
 plan_load() {
   pl_mode=${1:-strict}
@@ -631,7 +633,6 @@ fetch_lane() {
   print_record_hint "$no_id" "$merge_next"
 }
 
-read_board
 find_active
 
 case "$active_state" in

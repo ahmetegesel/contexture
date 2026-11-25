@@ -286,7 +286,9 @@ Help mode writes nothing: while `CTX_HELP=1` (the engine sets it for a verb's he
 whole process tree), the resolver refuses `store.put`, `store.delete`, `store.batch`,
 `store.promote`, and `storage.sweep`, in the direct and the `exec` form, rc 1 with its one
 line `driver-resolver: ERROR: <function> refused in help mode: help writes nothing
-(ERR_INVALID_ARGUMENT)`, before the driver runs; every read passes.
+(ERR_INVALID_ARGUMENT)`, before the driver runs; every read passes. A write that never reaches
+the resolver, a direct file write or a configuration write through `ctx store config set` or
+`unset` and the other configuration verbs, is bound by the help mode contract alone.
 
 The interrupt rule: rc 0 means the write landed; after an interrupt any other exit means
 check with a read before writing again.

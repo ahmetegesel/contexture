@@ -1216,10 +1216,10 @@ verb_help_sub() {
 # verb_help_hook <module> <module dir> <verb> <sub>: a verb whose header declares
 # "# help-from: code" runs once in help mode (CTX_HELP=1 with the module, verb, and sub
 # names, no argument, stdin from /dev/null, the dispatch exports, its own scratch root) bounded
-# at 5 s; exit 0 appends one empty line and its stdout below the header table; a nonzero exit,
-# no exit status, or the bound keeps the table alone with one stderr line; its stderr is
-# discarded; any other help-from value is ignored with one stderr line; the verb's
-# declaration serves every section
+# at 5 s of wall clock (a sleep 5 watchdog ends the wait, the tick count a cap); exit 0 appends
+# one empty line and its stdout below the header table; a nonzero exit, no exit status, or the
+# bound keeps the table alone with one stderr line; its stderr is discarded; any other
+# help-from value is ignored with one stderr line; the verb's declaration serves every section
 verb_help_hook() {
   hh_f="$2/scripts/$3"
   hh_from=$(verb_head from "$1" "$2" "$3" 1)
@@ -1231,6 +1231,7 @@ verb_help_hook() {
   hh_io="$root/.contexture/tmp/verb.$$.help.io"
   hh_scratch="$root/.contexture/tmp/verb.$$.help"
   hh_pid=""
+  hh_dog=""
   rm -rf "$hh_io" "$hh_scratch" 2>/dev/null
   if ! mkdir -p "$hh_io" "$hh_scratch" 2>/dev/null; then
     ctx_err "$1 $3: the help hook has no scratch root; the header table stands"
@@ -1249,11 +1250,15 @@ verb_help_hook() {
     printf '%s\n' "$?" > "$hh_io/rc"
   ) < /dev/null > "$hh_io/out" 2> "$hh_io/err" &
   hh_pid=$!
+  sleep 5 2>/dev/null &
+  hh_dog=$!
   hh_t=0
-  while [ ! -f "$hh_io/rc" ] && kill -0 "$hh_pid" 2>/dev/null && [ "$hh_t" -lt "$hh_ticks" ]; do
+  while [ ! -f "$hh_io/rc" ] && kill -0 "$hh_pid" 2>/dev/null && kill -0 "$hh_dog" 2>/dev/null && [ "$hh_t" -lt "$hh_ticks" ]; do
     sleep "$hh_tick" 2>/dev/null || sleep 1
     hh_t=$((hh_t + 1))
   done
+  { kill "$hh_dog"; wait "$hh_dog"; } 2>/dev/null
+  hh_dog=""
   hh_over=0
   if [ ! -f "$hh_io/rc" ] && kill -0 "$hh_pid" 2>/dev/null; then
     hh_over=1
@@ -1282,6 +1287,7 @@ verb_help_hook() {
 # hook with every descendant and removes its folders before the engine exits
 verb_help_abort() {
   trap - HUP INT TERM
+  [ -z "$hh_dog" ] || { kill "$hh_dog"; wait "$hh_dog"; } 2>/dev/null
   [ -z "$hh_pid" ] || { child_stop "$hh_pid"; } 2>/dev/null
   rm -rf "$hh_io" "$hh_scratch" 2>/dev/null
   exit "$1"

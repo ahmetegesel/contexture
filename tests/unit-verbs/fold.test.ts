@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { exec } from '../support/exec';
 import { fresh, seed } from '../support/snapshot';
 import { stage } from '../support/stage';
 import { run, seedUnit, unit } from '../support/unit';
@@ -27,6 +28,15 @@ describe.concurrent('ctx unit fold: the surface, the handoff, and the input rule
     const word = await unit(sb, 'fold', 'help');
     expect([word.code, word.stdout]).toEqual([1, '']);
     expect(word.stderr).toContain("unit 'help' not found");
+  });
+
+  it('FC1 [the-record-r-foldm]: an absent unit, help among them, refuses before fold reads stdin, so the call returns while its stdin stays open', async () => {
+    const sb = fresh(empty);
+    for (const name of ['help', 'no-such-unit']) {
+      const r = await exec('./.contexture/ctx', ['unit', 'fold', name], { cwd: sb, input: null, timeout: 20_000 });
+      expect([r.code, r.stdout], name).toEqual([1, '']);
+      expect(r.stderr, name).toContain(`unit '${name}' not found`);
+    }
   });
 
   it('FC1: fold refuses a malformed or absent unit, a lane call with no active fold, a payload, a NUL payload, and an unknown option', async () => {

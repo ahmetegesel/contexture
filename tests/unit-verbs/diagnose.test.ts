@@ -21,6 +21,14 @@ describe.concurrent('ctx unit diagnose', () => {
     }, 'posix', 'diagnose');
   });
 
+  it('[the-engine-r7]: ctx unit --diagnose -h and --help print the bytes of ctx unit help diagnose rc 0 with an empty stderr; -h followed by more refuses rc 1 with the sole form line', async () => {
+    const sb = fresh(sb0);
+    const table = await unit(sb, 'help', 'diagnose');
+    expect([table.code, table.stderr]).toEqual([0, '']);
+    for (const flag of ['-h', '--help']) expect(await unit(sb, '--diagnose', flag).then((r) => [r.code, r.stdout, r.stderr]), flag).toEqual([0, table.stdout, '']);
+    expect(await unit(sb, '--diagnose', '-h', 'x').then((r) => [r.code, r.stdout, r.stderr])).toEqual([1, '', 'ctx: unit diagnose: -h takes no further argument; help is ctx unit diagnose -h alone\n']);
+  });
+
   it('X-f [the-engine-r24]: diagnose never reports the store missing while it holds units', async () => {
     const r = await unit(fresh(sb0), 'diagnose', '--json');
     expect(r.stdout + r.stderr).not.toContain('not created yet');
