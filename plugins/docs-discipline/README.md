@@ -16,8 +16,10 @@ The mechanism in one paragraph: every repository gets unit docs addressed
 `docs/<repo>/<slug>.md` written per the docs module's grammar (a private
 asset inside the module, enforced by the write verbs), and the workspace gets its own docs addressed
 `docs/workspace/<slug>.md` (the conventions and the map); the configured
-storage driver holds them (the files driver as those very files, a store
-driver such as the storage-sqlite plugin's in its store) and every verb reaches
+storage driver holds them (the files driver as files under the docs
+namespace's root in the drawer, `.contexture/docs/<repo>/<slug>.md`, beside the
+other modules' data, so the repository's own `docs/` folder belongs to people;
+a store driver such as the storage-sqlite plugin's in its store) and every verb reaches
 them through it; the write verbs change a doc block by block; `ctx docs search` finds the entities a term names and `ctx docs get` prints one; `ctx docs query` serves the index, the projections, the lookups, and the
 rule and pitfall views; `ctx docs check` compares a git change delta against
 the corpus (coverage, freshness, dead sources); `ctx docs gate` runs the audit
@@ -86,10 +88,10 @@ them).
 
 | shape | code lives | docs live | sources mapping | notes |
 |---|---|---|---|---|
-| parent multi-repo workspace | product repos under `projects/` | `docs/workspace/` plus `docs/<repo>/` per repo | non-workspace docs are repo-relative (`src/...`); the reference check prefixes them with `projects/<repo>/` | the `projects/` gitignore lines apply; the gate aggregates the workspace root and every `projects/*/.git` |
-| single-repo workspace | one repository at the workspace root | `docs/workspace/` (the repo's unit docs included) | `repo: workspace` with root-relative sources (`src/...`); a corpus with named namespaces (for example `repo: app` at the root) calibrates the check's mapping on the spot | the reference check maps `repo: workspace` docs against the workspace root, non-workspace docs through the prefix; no `projects/` aggregation |
-| monorepo | one repository, many packages | `docs/workspace/` | `repo: workspace` with package-scoped globs (`packages/<name>/**`) | map each package as a unit; same mechanics as single-repo |
-| standalone repository | the repository is its own root | `docs/workspace/` | `repo: workspace`, root-relative sources | the drawer ships inside the repository; same mapping as single-repo |
+| parent multi-repo workspace | product repos under `projects/` | the `workspace` repo plus one `<repo>` per product repo (`.contexture/docs/<repo>/` under the files driver) | non-workspace docs are repo-relative (`src/...`); the reference check prefixes them with `projects/<repo>/` | the `projects/` gitignore lines apply; the gate aggregates the workspace root and every `projects/*/.git` |
+| single-repo workspace | one repository at the workspace root | the `workspace` repo, the repo's unit docs included (`.contexture/docs/workspace/` under the files driver) | `repo: workspace` with root-relative sources (`src/...`); a corpus with named namespaces (for example `repo: app` at the root) calibrates the check's mapping on the spot | the reference check maps `repo: workspace` docs against the workspace root, non-workspace docs through the prefix; no `projects/` aggregation |
+| monorepo | one repository, many packages | the `workspace` repo | `repo: workspace` with package-scoped globs (`packages/<name>/**`) | map each package as a unit; same mechanics as single-repo |
+| standalone repository | the repository is its own root | the `workspace` repo | `repo: workspace`, root-relative sources | the drawer ships inside the repository; same mapping as single-repo |
 
 The gate's scanners follow the shape: product repositories under `projects/`
 are scanned through the `projects/<repo>/` prefix; when `projects/` is absent
@@ -167,7 +169,13 @@ into an existing file; `seed` means it is starting content to adapt; and
    rhythms under `.contexture/extensions/rhythms/`; it records every installed
    path and runs the module's install hook, which seeds the workspace
    conventions through `ctx docs write` once and never overwrites a present
-   doc. The docs-shaped work rhythm stays reference material at `docs/work.md`.
+   doc. Updating from a release that kept the corpus at `docs/<repo>/`: move
+   each corpus repo folder into `.contexture/docs/` before the update
+   (`docs/adoption.md`, Updating); under posix, while the corpus the module
+   serves is empty and a corpus doc still sits at the old place, the hook
+   seeds nothing and refuses naming those repos, the installer stops rc 2 with
+   the overlay and its record in place, and the same install after the move
+   reads already present (a temporary guard, retired in a later release). The docs-shaped work rhythm stays reference material at `docs/work.md`.
    The verbs run through the workspace's `ctx` (the base runtime ships at `.contexture/ctx`).
    The module resolves the workspace root from the engine's `CTX_ROOT`
    (override with `DOCS_WORKSPACE_ROOT`), so an adopted copy always reads the
@@ -187,21 +195,27 @@ into an existing file; `seed` means it is starting content to adapt; and
    workspace already allows (the contexture base normally allows AGENTS.md and
    AGENTS.workspace.md).
 
-   The guide lines apply under the files driver when you track `docs/*.md`
-   guides under a deny-by-default `.gitignore`; the agent-facing corpus
-   (`docs/workspace/` and `docs/<repo>/`) stays gitignored working state, and
-   a corpus kept in a store driver needs none, since no corpus file lives
-   there (the storage-sqlite README names the git steps for moving a tracked
-   corpus into its store).
+   The guide lines apply when you track `docs/*.md` guides under a
+   deny-by-default `.gitignore`. The agent-facing corpus is untracked by
+   default: under the files driver it sits in the drawer at `.contexture/docs/`,
+   which a tree re-including the drawer (`!/.contexture/**`) re-ignores beside
+   the scratch line, and a corpus kept in a store driver needs no line, since
+   no corpus file lives there. A workspace may instead commit its corpus to
+   share it through git (drop the `.contexture/docs/` line, or whitelist
+   `!/.contexture/docs/` and `!/.contexture/docs/**` where the drawer is denied):
+   the check then keeps its STALE DOC and FRESH verdicts, and installing a store
+   driver later moves the corpus out of that folder, which git sees as deleted
+   files, so the switch is a team decision.
 
    ```gitignore
-   # the plugin drawer: the module (its grammar rides inside it) and scratch re-ignored
+   # the plugin drawer: the module (its grammar rides inside it); scratch and the
+   # agent-facing corpus (the files driver keeps it in the drawer) re-ignored
    !/.contexture/
    !/.contexture/**
    .contexture/tmp/
+   .contexture/docs/
 
-   # guides at docs/*.md stay tracked; the agent-facing corpus (docs/workspace/
-   # and docs/<repo>/ under the files driver) stays gitignored working state
+   # guides at docs/*.md stay tracked
    !/docs/
    !/docs/*.md
 
@@ -219,7 +233,8 @@ into an existing file; `seed` means it is starting content to adapt; and
    (`ctx docs write` for a whole draft, or `ctx docs new` and the block verbs,
    per the module's grammar), then one unit doc per repository, then the
    operational doc for the repository whose setup targets the nudge should
-   force. Under the files driver each write lands as `docs/<repo>/<slug>.md`.
+   force. Under the files driver each write lands as
+   `.contexture/docs/<repo>/<slug>.md`, its logical address `docs/<repo>/<slug>.md`.
 
 5. Keep `tests/sample/` and this README as references: the sample is
    fictional and never part of the adopted corpus; `tests/` holds the
@@ -232,7 +247,7 @@ into an existing file; `seed` means it is starting content to adapt; and
 
 From an adopted workspace root (seed at least one doc first; the verbs read
 the corpus through the configured storage driver, and the files driver serves
-`docs/<repo>/<slug>.md` in place):
+the files under `.contexture/docs/` in place):
 
 ```sh
 ctx docs audit                         # silence, exit 0 (the whole corpus; ctx docs audit <repo> for one repo)
@@ -386,10 +401,12 @@ it walk below runs every one of these.
   nothing refuses rc 1 (a search term, a rule category, a pitfall severity, an
   edge channel, a section, an owner path), and an empty corpus refuses rc 1.
   A wrong invocation never returns a plausible-but-empty result.
-- The glob forms (`docs/*/*.md`, `docs/<repo>/*.md`) are address patterns: sh
-  and bash hand the verb a pattern no file matches, which it expands through
-  the storage layer's list, while zsh refuses an unmatched glob before the verb runs;
-  name repos there or quote the pattern. Every doc path a verb prints is the
+- The glob forms (`docs/*/*.md`, `docs/<repo>/*.md`) are address patterns that
+  never name a corpus file: sh and bash hand the verb a pattern no file matches,
+  which it expands through the storage layer's list, while a match in the
+  repository's own `docs/` folder hands the verb those pages, which are no
+  corpus docs (no such doc), and zsh refuses an unmatched glob before the verb
+  runs; name repos, or quote the pattern. Every doc path a verb prints is the
   logical address `docs/<repo>/<slug>.md`, whatever the caller's spelling.
 - A driver that does not serve the store contract (without the capability `store`)
   makes every read verb refuse rc 2 naming the capability.
@@ -442,7 +459,7 @@ it walk below runs every one of these.
   working delta, which a notice names). `--since` joins the default form
   alone; an unknown revision, an empty one, or a root outside a repository
   with a commit refuses rc 1. Under the files driver git carries the corpus
-  half only for a tracked corpus: an untracked one rides no delta, whether git
+  half only for a committed corpus (tracked at `.contexture/docs/`): an untracked one rides no delta, whether git
   ignores it (the corpus-untracked posture) or not (an adopter between seeding
   the corpus and committing it), since the root's untracked files leave the
   corpus docs out; every form there reads `UNTRACKED CLAIMANT` and a
@@ -586,7 +603,7 @@ the shown shape; `<scratch>` in an output line stands for the absolute path of
 the scratch workspace; a nonzero exit shows as `(exit N)`). The staging builds
 a scratch workspace from the shipped copies: the base runtime, the storage
 core, its unit module (the record and storage driver the verbs reach the
-corpus through), and this plugin's module (its grammar rides inside); it commits the corpus in a repository of its own,
+corpus through), and this plugin's module (its grammar rides inside), the corpus at the docs namespace's root in the drawer; it commits the corpus in a repository of its own,
 since the check reads a claimant outside git as untracked (the process-owned
 verdict) and never as stale. The commands then run through the staged `ctx`
 (in an adopted workspace the same commands run as `ctx docs ...`). The first
@@ -595,16 +612,16 @@ part runs on the files driver, the second on the sqlite store.
 ```sh
 scratch="../../.contexture/tmp/docs-walk"
 rm -rf "$scratch"
-mkdir -p "$scratch/.contexture/modules" "$scratch/.contexture/extensions/modules" "$scratch/docs/workspace"
+mkdir -p "$scratch/.contexture/modules" "$scratch/.contexture/extensions/modules" "$scratch/.contexture/docs/workspace"
 cp ../../base/.contexture/ctx "$scratch/.contexture/ctx"
 cp -R ../../base/.contexture/storage "$scratch/.contexture/"
 cp -R ../../base/.contexture/modules/unit "$scratch/.contexture/modules/"
 cp -R .contexture/extensions/modules/docs "$scratch/.contexture/extensions/modules/"
-cp -R docs/workspace/. "$scratch/docs/workspace/"
-cp -R tests/sample/docs/. "$scratch/docs/"
+cp -R docs/workspace/. "$scratch/.contexture/docs/workspace/"
+cp -R tests/sample/docs/. "$scratch/.contexture/docs/"
 cp tests/sample/backlog.md "$scratch/backlog.md"
 cd "$scratch"
-git init -q && git add docs && git -c user.name=walk -c user.email=walk@example.invalid commit -qm walk
+git init -q && git add .contexture/docs && git -c user.name=walk -c user.email=walk@example.invalid commit -qm walk
 ```
 
 The audit over the whole corpus (a bare call; `ctx docs audit <repo>` audits
@@ -681,7 +698,7 @@ The owner lookup, a rule view, and the pitfall view:
 ```text
 OWNER: order-flow (capability) [demo-orders]
 SUMMARY: Cart validation, pricing, and order persistence for the demo storefront
-DOC: <scratch>/docs/demo-orders/order-flow.md
+DOC: docs/demo-orders/order-flow.md
 ```
 
 ```sh
@@ -816,11 +833,11 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 
 **The two-sided delta.** A pushed range needs both halves in one stream, the
 repository's code delta and the corpus delta, records split so a rename's old
-path surfaces as a dead source. Under the files driver with a tracked corpus
-the corpus half is the corpus paths of git:
+path surfaces as a dead source. Under the files driver with a committed corpus
+the corpus half is the corpus paths of git, under the docs namespace's root:
 
 ```sh
-{ git -C projects/<repo> diff --name-status --no-renames <base>..origin/<branch> | awk -F'\t' -v p=projects/<repo>/ '{ print $1 "\t" p $2 }'; git status --porcelain docs/<repo>/ | sed 's|^ *\([A-Z?]\)[A-Z? ] *|\1\t|'; } | ctx docs check <repo>
+{ git -C projects/<repo> diff --name-status --no-renames <base>..origin/<branch> | awk -F'\t' -v p=projects/<repo>/ '{ print $1 "\t" p $2 }'; git status --porcelain .contexture/docs/<repo>/ | sed 's|^ *\([A-Z?]\)[A-Z? ] *|\1\t|'; } | ctx docs check <repo>
 ```
 
 Under a store driver, or with an untracked corpus, the corpus half is the
@@ -856,13 +873,13 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 ```
 
 ```sh
-printf '@doc capability broken\n  repo: demo-orders\n' > docs/demo-orders/broken.md
+printf '@doc capability broken\n  repo: demo-orders\n' > .contexture/docs/demo-orders/broken.md
 printf 'M\tprojects/demo-orders/src/order/validate.ts\n' | ./.contexture/ctx docs gate --stdin
-rm docs/demo-orders/broken.md
+rm .contexture/docs/demo-orders/broken.md
 ```
 
 ```text
-<scratch>/docs/demo-orders/broken.md:1: error: missing required 'description:' field in @doc
+docs/demo-orders/broken.md:1: error: missing required 'description:' field in @doc
 docs-audit: FAILED with 1 error(s)
 (exit 1)
 ```
@@ -1003,9 +1020,9 @@ git -c user.name=walk -c user.email=walk@example.invalid commit -qam writes
 mkdir -p .contexture/extensions/storage/drivers
 cp -R ../../../plugins/storage-sqlite/.contexture/extensions/storage/drivers/sqlite .contexture/extensions/storage/drivers/
 printf 'storage.driver: sqlite\n' > .contexture/config
-for f in docs/*/*.md; do r=${f#docs/}; s=${f##*/}; ./.contexture/ctx docs write "${r%%/*}" "${s%.md}" < "$f"; done
-git rm -r -q --cached docs && git -c user.name=walk -c user.email=walk@example.invalid commit -qm "the corpus moves into the store"
-rm -rf docs
+for f in .contexture/docs/*/*.md; do r=${f#.contexture/docs/}; s=${f##*/}; ./.contexture/ctx docs write "${r%%/*}" "${s%.md}" < "$f"; done
+git rm -r -q --cached .contexture/docs && git -c user.name=walk -c user.email=walk@example.invalid commit -qm "the corpus moves into the store"
+rm -rf .contexture/docs
 ```
 
 ```text
@@ -1016,7 +1033,7 @@ docs write: workspace/conventions written (157 lines)
 docs write: workspace/system-map written (45 lines)
 ```
 
-With no docs folder left, the verbs read the store and print what the files
+With no corpus folder left in the drawer, the verbs read the store and print what the files
 driver printed:
 
 ```sh

@@ -685,9 +685,9 @@ docs_delta_shebangs() {
 # docs_corpus_untracked: DOCS_UNTRACKED counts the materialized corpus docs the root's
 # repository does not track at the declared root (ignored or not; every doc outside a
 # repository, and every doc a store driver holds, since no file lives there) and
-# DOCS_NDOCS counts them all
+# DOCS_NDOCS counts them all; the declared root reaches git as a literal pathspec
 docs_corpus_untracked() {
-  git -C "$DOCS_ROOT" ls-files -- "${DOCS_CORPUS_ROOT:-docs}" > "$DOCS_SCRATCH/tracked" 2>/dev/null || : > "$DOCS_SCRATCH/tracked"
+  git -C "$DOCS_ROOT" -c core.quotePath=false ls-files -- ":(literal)${DOCS_CORPUS_ROOT:-docs}" > "$DOCS_SCRATCH/tracked" 2>/dev/null || : > "$DOCS_SCRATCH/tracked"
   DOCS_UNTRACKED=$(DOCS_TRACKED="$DOCS_SCRATCH/tracked" DOCS_CR="${DOCS_CORPUS_ROOT:-docs}/" awk "$DOCS_CORPUS_AWK"'
     BEGIN { f = ENVIRON["DOCS_TRACKED"]; while ((getline l < f) > 0) t[logical(l)] = 1; close(f) }
     !($0 in t) { n++ }

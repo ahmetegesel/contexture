@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { exec, type Run } from '@support/exec';
 import { stage } from '@support/stage';
 import { unit } from '@support/unit';
-import { addModule, docs, PLUGIN, stageSeed } from '../support/corpus';
+import { addModule, CORPUS, docs, PLUGIN, stageSeed } from '../support/corpus';
 
 let ws: string;
 const hook = (name: string, env: Record<string, string>): Promise<Run> => exec(join(ws, '.contexture/extensions/modules/docs', name), [], { cwd: ws, env });
@@ -13,7 +13,7 @@ const context = (): Record<string, string> => ({ CTX_ROOT: ws, CTX_PACKAGE_ROOT:
 beforeAll(() => {
   ws = stage('posix', 'hooks');
   addModule(ws);
-  mkdirSync(join(ws, 'docs/workspace'), { recursive: true });
+  mkdirSync(join(ws, CORPUS, 'workspace'), { recursive: true });
 });
 
 describe('the docs module part hooks, in order on one workspace', { concurrent: false }, () => {

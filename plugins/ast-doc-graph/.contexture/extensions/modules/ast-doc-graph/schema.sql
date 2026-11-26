@@ -87,10 +87,11 @@ CREATE TABLE IF NOT EXISTS indexed_files (
 
 CREATE INDEX IF NOT EXISTS idx_indexed_files_mtime ON indexed_files(mtime);
 
-/* One row: the absolute repository and source scan roots of the last full index */
+/* One row: the absolute repository and source scan roots of the last full index, and its docs walk folder relative to the repository root */
 CREATE TABLE IF NOT EXISTS graph_meta (
     repo_root TEXT NOT NULL,
-    src_root TEXT NOT NULL
+    src_root TEXT NOT NULL,
+    docs_root TEXT
 );
 
 /* ========================================================================= */

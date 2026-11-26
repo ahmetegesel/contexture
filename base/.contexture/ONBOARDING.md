@@ -98,7 +98,7 @@
       always ignore the composed law layer with the root-anchored line /AGENTS.generated.md (built at install and boot, never tracked, never edited); a repository that ignored it at its old place replaces its .contexture/laws/AGENTS.generated.md ignore line with /AGENTS.generated.md once the update compose has removed the legacy file (update step 9, before the step 10 review)
       always ignore the scratch drawer with the line .contexture/tmp/, where the engine stages its own scratch at every call (update step 9)
       track .contexture/config (its package lines declare the installs a clone reproduces) and .contexture/plugins/ (the workspace catalog copy) unless the team explicitly chooses not to vendor the catalog
-      when docs-discipline is installed under the files driver, ignore docs/workspace/ (agent-facing corpus working state, never committed, while docs/*.md guides stay tracked)
+      when docs-discipline is installed under the files driver, ignore .contexture/docs/ (the agent-facing corpus, which the files driver keeps in the drawer as untracked working state by default, while docs/*.md guides stay tracked); a team that chooses to commit its corpus leaves the line out, a choice that turns a later storage driver install into a team decision
     parent workspace:
       deny-by-default (*) allowed only if repo tracks contexture configuration alone
       whitelist shared files explicitly:
@@ -112,7 +112,7 @@
       re-ignore the scratch drawer after the whitelist: the line .contexture/tmp/ follows !.contexture/**, which otherwise re-includes it, the later line winning (update step 9)
       the catalog at .contexture/plugins/ rides automatically under !.contexture/**
       the generated law layer AGENTS.generated.md sits at the root under the deny-by-default (*), so it stays ignored with no line of its own: whitelist the AGENTS files by name, never with an AGENTS*.md glob, which would track it; a workspace that re-ignored it at its old place drops its .contexture/laws/AGENTS.generated.md re-ignore line once the update compose has removed the legacy file (update step 9, before the step 10 review)
-      when docs-discipline is installed under the files driver, keep docs/workspace/ un-whitelisted (ignored working state) while whitelisting any docs/*.md guides
+      when docs-discipline is installed under the files driver, re-ignore the agent-facing corpus beside the scratch drawer: the line .contexture/docs/ follows !.contexture/**, which otherwise re-includes it (the corpus is untracked working state by default, unless the team chooses to commit it), while whitelisting any docs/*.md guides
   migration:
     if existing AGENTS.md, CLAUDE.md, or other instruction files exist:
       extract discovered multi-step workflows and checklists into `.contexture/rhythms/<name>.md` per `@rhythms#placement` (`use when:` trigger and numbered `N. GATE: outcome` steps), never placing workflows or checklists in `@append @laws`

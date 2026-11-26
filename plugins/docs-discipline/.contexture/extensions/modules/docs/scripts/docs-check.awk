@@ -119,14 +119,21 @@ function is_governed_guide(t_file) {
 
 # Trackedness signal for the freshness of a governed file: a claimant the repository does not
 # track cannot ride the delta, so it is never counted stale (reconciliation is process-owned).
-# Memoized per path; a non-repository run reads every claimant untracked.
+# Memoized per path; a non-repository run reads every claimant untracked. The path reaches git
+# as a literal pathspec inside single quotes, so a declared folder's glob characters, quotes,
+# or dollar signs stay its own bytes.
+function shell_quoted(s) {
+    gsub(/'/, "'\"'\"'", s)
+    return "'" s "'"
+}
+
 function claimant_is_tracked(path,   cmd, rc, root, gpath) {
     if (path in tracked_cache) return tracked_cache[path]
     root = ENVIRON["DOCS_GIT_ROOT"]
     gpath = path
     if (index(path, "docs/") == 1) gpath = CROOT substr(path, 6)
-    if (root != "") cmd = "git -C \"" root "\" ls-files --error-unmatch -- \"" gpath "\" >/dev/null 2>&1"
-    else cmd = "git ls-files --error-unmatch -- \"" gpath "\" >/dev/null 2>&1"
+    if (root != "") cmd = "git -C " shell_quoted(root) " ls-files --error-unmatch -- " shell_quoted(":(literal)" gpath) " >/dev/null 2>&1"
+    else cmd = "git ls-files --error-unmatch -- " shell_quoted(":(literal)" gpath) " >/dev/null 2>&1"
     rc = system(cmd)
     tracked_cache[path] = (rc == 0) ? 1 : 0
     return tracked_cache[path]

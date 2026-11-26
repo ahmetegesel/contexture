@@ -27,9 +27,10 @@ describe.concurrent('the real catalog installs by catalog name through ctx packa
     expect(existsSync(extPath(sb, 'rhythms/docs-authoring.md'))).toBe(true);
     expect(existsSync(extPath(sb, 'rhythms/docs-drift.md'))).toBe(true);
     expect(existsSync(extPath(sb, 'rhythms/work.md'))).toBe(false);
-    expect(existsSync(join(sb, 'docs/workspace/conventions.md'))).toBe(true);
+    expect(existsSync(join(sb, '.contexture/docs/workspace/conventions.md'))).toBe(true);
+    expect(existsSync(join(sb, 'docs/workspace'))).toBe(false);
     const sd = (await exec('./.contexture/storage/scripts/store-data', ['docs'], { cwd: sb })).stdout.split('\n');
-    expect(sd.slice(0, 4)).toEqual(['docs', 'docs', '.md', '<repo>/<slug>']);
+    expect(sd.slice(0, 4)).toEqual(['docs', '.contexture/docs', '.md', '<repo>/<slug>']);
     expect(sd[4]).toBe(join(realpathSync(sb), '.contexture/extensions/modules/docs/data'));
     expect((await ctx(sb, 'docs', 'query', 'workspace', 'conventions')).stdout).toContain('conventions: conventions');
     const starter = catalogCopy(sb, 'starter-rhythms');

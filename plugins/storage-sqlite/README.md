@@ -87,7 +87,7 @@ The maintainer sets the driver via `ctx store config set driver sqlite` (which r
 ```sh
 .contexture/ctx store config set driver sqlite   # or set database <path> for a custom store path
 ctx unit bootstrap <unit> "<objective>"          # then task add, finding add, record, lane create, ...
-ctx docs write <repo> <slug> < docs/<repo>/<slug>.md
+ctx docs write <repo> <slug> < .contexture/docs/<repo>/<slug>.md   # each posix corpus file
 ```
 
 ## Verify
@@ -103,7 +103,7 @@ bun run test:storage-sqlite
 
 The shared set (`tests/drivers/store-contract.test.ts` and its siblings) proves the store six, the batch, the scan, the locks, the faults, and the differential fuzzer on both drivers, and the storage core's behavior test reads this driver the same as posix; `plugins/storage-sqlite/tests` adds what only this driver keeps: the schema and its version, the sqlite3 guard and the probe, the scan encoding, the process count, and the trigger rollbacks.
 
-Verify the re-entered record with the read verbs (`ctx unit board`, `load`, `task list`, `entry list`, `finding list`, `lane show`) against the same reads under posix, and each doc with `ctx docs write <repo> <slug> --replace --dry-run < docs/<repo>/<slug>.md`, which answers `unchanged (nothing written)` exactly when the store holds the doc byte for byte.
+Verify the re-entered record with the read verbs (`ctx unit board`, `load`, `task list`, `entry list`, `finding list`, `lane show`) against the same reads under posix, and each doc with `ctx docs write <repo> <slug> --replace --dry-run < .contexture/docs/<repo>/<slug>.md` (the posix corpus file), which answers `unchanged (nothing written)` exactly when the store holds the doc byte for byte.
 
 ## Needs
 

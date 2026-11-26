@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { exec, type Run } from '@support/exec';
 import { stage } from '@support/stage';
-import { MODULE, PLUGIN } from '../support/corpus';
+import { CORPUS, MODULE, PLUGIN } from '../support/corpus';
 
 // the docs module installed under the alias corpus: its part hook, its unit hooks, and its
 // search rows reach the module by its installed name, so the alias needs no change in its code
@@ -66,7 +66,7 @@ describe('the docs module installed under an alias', { concurrent: false }, () =
     expect(plain.stdout).toContain('docs install: seeded workspace conventions');
     expect(plain.stdout).not.toContain('already present');
     expect(existsSync(join(ws, 'corpus/workspace/conventions.md'))).toBe(true);
-    expect(existsSync(join(ws, 'docs/workspace/conventions.md'))).toBe(true);
+    expect(existsSync(join(ws, CORPUS, 'workspace/conventions.md'))).toBe(true);
     expect((await ctx(['docs', 'remove', 'workspace', 'conventions'])).code).toBe(0);
     expect((await ctx(['docs', 'query', 'workspace', 'conventions'])).code).toBe(1);
     expect((await ctx(['corpus', 'query', 'workspace', 'conventions'])).stdout).toContain('Universal workspace conventions');

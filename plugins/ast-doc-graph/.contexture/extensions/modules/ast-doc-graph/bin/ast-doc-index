@@ -60,6 +60,12 @@ Drawer:
   Runs inside a contexture drawer: CTX_ROOT when ctx dispatches it, else the
   repository root when it holds a .contexture folder; refuses rc 1 outside one.
 
+Docs walk:
+  The docs namespace's declared root, read through the drawer's storage library, when it
+  lies inside the repository root (a root outside it leaves the docs side empty with a
+  notice, and roots the library cannot list refuse rc 2); a drawer declaring no docs
+  namespace walks the docs folder, else the repository root outside the exclusions.
+
 Pipeline steps:
   1. Discovery: scans TypeScript sources (.ts, .tsx) and documentation (.md)
   2. AST extraction: runs extract-ts.sh to emit symbols.jsonl and edges.jsonl
@@ -249,13 +255,51 @@ else
   SCAN_DIR="$REPO_ROOT"
 fi
 
-# Resolve documentation directory
+# Resolve the docs walk: the docs namespace's declared root, read through the storage library's
+# store_roots (in a plain sh child, apart from this script's bash options) and walked when it lies
+# inside the repository root; a drawer that declares no docs namespace keeps the generic walk,
+# the docs folder, else the repository root outside the exclusions. DOCS_ROOT_REL, the walk
+# folder relative to the repository root, reaches the extractor and the loader
 DOCS_SCAN_DIR=""
-if [[ -d "$REPO_ROOT/docs" ]]; then
+DOCS_ROOT_REL="docs"
+STORE_LIB=""
+for store_lib in "$DRAWER/.contexture/storage/scripts/library" "$DRAWER/base/.contexture/storage/scripts/library"; do
+  if [[ -f "$store_lib" ]]; then
+    STORE_LIB="$store_lib"
+    break
+  fi
+done
+DOCS_DECLARED=""
+if [[ -n "$STORE_LIB" ]]; then
+  if ! DOCS_ROWS="$(CTX_STORE_ROOT="$DRAWER" sh -c '. "$1" && store_roots' ast-doc-index "$STORE_LIB" < /dev/null 2> "$CACHE_DIR/store-roots.err")"; then
+    echo "Error: the docs root cannot be read: $(head -n 1 "$CACHE_DIR/store-roots.err")" >&2
+    exit 2
+  fi
+  DOCS_DECLARED="$(printf '%s\n' "$DOCS_ROWS" | awk -F '\t' '$1 == "docs" { print $2; exit }')"
+fi
+if [[ -n "$DOCS_DECLARED" ]]; then
+  DOCS_ABS="$(cd "$DRAWER" && pwd -P)/$DOCS_DECLARED"
+  REPO_ABS="$(cd "$REPO_ROOT" && pwd -P)"
+  case "$DOCS_ABS" in
+    "$REPO_ABS"/*)
+      DOCS_ROOT_REL="${DOCS_ABS#"$REPO_ABS"/}"
+      DOCS_SCAN_DIR="$REPO_ROOT/$DOCS_ROOT_REL"
+      ;;
+    *)
+      echo "Notice: the docs namespace's root lies outside the repository root $REPO_ROOT, so the graph's docs side stays empty" >&2
+      DOCS_ROOT_REL=""
+      ;;
+  esac
+elif [[ -d "$REPO_ROOT/docs" ]]; then
   DOCS_SCAN_DIR="$REPO_ROOT/docs"
 else
   DOCS_SCAN_DIR="$REPO_ROOT"
 fi
+# docs_find <find expression...>: the docs walk, nothing when no folder is there to walk
+docs_find() {
+  [[ -n "$DOCS_SCAN_DIR" && -d "$DOCS_SCAN_DIR" ]] || return 0
+  scan_find "$DOCS_SCAN_DIR" "$@"
+}
 
 SYMBOLS_JSONL="$CACHE_DIR/symbols.jsonl"
 EDGES_JSONL="$CACHE_DIR/edges.jsonl"
@@ -300,7 +344,7 @@ if [[ "$DELTA" == true ]]; then
   RECONCILED_LIST="$CACHE_DIR/reconciled_files.txt"
   {
     scan_find "$SCAN_DIR" "${TS_SOURCES[@]}" "${EXCLUDES[@]}"
-    scan_find "$DOCS_SCAN_DIR" -type f -name "*.md" "${EXCLUDES[@]}"
+    docs_find -type f -name "*.md" "${EXCLUDES[@]}"
   } > "$DISCOVERED_LIST"
   RECONCILE_FLAGS=(--db "$DB_PATH" --project-root "$REPO_ROOT" --schema "$SCHEMA_SQL" --reconcile "$DISCOVERED_LIST")
   [[ -z "$SRC_DIR" ]] || RECONCILE_FLAGS+=(--src-root "$SCAN_DIR")
@@ -349,7 +393,7 @@ if [[ "$DELTA" == true ]]; then
     done
   else
     { scan_find "$SCAN_DIR" "${TS_SOURCES[@]}" "${EXCLUDES[@]}" -newer "$DB_PATH" 2>/dev/null || true
-      scan_find "$DOCS_SCAN_DIR" -type f -name "*.md" "${EXCLUDES[@]}" -newer "$DB_PATH" 2>/dev/null || true
+      docs_find -type f -name "*.md" "${EXCLUDES[@]}" -newer "$DB_PATH" 2>/dev/null || true
     } | while IFS= read -r f; do
       printf '%s\n' "${f#"$REPO_ROOT"/}"
     done >> "$DIRTY_LIST"
@@ -394,6 +438,7 @@ if [[ "$DELTA" == true ]]; then
     printf '%s\n' "${DIRTY_DOCS[@]/#/$REPO_ROOT/}" > "$DOCS_DELTA_LIST"
     "$EXTRACT_DOCS" \
       --project-root "$REPO_ROOT" \
+      --docs-root "$DOCS_ROOT_REL" \
       --out-docs "$DOCS_JSONL" \
       --out-rules "$RULES_JSONL" \
       --out-pitfalls "$PITFALLS_JSONL" \
@@ -419,6 +464,7 @@ if [[ "$DELTA" == true ]]; then
     --rules "$RULES_JSONL"
     --pitfalls "$PITFALLS_JSONL"
     --project-root "$REPO_ROOT"
+    --docs-root "$DOCS_ROOT_REL"
     --schema "$SCHEMA_SQL"
     --delta
     --file-list "$DELTA_LIST"
@@ -437,7 +483,7 @@ scan_find "$SCAN_DIR" "${TS_SOURCES[@]}" "${EXCLUDES[@]}" | sort > "$TS_FILE_LIS
 MD_FILE_LIST="$CACHE_DIR/md_files.txt"
 DOCS_WALK=(-type f -name "*.md")
 [[ "$DOCS_SCAN_DIR" != "$REPO_ROOT" ]] || DOCS_WALK+=("${EXCLUDES[@]}")
-scan_find "$DOCS_SCAN_DIR" "${DOCS_WALK[@]}" | sort > "$MD_FILE_LIST"
+docs_find "${DOCS_WALK[@]}" | sort > "$MD_FILE_LIST"
 
 TS_COUNT="$(wc -l < "$TS_FILE_LIST" | tr -d ' ')"
 
@@ -456,6 +502,7 @@ fi
 # Step 3: Extract documentation units, contract rules, and pitfalls
 "$EXTRACT_DOCS" \
   --project-root "$REPO_ROOT" \
+  --docs-root "$DOCS_ROOT_REL" \
   --out-docs "$DOCS_JSONL" \
   --out-rules "$RULES_JSONL" \
   --out-pitfalls "$PITFALLS_JSONL" \
@@ -472,6 +519,7 @@ LOADER_FLAGS=(
   --rules "$RULES_JSONL"
   --pitfalls "$PITFALLS_JSONL"
   --project-root "$REPO_ROOT"
+  --docs-root "$DOCS_ROOT_REL"
   --src-root "$SCAN_DIR"
   --schema "$SCHEMA_SQL"
   --file-list "$TS_FILE_LIST"

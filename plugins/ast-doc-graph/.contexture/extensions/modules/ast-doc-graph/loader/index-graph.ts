@@ -123,11 +123,16 @@ export function fileMatchesGlobs(file: string, sources: string[]): boolean {
   return false;
 }
 
-export function candidateDocIdsForFile(file: string): string[] {
+/* The docs walk folder relative to the project root (--docs-root), docs unless the driver names another */
+let docsRoot = 'docs';
+const docsPrefix = (root: string): string => (root ? `${root.replace(/\/+$/, '')}/` : '');
+
+export function candidateDocIdsForFile(file: string, root: string = docsRoot): string[] {
   const norm = file.replace(/^\.\//, '').replace(/\.md$/i, '');
+  const prefix = docsPrefix(root);
   const res: string[] = [];
-  if (norm.startsWith('docs/')) {
-    const sub = norm.slice('docs/'.length);
+  if (prefix && norm.startsWith(prefix)) {
+    const sub = norm.slice(prefix.length);
     res.push(`doc:${sub.replace(/\//g, ':')}`);
     const parts = sub.split('/');
     if (parts.length > 1) {
@@ -140,14 +145,11 @@ export function candidateDocIdsForFile(file: string): string[] {
   return Array.from(new Set(res));
 }
 
-export function docFileCandidates(docId: string): string[] {
+export function docFileCandidates(docId: string, root: string = docsRoot): string[] {
   if (!docId.startsWith('doc:')) return [];
   const parts = docId.slice(4).split(':');
-  return [
-    path.join('docs', ...parts) + '.md',
-    path.join('docs', parts[parts.length-1]) + '.md',
-    path.join(...parts) + '.md',
-  ];
+  const under = root ? [path.join(root, ...parts) + '.md', path.join(root, parts[parts.length-1]) + '.md'] : [];
+  return [...under, path.join(...parts) + '.md'];
 }
 
 export function resolveDocFile(docId: string, projectRoot?: string): string | null {
@@ -284,6 +286,8 @@ Options:
   --project-root <path>   Project root path for relative file resolution
   --src-root <path>       The source scan root: a full load records it with the project root;
                           a reconcile refuses one other than the recorded root
+  --docs-root <path>      The docs walk folder relative to the project root, stripped from a
+                          markdown path for its unit ids; a full load records it (default: docs)
   --schema <file>         Path to schema.sql (default: ../schema.sql)
   --clean                 Remove existing database before indexing
   -h, --help              Display this help message
@@ -298,6 +302,11 @@ const CLEAR_GRAPH =
 /* A graph loaded before the record holds no graph_meta table, so the read asks for the table first */
 const HAS_ROOTS = "SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'graph_meta';";
 const READ_ROOTS = 'SELECT repo_root, src_root FROM graph_meta LIMIT 1;';
+
+/* A graph_meta made before the docs walk folder was recorded gains its column on the next load */
+const META_COLUMNS = "SELECT name FROM pragma_table_info('graph_meta');";
+const ADD_DOCS_ROOT = 'ALTER TABLE graph_meta ADD COLUMN docs_root TEXT;';
+const lacksDocsRoot = (columns: any[]): boolean => columns.length > 0 && !columns.some((c) => c.name === 'docs_root');
 
 /* SQL helper for fallback */
 
@@ -465,6 +474,10 @@ async function main(): Promise<void> {
       srcRoot = args[++i];
     } else if (arg.startsWith('--src-root=')) {
       srcRoot = arg.slice('--src-root='.length);
+    } else if (arg === '--docs-root') {
+      docsRoot = args[++i] ?? '';
+    } else if (arg.startsWith('--docs-root=')) {
+      docsRoot = arg.slice('--docs-root='.length);
     } else if (arg === '--schema') {
       schemaPath = args[++i];
     } else if (arg.startsWith('--schema=')) {
@@ -651,6 +664,7 @@ async function main(): Promise<void> {
     db.exec('PRAGMA foreign_keys = ON;');
     db.exec('PRAGMA busy_timeout = 5000;');
     db.exec(schemaSql);
+    if (lacksDocsRoot(db.prepare(META_COLUMNS).all() as any[])) db.exec(ADD_DOCS_ROOT);
 
     db.exec('BEGIN TRANSACTION;');
 
@@ -696,7 +710,7 @@ async function main(): Promise<void> {
       }
     } else {
       db.exec(CLEAR_GRAPH);
-      db.prepare('INSERT INTO graph_meta (repo_root, src_root) VALUES (?, ?);').run(roots.repo_root, roots.src_root);
+      db.prepare('INSERT INTO graph_meta (repo_root, src_root, docs_root) VALUES (?, ?, ?);').run(roots.repo_root, roots.src_root, docsRoot);
     }
 
     // Insert incoming symbols
@@ -997,6 +1011,7 @@ async function main(): Promise<void> {
       printReconcile(queryJson('SELECT file FROM indexed_files;').map((r: any) => r.file), recorded);
       return;
     }
+    if (lacksDocsRoot(queryJson(META_COLUMNS))) execFileSync(sqliteBin, ['-bail', dbPath, ADD_DOCS_ROOT], { stdio: ['ignore', 'ignore', 'inherit'] });
 
     if (delta) {
       // Query existing state to re-link edges
@@ -1318,7 +1333,7 @@ async function main(): Promise<void> {
         schemaSql,
         'BEGIN TRANSACTION;',
         CLEAR_GRAPH,
-        `INSERT INTO graph_meta (repo_root, src_root) VALUES (${sqlEscape(roots.repo_root)}, ${sqlEscape(roots.src_root)});`,
+        `INSERT INTO graph_meta (repo_root, src_root, docs_root) VALUES (${sqlEscape(roots.repo_root)}, ${sqlEscape(roots.src_root)}, ${sqlEscape(docsRoot)});`,
       ];
 
       for (const s of symbols) {

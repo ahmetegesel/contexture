@@ -16,8 +16,8 @@
 # inside a word or a string). A new corpus read or path print outside the helper lands here only by an
 # explicit edit, which is the point: it stays visible.
 claimant-probe	docs-check.awk	    if (index(path, "docs/") == 1) gpath = CROOT substr(path, 6)
-claimant-probe	docs-check.awk	    if (root != "") cmd = "git -C \"" root "\" ls-files --error-unmatch -- \"" gpath "\" >/dev/null 2>&1"
-claimant-probe	docs-check.awk	    else cmd = "git ls-files --error-unmatch -- \"" gpath "\" >/dev/null 2>&1"
+claimant-probe	docs-check.awk	    if (root != "") cmd = "git -C " shell_quoted(root) " ls-files --error-unmatch -- " shell_quoted(":(literal)" gpath) " >/dev/null 2>&1"
+claimant-probe	docs-check.awk	    else cmd = "git ls-files --error-unmatch -- " shell_quoted(":(literal)" gpath) " >/dev/null 2>&1"
 claimant-probe	docs-check.awk	    rc = system(cmd)
 delta-read	docs-check.awk	    while ((getline raw_line < input_src) > 0) {
 scratch-list	docs-check.awk	        while ((getline sb_line < shebang_src) > 0) {

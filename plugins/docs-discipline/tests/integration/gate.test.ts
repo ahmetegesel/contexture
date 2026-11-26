@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { sandbox } from '@support/sandbox';
 import { fresh, seed } from '@support/snapshot';
-import { addModule, docs, gwWorkspace, PLUGIN, stageSeed } from '../support/corpus';
+import { addModule, CORPUS, docs, gwWorkspace, PLUGIN, stageSeed } from '../support/corpus';
 import { git, gitCommit, gitInit } from '../support/git';
 
 let staged: string;
@@ -22,7 +22,7 @@ beforeAll(async () => {
       mkdirSync(join(sb, '.contexture/modules/custom'), { recursive: true });
       writeFileSync(join(sb, '.contexture/modules/custom/run.sh'), 'echo custom\n');
       writeFileSync(join(sb, 'AGENTS.workspace.md'), '# overlay\n');
-      writeFileSync(join(sb, '.gitignore'), '.contexture/tmp/\n/docs/\n');
+      writeFileSync(join(sb, '.gitignore'), `.contexture/tmp/\n/${CORPUS}/\n`);
       await gitInit(sb);
       await git(sb, 'add', '-A');
       await gitCommit(sb, 'h0');

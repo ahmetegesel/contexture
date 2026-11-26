@@ -7,7 +7,7 @@ map: it is not linked from the workspace's boot, laws, or help.
 
 ## Layout
 
-The folder is the standard module folder (`docs/modules.md`): `module` carries the summary, the version, and the description block the compose reads; `laws` carries the docs laws, its layout clauses, its boot clause, and its close clause; `data` is the storage declaration; `install` and `uninstall` are the optional part hooks (install seeds the corpus conventions through `ctx docs write` once, and uninstall leaves the store data); `scripts/` holds the verbs, their private engines, and the private grammar asset `doc.grammar`; `hooks/` holds the two handler files the unit module's points run: `task-landing` nudges a task that starts, `load-end` nudges the unit's in-progress tasks; both call `ctx docs nudge` and carry no block mode; this README is off-path.
+The folder is the standard module folder (`docs/modules.md`): `module` carries the summary, the version, and the description block the compose reads; `laws` carries the docs laws, its layout clauses, its boot clause, and its close clause; `data` is the storage declaration; `install` and `uninstall` are the optional part hooks (install seeds the corpus conventions through `ctx docs write` once, and refuses to seed while a corpus written at the old root still sits in the repository's docs folder, a temporary guard of the one time root move; uninstall leaves the store data); `scripts/` holds the verbs, their private engines, and the private grammar asset `doc.grammar`; `hooks/` holds the two handler files the unit module's points run: `task-landing` nudges a task that starts, `load-end` nudges the unit's in-progress tasks; both call `ctx docs nudge` and carry no block mode; this README is off-path.
 
 | verb | engine |
 |---|---|
@@ -87,8 +87,9 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   holds, since no file lives there).
 - The declared folder: `docs_corpus_root` reads the module's own row of the
   storage library's `store_roots` (the own namespace from `store_namespace`)
-  into `DOCS_CORPUS_ROOT`, `docs` at the shipped declaration and the
-  namespace under an alias install, and refuses rc 2 with the library's line
+  into `DOCS_CORPUS_ROOT`, `.contexture/docs` at the shipped declaration
+  (the drawer, beside the other modules' data) and the namespace under an
+  alias install, and refuses rc 2 with the library's line
   when the roots cannot be listed (a module data file the core cannot read)
   or no row names the namespace, never a guessed folder. `DOCS_CORPUS_AWK`
   holds the one translation pair, `logical()` (a path under the declared
@@ -96,8 +97,10 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   git path under the declared folder naming a doc), which
   `docs_untracked_half` and `docs_corpus_untracked` share; `check` and the
   gate pass the folder to the engine as `-v corpus_root=`, and
-  `claimant_is_tracked` probes git for a claimant at that folder. At `docs`
-  every translation is the identity.
+  `claimant_is_tracked` probes git for a claimant at that folder. Both git
+  calls pass the folder as a literal pathspec (`:(literal)`), the probe inside
+  single quotes, so a folder holding glob characters, a quote, or a dollar sign
+  reaches git as its own bytes. At `docs` every translation is the identity.
 - The quoted paths: every gate git call runs with `core.quotePath=false`, so a
   non-ASCII path arrives as its bytes. `docs_delta_decode` (under `LC_ALL=C`)
   decodes every path git still quotes (a `"..."` field: octal escapes, an
@@ -258,7 +261,9 @@ core drawer or the base mirror), never by a relative climb from the module
 folder, so the docs module works under the modules root and the extension root
 alike; the grammar asset is the one path resolved beside the module. The gate's git
 aggregation reads from that root; the corpus reads go through the driver
-(under the files driver the corpus is `<root>/docs/<repo>/<slug>.md`).
+(under the files driver the corpus is `<root>/.contexture/docs/<repo>/<slug>.md`, the
+docs namespace's declared root; the repository's own `docs/` folder belongs to
+people and is never read as the corpus).
 `DOCS_PRODUCT_REPOS_DIR` (default `projects/`) selects the multi-repo product
 directory.
 
@@ -269,7 +274,16 @@ directory.
   at a shared template. The suite stages the module whole, carrying the asset.
 - The seed conventions: the plugin's `docs/workspace/conventions.md`, written
   into the corpus by adoption through `ctx docs write workspace conventions`
-  (under the files driver the doc lands at that same path).
+  (under the files driver the doc lands at `.contexture/docs/workspace/conventions.md`).
+  The install hook seeds only when the corpus lacks the conventions doc; under
+  posix, when the corpus is empty while a corpus doc written at the old root
+  (a `docs/<repo>/<slug>.md` whose first line is the `@doc` line naming its
+  own slug) still sits in the repository's docs folder, it seeds nothing and
+  exits rc 1 naming those repos and `docs/adoption.md` (Updating), so the
+  installer stops rc 2 with the overlay and its record in place; the same
+  install after the move reads already present. The guard reads the corpus
+  only through `ctx docs query --index`, never runs under a store driver, and
+  leaves with the idea `retire-docs-root-move-guard`.
 - The plugin's `tests/sample/` corpus is reference data only: five fictional
   docs plus a demo backlog used by the nudge walk and the tests. It is never
   copied into a workspace.
@@ -343,12 +357,23 @@ the commit, a rename's dead source and uncovered new path, an ignored
 corpus's untracked claimant with its notice, an unignored untracked corpus
 read the same way, a committed non-ASCII change's STALE, an empty range, a
 child repository's working delta with its notice, and the refusals). `fault/` configures a planted driver that declares no store, so
-every read verb refuses rc 2 naming the capability. `integration/corpus-root.test.ts` installs the module under an alias, its
-corpus under `kb`: a tracked corpus's STALE and FRESH, the check over a stdin
-delta naming a doc by its path there and by its logical address, an untracked
-doc beside a tracked claimant, the `--since` untracked count, an adopter file
-at a doc's logical address read as an ordinary file in the gate's git halves,
-and the store roots refusal under the gate and the check. `store/` keeps the
+every read verb refuses rc 2 naming the capability. `integration/corpus-root.test.ts` installs the module plainly, its
+corpus in the drawer, and under an alias, its corpus under `kb`, each: a
+tracked corpus's STALE and FRESH, an untracked corpus's process-owned clean,
+the check over a stdin delta naming a doc by its path there and by its logical
+address, an untracked doc beside a tracked claimant, the `--since` untracked
+count, an adopter file at a doc's logical address read as an ordinary file in
+the gate's git halves, and the store roots refusal under the gate and the
+check; and a declared folder holding a dollar sign and glob brackets reaching
+git as its own bytes. `integration/root-move.test.ts` proves the drawer root
+beside an adopter's own docs folder (a tracked guide and nested pages never
+read as docs, keys, or strays) and the one time move with its install hook
+guard: an update before the move refused with the overlay in place and the old
+place untouched, the move then the same install reading already present with
+the index and every projection equal, the move first keeping every doc byte,
+the move form refusing an existing target, a fresh install beside pages that
+are no corpus docs seeding, two planted repos named, and a store driver
+leaving the seed alone. `store/` keeps the
 cases on the sqlite driver: the corpus written through `ctx docs write` with the
 docs folder removed and read back unchanged through `ctx docs write --replace
 --dry-run`, the gate on the git path (a code change alone reading `UNTRACKED

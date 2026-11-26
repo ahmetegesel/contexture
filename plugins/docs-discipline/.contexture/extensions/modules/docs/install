@@ -40,6 +40,53 @@ case "$qrc" in
     ;;
 esac
 
+# The one time root move guard, temporary (idea retire-docs-root-move-guard removes it). Under
+# posix, an empty corpus beside a corpus doc left at the old place (a docs/<repo>/<slug>.md
+# whose first line is the @doc line naming <slug>) means the update ran before the move:
+# seeding would fork the conventions doc and hide the corpus, so the hook refuses rc 1 and
+# seeds nothing. The corpus is read only through the module's own verb.
+gd_old_place() {
+  for gd_f in docs/*/*.md; do
+    [ -f "$gd_f" ] || continue
+    gd_r=${gd_f#docs/}
+    gd_s=${gd_r#*/}
+    gd_r=${gd_r%%/*}
+    gd_s=${gd_s%.md}
+    case "$gd_r" in [A-Za-z0-9]*) ;; *) continue ;; esac
+    case "$gd_s" in [A-Za-z0-9]*) ;; *) continue ;; esac
+    case "$gd_r$gd_s" in *[!A-Za-z0-9._-]*) continue ;; esac
+    gd_l=""
+    IFS= read -r gd_l < "$gd_f" || [ -n "$gd_l" ] || continue
+    set -f
+    # shellcheck disable=SC2086
+    set -- $gd_l
+    set +f
+    [ "${1:-}" = "@doc" ] && [ "${3:-}" = "$gd_s" ] && printf '%s\n' "$gd_r"
+  done
+  return 0
+}
+gd_driver=$("$ctx" store config get driver 2>/dev/null) || gd_driver=posix
+if [ "$gd_driver" = posix ]; then
+  gd_index=$("$ctx" "$module" query --index 2>&1)
+  gd_qrc=$?
+  gd_empty=0
+  case "$gd_qrc:$gd_index" in
+    "1:"*": the corpus is empty") gd_empty=1 ;;
+    0:*"index complete: "*) ;;
+    *)
+      echo "docs install: cannot read the corpus index (ctx $module query --index rc $gd_qrc)" >&2
+      exit 2
+      ;;
+  esac
+  if [ "$gd_empty" -eq 1 ]; then
+    gd_repos=$(cd "$CTX_ROOT" && gd_old_place | LC_ALL=C sort -u | awk 'NR > 1 { printf ", " } { printf "%s", $0 } END { if (NR) print "" }')
+    if [ -n "$gd_repos" ]; then
+      echo "docs install: the corpus still sits at its old place (docs/<repo>/ for $gd_repos) while the corpus this module serves holds no doc; move each of those folders once, as docs/adoption.md (Updating) shows, then install again (nothing was seeded)" >&2
+      exit 1
+    fi
+  fi
+fi
+
 if "$ctx" "$module" write workspace conventions < "$seed"; then
   echo 'docs install: seeded workspace conventions'
 else

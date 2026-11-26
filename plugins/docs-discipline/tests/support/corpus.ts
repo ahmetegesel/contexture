@@ -16,6 +16,9 @@ export const TESTS = join(PLUGIN, 'tests');
 export const WRITE = join(TESTS, 'write');
 export const SAMPLE = join(TESTS, 'sample');
 export const STAGED_SCRIPTS = '.contexture/extensions/modules/docs/scripts';
+// the folder the module's data file declares for the corpus under the files driver
+export const CORPUS = /^root: (.+)$/m.exec(readFileSync(join(MODULE, 'data'), 'utf8'))?.[1] ?? 'docs';
+const IN_DRAWER = CORPUS.startsWith('.contexture/');
 
 export function addModule(sb: string): void {
   cpSync(MODULE, join(sb, '.contexture/extensions/modules/docs'), { recursive: true });
@@ -23,8 +26,8 @@ export function addModule(sb: string): void {
 
 function addDocs(sb: string): void {
   addModule(sb);
-  cpSync(join(PLUGIN, 'docs'), join(sb, 'docs'), { recursive: true });
-  cpSync(join(SAMPLE, 'docs'), join(sb, 'docs'), { recursive: true });
+  cpSync(join(PLUGIN, 'docs'), join(sb, CORPUS), { recursive: true });
+  cpSync(join(SAMPLE, 'docs'), join(sb, CORPUS), { recursive: true });
   copyFileSync(join(SAMPLE, 'backlog.md'), join(sb, 'backlog.md'));
 }
 
@@ -68,12 +71,19 @@ export function matches(actual: string, expectedFile: string): string {
   return readFileSync(expectedFile, 'utf8');
 }
 
+// the ignore file of a workspace whose drawer git ignores: the corpus ignored with it, or
+// tracked by a whitelist of its declared folder
+export function corpusIgnore(ignoreCorpus: boolean): string {
+  if (IN_DRAWER) return ignoreCorpus ? '.contexture/\n' : `.contexture/*\n!/${CORPUS}/\n`;
+  return ignoreCorpus ? `.contexture/\n/${CORPUS}/\n` : '.contexture/\n';
+}
+
 export async function gwWorkspace(driver: Driver, label: string, { ignoreCorpus = false } = {}): Promise<string> {
   return seed(async (sb) => {
     addModule(sb);
     mkdirSync(join(sb, 'src'));
     writeFileSync(join(sb, 'src/gw.sh'), 'echo gw\n');
-    writeFileSync(join(sb, '.gitignore'), ignoreCorpus ? '.contexture/\n/docs/\n' : '.contexture/\n');
+    writeFileSync(join(sb, '.gitignore'), corpusIgnore(ignoreCorpus));
     await gitInit(sb);
     await git(sb, 'add', '-A');
     await gitCommit(sb, 'h0');
@@ -109,7 +119,7 @@ export const sqliteCorpus = seedSteps('docs-sqlite', [
     build: async (sb) => {
       addDocs(sb);
       await writeCorpus(sb);
-      rmSync(join(sb, 'docs'), { recursive: true });
+      rmSync(join(sb, CORPUS), { recursive: true });
     },
   },
 ], 'sqlite');
