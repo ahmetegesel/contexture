@@ -12,6 +12,7 @@ const UNIT = 'base/.contexture/modules/unit';
 const POSIX = 'base/.contexture/storage/drivers/posix/driver';
 const FTS5 = 'plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5/driver';
 const LIBRARY = 'base/.contexture/storage/scripts/library';
+const BEHAVIOR = 'base/.contexture/storage/scripts/driver-behavior';
 
 const OWNERS: readonly [file: string, line: string, why: string][] = [
   [`${UNIT}/data`, 'root: .contexture/units', 'the record root, declared once by the unit module'],
@@ -24,6 +25,7 @@ const OWNERS: readonly [file: string, line: string, why: string][] = [
   [FTS5, '  sl_lock="$LOCK_BASE/locks/store-$1.lock"', 'the fts5 namespace lock (store_lock)'],
   [FTS5, '  lh_lock="$LOCK_BASE/locks/store-$1.lock"', 'the fts5 namespace lock probe (store_lock_held)'],
   [LIBRARY, '  ll_dir="$(store_lib_root)/.contexture/tmp/locks/lib"', 'the library lock folder, its own family (lib_lock)'],
+  [BEHAVIOR, '  BL_DIR="$1/.contexture/tmp/locks/store-$2.lock"', 'the namespace lock the behavior test plants in a scratch workspace for its locked health step (bh_lock)'],
   ['base/.contexture/config-lib', '    cwl_lock_dir="$cwl_ctx/tmp/locks"', 'the config lock folder (cfg_write_locked)'],
 ];
 

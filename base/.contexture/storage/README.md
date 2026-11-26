@@ -8,6 +8,8 @@ library, and the posix driver.
 ```text
 storage/
   scripts/driver-resolver   the resolver: selection, the capability handshake, dispatch
+  scripts/driver-behavior   the private differential behavior test a driver meets: posix and the
+                            candidate in two scratch workspaces, one step set compared
   scripts/store-data        the private reader and validator of a module's data file, and its listing
   scripts/store-key.awk     the one key rule: the awk functions the dispatch gate and every bundled
                             driver read (the key, the prefixes, the leading run fold set)
@@ -444,6 +446,94 @@ out a declaration it cannot read (a malformed one, or an extension module's whos
 record area cannot be read) and a module folder whose name is no namespace token, one
 stderr line each, then exits 1 with the rows it read, so a reader never takes a partial
 listing for the whole (rc 0 when nothing is left out, rc 2 with no module drawer).
+
+## The behavior test a driver meets
+
+The handshake reads a driver's card; `scripts/driver-behavior` holds its behavior to posix.
+It is a private script (no summary line, so never a verb) in plain POSIX sh and awk with the
+utilities the core already uses (`cmp`, `cp`, `dd`, `env`, `mkdir`, `mktemp`, `rm`, `wc`,
+and `od` through `store-b64`), so an adopter needs no test harness. Its caller is the package
+installer: once the driver package lifecycle wires the call, the installer runs it on an
+incoming driver part after the package files land and before the driver's prepare hook, rc 0
+letting the install go on and any other answer refusing it. A driver author runs it by
+installing the driver package into a throwaway workspace (`ctx package install <package
+root>`); no guide names the script as a command to run. Until the installer's call lands,
+the drivers project runs it upstream (`tests/drivers/driver-behavior.test.ts`).
+
+The argument is the driver part as a package ships it, `storage/drivers/<name>`: a folder
+holding an executable `driver`, or the executable itself, its base name the driver name
+under the installer's driver name rule (letters, digits, dot, underscore, dash, not opening
+with a dot), `posix` refused; `--all` prints every differing step. A bad argument refuses
+rc 1 with one line, `driver-behavior: error: <message> (ERR_INVALID_ARGUMENT)`.
+
+What it stages: one work root by `mktemp -d` in the drawer's scratch folder (a drawer that
+cannot hold it answers cannot run, never the system temp) holding two scratch workspaces,
+each a copy of this storage folder, the configuration library, and two synthetic namespaces
+declared by data files alone: `flat` (`key: <a>/<b>`, no suffix) and `deep` (`key: <p...>`
+with a 48 byte suffix, so a 200 byte final segment meets posix's 255 byte name limit
+exactly, the suffix and the 7 byte temp tail added). The reference keeps the core posix
+driver; the candidate holds the part at `.contexture/extensions/storage/drivers/<name>` with
+`storage.driver: <name>`, its configured driver, never an override or a path, and a
+candidate that does not resolve there (a core driver of its name shadowing it) answers
+cannot run. Every call runs that workspace's own `driver-resolver` from its root under
+`env -i` with `PATH`, `HOME`, `USER`, `TZ`, `LC_ALL=C`, `TMPDIR` and `CTX_SCRATCH_ROOT`
+inside the root, and `CTX_ROOT` the root, so an exported `CTX_ROOT`, a `CTX_DIR`, a
+`CTX_STORAGE_DRIVER` override, and a `CTX_STORAGE_SQLITE_PATH` never reach it. The two
+sides run as two background jobs over the same steps, every one through the resolver's
+dispatch (the handshake and the key and value gate before the driver) and none sending an
+input the gate refuses, since that compares the core with itself.
+
+| ids | group |
+|---|---|
+| `k01` | the card through the resolver's `check`, first |
+| `h01` `l01` `c00` `g00` | the empty store: health (degraded, absent), list, scan, an absent get |
+| `p01` to `g06`, `h02` | values by put and get: one, an overwrite without a final newline, empty, NUL bytes, invalid UTF-8, every byte value; health with keys (ok, present) |
+| `p07` to `p10` | every allowed key character and a leading digit |
+| `q01` to `q08`, `l02` to `l09` | list order across dash, dot, slash, digit, upper case, underscore, lower case; prefixes ending mid segment, on a slash, a dot, an underscore (literal), and a dash, a whole key, and the other case (nothing) |
+| `p20` to `l11` | the longest keys: a 200 byte final segment, a 512 byte key of three segments, a 512 byte key of 256 segments, the lists below them; the three segment key sits below the 200 byte key, a key below another key as `o/a` below `o` |
+| `t01` to `t09` | ASCII case twins refused: the whole key, a get in another case, a leading segment, in a batch against a stored key and within one batch, nothing written |
+| `b01` to `b19` | batches: in order with a delete of a key put earlier, a failing third action, a twin, a put and a delete of one key, NUL, invalid UTF-8, and empty values, a malformed base64 value, an unknown payload line, a key put twice; each failing batch leaving nothing |
+| `m01` | a batched get: present, empty, NUL, invalid UTF-8, missing, repeated, in the asked order |
+| `s01` to `s06` | the exact search: case insensitive, never on a `#` line, the limit after the walk, a ranked mode refused |
+| `c01` `c02` | the scan of both namespaces |
+| `r01` to `r05` | the driver's own refusals: a key outside the pattern, an undeclared namespace, an unknown function, an extra argument, a missing key |
+| `h03` | health locked while a live namespace lock is planted in the workspace's lock folder |
+| `v01` to `v03` | the value at the cap: 16777216 bytes holding every byte value with a newline every 65281 bytes, by put, get, and delete alone, never in a scan or a batched get |
+| `x01` to `x07`, `h04` | the deletes: a key, the same key again, a get of it, a batch per namespace deleting every key the run wrote, both lists empty, health ok with the store absent |
+
+The comparison: the exit code, the stdout bytes by `cmp -s` on captured files (never a
+shell variable or awk), and the stderr shape, nothing on rc 0 and on a refusal one line on
+both sides with the same function before `: error: ` (the resolver's `driver-resolver:
+ERROR:` line counting as its function) and the same code in its last parentheses, the
+message free. `k01` compares the exit code and the stderr shape alone; the health steps
+compare the `health` and `store` fields, the driver name and detail free. posix is the
+reference, so no answer is kept here: each step carries its intent alone, hold or refuse,
+and a reference that refuses a step it must hold, holds one it must refuse, writes to stderr
+while it holds one, or refuses without one line naming its function and code answers cannot
+run, never same.
+
+The answer, one stdout line naming no path:
+
+```text
+driver behavior: same: <name> answers the 100 steps as posix does          rc 0
+driver behavior: differs at step <id> (<title>): <what differed>           rc 1
+driver behavior: cannot run: <reason>                                      rc 2
+```
+
+A difference names the first differing step; with `--all` every differing step's line comes
+first and the answer line last. A hangup, interrupt, or termination stops both sides (each
+sends a termination to its call in flight and waits for it), removes the work root, and
+exits 129, 130, or 143; every run leaves the drawer's scratch folder as it found it and no
+process behind. No per step watchdog runs: a hung candidate waits until interrupted.
+
+The isolation requirement a driver meets: run from a scratch workspace root as that
+workspace's configured driver with only the environment above, it keeps every byte it
+writes under that root (a file or database driver at its default place in the workspace's
+drawer, a remote driver in a throwaway space it derives from that root alone, which the
+deletes leave empty). A driver that needs a location, an endpoint, or a credential from
+anywhere else cannot be tested, and so cannot be installed. The test cannot see a write
+outside the root; upstream, the drivers project proves the requirement for the bundled
+drivers with a fingerprint of a mock live workspace.
 
 ## Discovery and selection
 
