@@ -451,9 +451,10 @@ listing for the whole (rc 0 when nothing is left out, rc 2 with no module drawer
 
 The handshake reads a driver's card; `scripts/driver-behavior` holds its behavior to posix.
 It is a private script (no summary line, so never a verb) in plain POSIX sh and awk with the
-utilities the core already uses (`cmp`, `cp`, `dd`, `env`, `mkdir`, `mktemp`, `rm`, `wc`,
-and `od` through `store-b64`), so an adopter needs no test harness. Its caller is the package
-installer: once the driver package lifecycle wires the call, the installer runs it on an
+utilities the core already uses (`cat`, `cmp`, `cp`, `dd`, `env`, `mkdir`, `mktemp`, `mv`,
+`rm`, `rmdir`, `wc`, and `od` through `store-b64`), so an adopter needs no test harness. Its
+caller is the package installer: once the driver package lifecycle wires the call, the
+installer runs it on an
 incoming driver part after the package files land and before the driver's prepare hook, rc 0
 letting the install go on and any other answer refusing it. A driver author runs it by
 installing the driver package into a throwaway workspace (`ctx package install <package
@@ -529,10 +530,9 @@ process behind. No per step watchdog runs: a hung candidate waits until interrup
 The isolation requirement a driver meets: run from a scratch workspace root as that
 workspace's configured driver with only the environment above, it keeps every byte it
 writes under that root (a file or database driver at its default place in the workspace's
-drawer, a remote driver in a throwaway space it derives from that root alone, which the
-deletes leave empty). A driver that needs a location, an endpoint, or a credential from
-anywhere else cannot be tested, and so cannot be installed. The test cannot see a write
-outside the root; upstream, the drivers project proves the requirement for the bundled
+drawer). A driver that cannot, one that needs a location from anywhere else among them,
+cannot be tested, and so cannot be installed. The test cannot see a write outside the
+root; upstream, the drivers project proves the requirement for the bundled
 drivers with a fingerprint of a mock live workspace.
 
 ## Discovery and selection
