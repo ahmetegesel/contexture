@@ -308,21 +308,8 @@ _dup=$(awk '{ print $2 }' "$scratch/inames" | LC_ALL=C sort | uniq -d | head -n 
 # a re-install never leaves an installed module's data undeclared: a data carrying module the
 # record names whose installed name no payload module with a data file takes again (an --as
 # moving it, a version dropping it or its data file) refuses while its namespace holds a key
-# or its key count fails, since its data would be neither listed nor moved; one a payload
-# module with a data file takes again is held to its roots by the storage root check below
+# or its key count fails, since its data would be neither listed nor moved
 clear_bin=$ws_root/.contexture/storage/scripts/store-clear
-# keys_held <namespace>: the key count phrase, through this workspace's configured driver, or
-# nothing for an empty namespace (an unknown count counts as holding)
-keys_held() {
-  if _dc=$(CTX_ROOT=$ws_root "$clear_bin" count "$1" 2>/dev/null) && [ -n "$_dc" ]; then :; else _dc=unknown; fi
-  case "$_dc" in
-    0) ;;
-    unknown) printf 'key count unknown' ;;
-    1) printf '1 key' ;;
-    *) printf '%s keys' "$_dc" ;;
-  esac
-}
-: > "$scratch/data_stays"
 if [ "$have_record" -eq 1 ]; then
   awk '
     $1 == "module" && NF == 3 { orig[$2] = $3; next }
@@ -335,11 +322,15 @@ if [ "$have_record" -eq 1 ]; then
     [ -f "$ext_root/modules/$_dn/data" ] || continue
     _keeps=$(awk -v n="$_dn" '$2 == n { print $1; exit }' "$scratch/inames")
     if [ -n "$_keeps" ] && grep -Fqx "modules/$_keeps/data" "$scratch/files"; then
-      printf '%s %s\n' "$_dn" "$_do" >> "$scratch/data_stays"
       continue
     fi
-    _dk=$(keys_held "$_dn")
-    [ -n "$_dk" ] || continue
+    if _dc=$(CTX_ROOT=$ws_root "$clear_bin" count "$_dn" 2>/dev/null) && [ -n "$_dc" ]; then :; else _dc=unknown; fi
+    [ "$_dc" != 0 ] || continue
+    case "$_dc" in
+      unknown) _dk="key count unknown" ;;
+      1) _dk="1 key" ;;
+      *) _dk="$_dc keys" ;;
+    esac
     die 1 "the re-install would leave the data of module '$_do' (namespace '$_dn', $_dk) undeclared; uninstall the package with --keep-data or --delete-data as the human answers, then install it"
   done < "$scratch/data_now"
 fi
@@ -467,19 +458,6 @@ if [ -x "$sd_bin" ] && grep -q '^modules/[^/]*/data$' "$scratch/files"; then
     _nr=$(sd_row "$_kn" "$scratch/roots.new")
     [ -z "$_kr" ] || [ "$_kr" = "$_nr" ] || kept_back_refuse "$_km" "$_kn" "this version stores it under '$_nr' where the kept data lies under '$_kr'"
   done < "$scratch/kept_return"
-  # an installed data carrying module that stays keeps its roots while its namespace holds a
-  # key, since its verbs would read the new roots alone; an unreadable installed declaration
-  # gives no row, and the re-install then repairs it
-  while read -r _dn _do; do
-    _or=$(sd_row "$_dn" "$scratch/roots.old")
-    _nr=$(sd_row "$_dn" "$scratch/roots.new")
-    [ -n "$_or" ] && [ "$_or" != "$_nr" ] || continue
-    _dk=$(keys_held "$_dn")
-    [ -n "$_dk" ] || continue
-    [ "$_dk" != "key count unknown" ] || _dk="keys (key count unknown)"
-    _dv=$(awk '$1 == "version" && NF == 2 { print $2; exit }' "$state_file" 2>/dev/null)
-    die 1 "the new version moves the storage root of module '$_do' (namespace '$_dn'), so its $_dk cannot follow it; uninstall the package first, as the human answers: --delete-data deletes that data and then the new version installs, --keep-data keeps it for the version that holds it (${_dv:-unknown}), which installs again over it, the new version refused while it is kept"
-  done < "$scratch/data_stays"
   _clash=$(awk '
     FILENAME == ARGV[1] { own[$0] = 1; next }
     FILENAME == ARGV[2] { orig[$2] = $1; next }

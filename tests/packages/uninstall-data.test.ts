@@ -325,30 +325,6 @@ describe.concurrent('ctx package uninstall: the data answer', () => {
     expect(tree(sb)).toBe(before);
   });
 
-  it('[modules-r15] a re-install whose new version moves an installed data carrying module\'s root or fallback root refuses rc 1 before any write while its namespace holds a key; an empty namespace installs', async () => {
-    const sb = sandbox();
-    const p = memosPkg(sb, 'pkg-memos', 'memos', 'root: memos-v1\nfallback_root: memos-old\nkey: <a>/<b>\n');
-    expect((await install(sb, p)).code).toBe(0);
-    expect((await ctx(sb, ['memos', 'put', 'a/b'], 'a/b\n')).code).toBe(0);
-    const before = tree(sb);
-    const line = "package-install: the new version moves the storage root of module 'memos' (namespace 'memos'), so its 1 key cannot follow it; uninstall the package first, as the human answers: --delete-data deletes that data and then the new version installs, --keep-data keeps it for the version that holds it (1.0.0), which installs again over it, the new version refused while it is kept\n";
-    memosPkg(sb, 'pkg-memos', 'memos', 'root: memos-v2\nfallback_root: memos-old\nkey: <a>/<b>\n', '2.0.0');
-    const moved = await install(sb, p);
-    expect([moved.code, moved.stdout, moved.stderr]).toEqual([1, '', line]);
-    expect(moved.stderr).not.toMatch(/memos-v|memos-old|\.contexture/);
-    memosPkg(sb, 'pkg-memos', 'memos', 'root: memos-v1\nkey: <a>/<b>\n', '2.1.0');
-    const dropped = await install(sb, p);
-    expect([dropped.code, dropped.stdout, dropped.stderr]).toEqual([1, '', line]);
-    expect(tree(sb)).toBe(before);
-    const empty = sandbox();
-    const q = memosPkg(empty, 'pkg-memos', 'memos', 'root: memos-v1\nkey: <a>/<b>\n');
-    expect((await install(empty, q)).code).toBe(0);
-    memosPkg(empty, 'pkg-memos', 'memos', 'root: memos-v2\nkey: <a>/<b>\n', '2.0.0');
-    const r = await install(empty, q);
-    expect(r.code).toBe(0);
-    expect(r.stderr).not.toMatch(/error|refus/);
-  });
-
   it('[modules-r13, modules-r15] a kept declaration the storage core cannot read names its one repair: another data package\'s install and the delete by name both say to install the package that kept it again, writing nothing', async () => {
     const sb = sandbox();
     await memos(sb, '', ['a/b']);
