@@ -943,6 +943,24 @@ store_scan() {
   fi
   if ! { SC_NS=$(store_json "$sns_ns") SK_PAT="$SD_KEYPAT" SK_SFX="$SD_SUFFIX" LC_ALL=C awk -F '\t' "$KR"'
     function b64(n) { return substr(B, n + 1, 1) }
+    function enc(h,    L, half, full, i, a, c) {
+      L = length(h)
+      if (L > 768) {
+        half = 6 * int(L / 12)
+        enc(substr(h, 1, half))
+        enc(substr(h, half + 1))
+        return
+      }
+      full = L - L % 6
+      for (i = 1; i <= full; i += 6) printf "%s%s", T[substr(h, i, 3)], T[substr(h, i + 3, 3)]
+      if (L - full == 2) {
+        a = V[substr(h, full + 1, 2)]
+        printf "%s%s==", b64(int(a / 4)), b64((a % 4) * 16)
+      } else if (L - full == 4) {
+        a = V[substr(h, full + 1, 2)]; c = V[substr(h, full + 3, 2)]
+        printf "%s%s%s=", b64(int(a / 4)), b64((a % 4) * 16 + int(c / 16)), b64((c % 16) * 4)
+      }
+    }
     BEGIN {
       m = split(ENVIRON["SK_PAT"], p, /\//); sfx = ENVIRON["SK_SFX"]
       multi = (m >= 1 && p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
@@ -961,15 +979,7 @@ store_scan() {
       if (multi) { if (n < m) next } else if (n != m) next
       printf "%s{\"key\":\"%s\",\"value_b64\":\"", sep, k
       sep = ","
-      L = length(h); full = L - L % 6
-      for (i = 1; i <= full; i += 6) printf "%s%s", T[substr(h, i, 3)], T[substr(h, i + 3, 3)]
-      if (L - full == 2) {
-        a = V[substr(h, full + 1, 2)]
-        printf "%s%s==", b64(int(a / 4)), b64((a % 4) * 16)
-      } else if (L - full == 4) {
-        a = V[substr(h, full + 1, 2)]; c = V[substr(h, full + 3, 2)]
-        printf "%s%s%s=", b64(int(a / 4)), b64((a % 4) * 16 + int(c / 16)), b64((c % 16) * 4)
-      }
+      enc(h)
       printf "\"}"
     }
     END { printf "]}\n" }' "$SCRATCH/keys" > "$SCRATCH/scan-out"; } 2>/dev/null; then
@@ -1023,8 +1033,8 @@ store_query_read() {
 }
 
 # store_search <namespace> <mode> [<limit>]: exact over the raw stored values, the one mode;
-# one sqlite3 call writes every value of the namespace into the call's scratch for the core
-# engine
+# one sqlite3 call writes every value of the namespace into the call's scratch, and the core
+# engine walks the keys the key rule and the module pattern admit, the keys list answers
 store_search() {
   FN=store.search
   [ $# -ge 2 ] && [ $# -le 3 ] || refuse 1 ERR_INVALID_ARGUMENT "store.search takes the namespace, the mode, and an optional limit"
@@ -1051,10 +1061,18 @@ store_search() {
     if ! { sq -bail -separator '	' "$DB_PATH" "SELECT rowid, key, writefile($(store_sqlq "$SCRATCH/values/") || rowid, value) FROM store WHERE namespace = $(store_sqlq "$ss_ns") ORDER BY key COLLATE BINARY;" > "$SCRATCH/keys"; } 2>/dev/null; then
       refuse 2 ERR_STORAGE_READ "cannot read the storage layer's values"
     fi
-    SS_DIR="$SCRATCH/values" LC_ALL=C awk -F '\t' 'NF >= 3 {
-      k = substr($0, length($1) + 2, length($0) - length($1) - length($NF) - 2)
-      print k "\t" ENVIRON["SS_DIR"] "/" $1
-    }' "$SCRATCH/keys" > "$SCRATCH/man" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+    SS_DIR="$SCRATCH/values" SK_PAT="$SD_KEYPAT" SK_SFX="$SD_SUFFIX" LC_ALL=C awk -F '\t' "$KR"'
+      BEGIN {
+        m = split(ENVIRON["SK_PAT"], p, /\//); sfx = ENVIRON["SK_SFX"]
+        multi = (m >= 1 && p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+      }
+      NF >= 3 {
+        k = substr($0, length($1) + 2, length($0) - length($1) - length($NF) - 2)
+        if (m < 1 || !kr_key(k, sfx, multi)) next
+        n = split(k, s, /\//)
+        if (multi) { if (n < m) next } else if (n != m) next
+        print k "\t" ENVIRON["SS_DIR"] "/" $1
+      }' "$SCRATCH/keys" > "$SCRATCH/man" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   fi
   ss_out=$("$ss_core" exact "$SD_FILE" "$ss_ns" "$ss_q" "$ss_lim" "$SCRATCH/man" 2>"$ss_err")
   ss_rc=$?

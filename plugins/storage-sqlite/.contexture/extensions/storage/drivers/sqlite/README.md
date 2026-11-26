@@ -37,13 +37,17 @@ runs its whole action list in one `BEGIN IMMEDIATE` transaction (all or none; th
 failure names the 1-based action and key and leaves nothing written; a `head=` line
 refuses as an unknown payload line), and `store.scan` reads every key of the namespace
 with its value in hex in one `sqlite3` call, then keeps the admitted keys and encodes each
-value in base64 in one awk pass, so its process count never grows with the key count. The
+value in base64 in one awk pass, so its process count never grows with the key count; the
+pass halves a long value's hex at 3 byte boundaries down to short pieces, since an awk that
+measures the whole string on every `substr` call would make one long value cost the square
+of its size. The
 key rule is the storage core's `store-key.awk`; the docs corpus reaches this store through
 the docs module, and this driver never parses a doc.
 
 `store.search` answers `exact` alone: one `sqlite3` call writes every value of the
 namespace into the call's scratch, and the storage core's shared engine computes the
-record rule over them, as on every driver. The descriptor registers `exact` alone as a
+record rule over the keys the key rule and the module pattern admit, the keys `store.list`
+answers, as on every driver. The descriptor registers `exact` alone as a
 `{name, description}` object; any other mode refuses rc 1 `ERR_CAPABILITY_UNSUPPORTED`
 with posix's line, `mode '<m>' is not registered; registered modes: exact`.
 

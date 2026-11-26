@@ -358,7 +358,7 @@ fallback_root: <folder>             # optional; a deprecated root read after the
 suffix: <suffix>                    # optional; default: empty
 search: flat|documents              # optional; the search schema form
 format: text|json                   # optional; flat only; default text
-fields: <field>, <field>            # optional; flat only; the JSON fields the search reads
+fields: <field>, <field>            # optional; flat only; validated, read by no search
 title: <field>|key|head             # optional; flat default key, documents default head
 snippet: line                       # optional; default line
 document: <key-pattern> <section> <entity-type> <head-marker|->   # repeatable

@@ -25,7 +25,7 @@
 #   format: text|json                                                        (optional;
 #         flat only; default text)
 #   fields: <comma-separated field names>                                    (optional;
-#         flat only; the JSON fields the typed search extracts)
+#         flat only; validated, read by no search)
 #   title: <field name|key|head>                                             (optional;
 #         flat default key; documents default head)
 #   snippet: line                                                            (optional;

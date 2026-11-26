@@ -69,6 +69,28 @@ describe.skipIf(!sqliteAvailable())('the sqlite store', { concurrent: true }, ()
     expect((await s.scan('docs')).stdout).toBe('{"namespace":"docs","items":[{"key":"workspace/a","value_b64":"YQo="}]}\n');
   });
 
+  it('[modules-r10, the-engine-r27] never searches a planted row the key rule or the pattern refuses, as posix searches only the keys it lists', async () => {
+    const sb = fresh(docs);
+    const s = store(sb, 'sqlite');
+    answer(await s.put('docs', 'workspace/b', 'needle kept\n'), 'store.put');
+    sqlite(db(sb), "INSERT INTO store (namespace, key, value) VALUES ('docs', 'top', CAST('needle top' AS BLOB)), ('docs', 'workspace/deep/x', CAST('needle deep' AS BLOB)), ('docs', 'workspace/..', CAST('needle dots' AS BLOB));");
+    const a = answer(await s.search('docs', 'exact', '0', q('needle')), 'store.search');
+    expect([a.total_matches, a.results.map((r: { key: string }) => r.key)]).toEqual([1, ['workspace/b']]);
+  });
+
+  it('[the-engine-r19] scans a value of 2 MiB and one byte in time linear in its size, its base64 the core encoder\'s', async () => {
+    const sb = fresh(docs);
+    const s = store(sb, 'sqlite');
+    const value = Buffer.from(Array.from({ length: 2 * 1024 * 1024 + 1 }, (_, i) => (i * 7919 + (i >> 8)) % 256));
+    answer(await s.put('docs', 'workspace/big', value), 'store.put');
+    const t0 = Date.now();
+    const r = await s.scan('docs');
+    const took = Date.now() - t0;
+    const items = answer(r, 'store.scan').items as { key: string; value_b64: string }[];
+    expect(items.find((i) => i.key === 'workspace/big')?.value_b64 === value.toString('base64')).toBe(true);
+    expect(took, `the scan took ${took} ms`).toBeLessThan(30_000);
+  });
+
   it('[the-engine-r21] a get whose value read fails prints its one refusal line, never the reader\'s own line naming the scratch', async () => {
     const sb = fresh(docs);
     const cat = ['/bin/cat', '/usr/bin/cat'].find((p) => existsSync(p));
