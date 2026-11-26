@@ -286,6 +286,22 @@ describe.skipIf(!sqliteAvailable())('store-move between posix and sqlite', { con
     expect(await listed(sb, 'sqlite', 'store')).toEqual(SEED.store.map((a) => a.key));
   });
 
+  it('[the-engine-r-mov01] a namespace named like the preflight\'s own findings (blind, keys, left, say, target) preflights and copies as any other', async () => {
+    const sb = fresh(await snap('base'));
+    const names = ['blind', 'keys', 'left', 'say', 'target'];
+    for (const ns of names) {
+      dataFile(sb, 'modules', ns, 'key: <a>\n');
+      await load(sb, ns, [{ action: 'put', key: 'a1', value: `${ns}\n` }]);
+    }
+    const all = [...NAMESPACES, ...names].sort();
+    const n = (ns: string): number => (names.includes(ns) ? 1 : COUNT[ns as Namespace]);
+    const keptBy = (ns: string): string => (ns === 'notebook' ? KEPT : '');
+    const pre = await move(sb, ['preflight', 'posix', 'sqlite']);
+    expect([pre.code, pre.stdout, pre.stderr]).toEqual([0, `${all.map((ns) => `${ns}: ${n(ns)} keys to copy${keptBy(ns)}\n`).join('')}ready to copy 86 keys in 9 namespaces\n`, '']);
+    const r = await move(sb, ['copy', 'posix', 'sqlite']);
+    expect([r.code, r.stdout, r.stderr]).toEqual([0, `${all.map((ns) => `${ns}: ${n(ns)} keys copied, dumps equal${keptBy(ns)}\n`).join('')}copied 86 keys in 9 namespaces\n`, '']);
+  });
+
   it.each([
     [{ CTX_STORAGE_SQLITE_PATH: 'elsewhere.db' }, 'CTX_STORAGE_SQLITE_PATH'],
     [{ CTX_STORAGE_DRIVER: 'sqlite', CTX_STORAGE_MOVE: '1' }, 'CTX_STORAGE_DRIVER'],

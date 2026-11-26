@@ -583,7 +583,10 @@ source list, the source scan's items, the sum of the batch answers' `actions`, t
 scan's items, and the target list, all equal, with `storage.health` reading the store
 present on each side exactly when its count is above zero: two empty dumps compare equal,
 so the counts catch a source whose scan is blind, and the health catches one blind to both
-its list and its scan. A failure refuses rc 2 `ERR_STORAGE_WRITE`, the diagnosis from the
+its list and its scan. The source's scan is trusted for its values: a source whose scan
+answers wrong values beside a true list copies them, and the check reads them again alike,
+so the behavior test, which holds a driver's scan to posix before the driver holds data, is
+that guard. A failure refuses rc 2 `ERR_STORAGE_WRITE`, the diagnosis from the
 two dumps on indented lines (`<key>: missing in the target`, `<key>: extra in the target`,
 `<key>: the value differs`), with no further driver call; a refused batch stops rc 2
 `ERR_STORAGE_WRITE` naming the namespace and the keys written so far.

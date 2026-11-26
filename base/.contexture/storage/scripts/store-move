@@ -383,6 +383,7 @@ sm_preflight() {
   sm_driver "$SM_DST"
   sm_namespaces
   : > "$SM_WORK/pf.blind"; : > "$SM_WORK/pf.keys"; : > "$SM_WORK/pf.left"; : > "$SM_WORK/pf.target"; : > "$SM_WORK/pf.say"
+  mkdir "$SM_WORK/pf" || sm_refuse 2 ERR_STORAGE_WRITE "the move's scratch folder cannot be written"
   sm_kr=$(cat "$SM_KEYRULE")
   sm_total=0
   sm_m=0
@@ -426,7 +427,7 @@ sm_preflight() {
       || sm_refuse 2 ERR_STORAGE_READ "the target's keys of namespace '$ns' cannot be listed: the listing is malformed"
     [ "$sm_tn" -eq 0 ] || printf '  %s: %s keys\n' "$ns" "$sm_tn" >> "$SM_WORK/pf.target"
 
-    printf '%s %s\n' "$sm_n" "$sm_h" > "$SM_WORK/pf.$ns"
+    printf '%s %s\n' "$sm_n" "$sm_h" > "$SM_WORK/pf/$ns"
     printf '%s: %s keys to copy%s\n' "$ns" "$sm_n" "$(sm_kept "$ns")" >> "$SM_WORK/pf.say"
     sm_total=$((sm_total + sm_n))
     sm_m=$((sm_m + 1))
@@ -544,7 +545,7 @@ sm_copy() {
   sm_m=0
   while IFS= read -r ns; do
     [ -n "$ns" ] || continue
-    read -r sm_sl sm_sh < "$SM_WORK/pf.$ns"
+    read -r sm_sl sm_sh < "$SM_WORK/pf/$ns"
     sm_call /dev/null "$SM_WORK/src" "$SM_SRC" store.scan "$ns" \
       || sm_relay $? "$SM_WORK/err" ERR_STORAGE_READ "the source's namespace '$ns' cannot be scanned"
     rm -rf "$SM_WORK/batches"
