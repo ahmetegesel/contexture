@@ -197,3 +197,41 @@ describe('a declared folder holding a dollar sign and glob brackets', () => {
     expect(since.stderr).not.toContain('the corpus is untracked here');
   });
 });
+
+describe('a declared folder holding a double quote, which git quotes in every path it lists', () => {
+  const root = '.contexture/q"x';
+  const docs = (sb: string, args: readonly string[]): Promise<Run> =>
+    exec('./.contexture/ctx', ['docs', ...args], { cwd: sb, env: { GIT_CEILING_DIRECTORIES: dirname(sb) } });
+
+  it('[docs-module-r12, docs-module-r16, docs-module-r17] reads the corpus paths git lists as their bytes: --since counts no untracked doc, and an untracked doc beside a tracked claimant never rides', async () => {
+    const sb = await seed(async (s) => {
+      const pkg = join(sandbox('docs-quote-root'), 'docs-discipline');
+      cpSync(PLUGIN, pkg, { recursive: true, filter: (src) => src !== join(PLUGIN, 'tests') });
+      writeFileSync(join(pkg, '.contexture/extensions/modules/docs/data'), `root: ${root}\nsuffix: .md\nkey: <repo>/<slug>\n`);
+      await must(exec('./.contexture/ctx', ['package', 'install', pkg], { cwd: s, env: { GIT_CEILING_DIRECTORIES: dirname(s) } }), 'install');
+      mkdirSync(join(s, 'src'));
+      writeFileSync(join(s, 'src/notes.sh'), 'echo notes\n');
+      writeFileSync(join(s, '.gitignore'), `.contexture/*\n!/${root}/\n`);
+      await must(docs(s, ['new', 'workspace', 'notes', '--kind=capability', '--description=the notes unit', '--sources=src/notes.sh', '--keywords=notes']), 'notes');
+      await gitInit(s);
+      await git(s, 'add', '-A');
+      await gitCommit(s, 'h0');
+    }, 'posix', 'quote-root');
+    expect((await git(sb, 'ls-files')).stdout).toContain(`"${root.replace('"', '\\"')}/workspace/notes.md"\n`);
+    const h0 = await head(sb);
+    writeFileSync(join(sb, 'src/notes.sh'), 'echo notes2\n');
+    expect((await docs(sb, ['header', 'workspace', 'notes', '--add-keyword=fresh'])).code).toBe(0);
+    await gitCommit(sb, 'h1', '-a');
+    const since = await docs(sb, ['gate', `--since=${h0}`]);
+    expect(since.code, since.stdout + since.stderr).toBe(0);
+    expect(since.stdout).toContain('FRESH: workspace > notes');
+    expect(since.stderr).not.toContain('the corpus is untracked here');
+    expect((await docs(sb, ['new', 'workspace', 'extra', '--kind=capability', '--description=the extra unit', '--sources=src/notes.sh', '--keywords=extra'])).code).toBe(0);
+    writeFileSync(join(sb, 'src/notes.sh'), 'echo notes3\n');
+    const r = await docs(sb, ['gate']);
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout).toMatch(/STALE DOC: .*workspace\/notes/);
+    expect(r.stdout).not.toContain('FRESH: workspace > extra');
+    expect(r.stdout).not.toContain('FRESH (BLANKET)');
+  });
+});

@@ -626,14 +626,28 @@ docs_corpus_root() {
 # DOCS_CORPUS_AWK: corpus(p), 1 when a git path names a corpus doc, a path under the declared
 # root (DOCS_CR in the environment, the root and a slash) whose logical address is
 # docs/<repo>/<slug>.md, the one rule the untracked half and the trackedness count share;
-# logical(p) maps a path under the declared root to its logical address
+# logical(p) maps a path under the declared root to its logical address; both read a path
+# git quoted for a double quote in it (git does even under core.quotePath=false) as its bytes
+# through git_path(p), which leaves a path holding any other escape as git spelled it
 DOCS_CORPUS_AWK='
+function git_path(p,   n, o, i, c, q, b) {
+  q = sprintf("%c", 34); b = sprintf("%c", 92); n = length(p)
+  if (n < 2 || substr(p, 1, 1) != q || substr(p, n, 1) != q) return p
+  o = ""
+  for (i = 2; i < n; i++) {
+    c = substr(p, i, 1)
+    if (c == b) { c = substr(p, ++i, 1); if (c != q && c != b) return p }
+    o = o c
+  }
+  return o
+}
 function logical(p,   r) {
+  p = git_path(p)
   r = ENVIRON["DOCS_CR"]
   if (r != "" && index(p, r) == 1) return "docs/" substr(p, length(r) + 1)
   return p
 }
-function corpus(p) { return index(p, ENVIRON["DOCS_CR"]) == 1 && logical(p) ~ /^docs\/[^\/]+\/[^\/]+\.md$/ }
+function corpus(p) { p = git_path(p); return index(p, ENVIRON["DOCS_CR"]) == 1 && logical(p) ~ /^docs\/[^\/]+\/[^\/]+\.md$/ }
 '
 
 # docs_untracked_half: the workspace root's untracked files (git ls-files --others on stdin)

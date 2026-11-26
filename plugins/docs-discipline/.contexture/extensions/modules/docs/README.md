@@ -100,7 +100,11 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   `claimant_is_tracked` probes git for a claimant at that folder. Both git
   calls pass the folder as a literal pathspec (`:(literal)`), the probe inside
   single quotes, so a folder holding glob characters, a quote, or a dollar sign
-  reaches git as its own bytes. At `docs` every translation is the identity.
+  reaches git as its own bytes; both translation functions first read a path
+  git quoted for a double quote in it (`git_path()`, since git quotes one even
+  under `core.quotePath=false`) as its bytes, so the tracked count and the
+  untracked half see every doc under such a folder. At `docs` every
+  translation is the identity.
 - The quoted paths: every gate git call runs with `core.quotePath=false`, so a
   non-ASCII path arrives as its bytes. `docs_delta_decode` (under `LC_ALL=C`)
   decodes every path git still quotes (a `"..."` field: octal escapes, an
@@ -364,8 +368,9 @@ the check over a stdin delta naming a doc by its path there and by its logical
 address, an untracked doc beside a tracked claimant, the `--since` untracked
 count, an adopter file at a doc's logical address read as an ordinary file in
 the gate's git halves, and the store roots refusal under the gate and the
-check; and a declared folder holding a dollar sign and glob brackets reaching
-git as its own bytes. `integration/root-move.test.ts` proves the drawer root
+check; a declared folder holding a dollar sign and glob brackets reaching
+git as its own bytes; and one holding a double quote, which git quotes in the
+paths it lists, keeping the `--since` count and the untracked half true. `integration/root-move.test.ts` proves the drawer root
 beside an adopter's own docs folder (a tracked guide and nested pages never
 read as docs, keys, or strays) and the one time move with its install hook
 guard: an update before the move refused with the overlay in place and the old
