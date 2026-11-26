@@ -340,7 +340,7 @@ describe.skipIf(!sqliteAvailable())('store-move between posix and sqlite', { con
   });
 
   it.each([
-    [{ CTX_STORAGE_SQLITE_PATH: 'elsewhere.db' }, 'CTX_STORAGE_SQLITE_PATH'],
+    [{ CTX_STORAGE_CUSTOM_PATH: 'elsewhere.db' }, 'CTX_STORAGE_CUSTOM_PATH'],
     [{ CTX_STORAGE_DRIVER: 'sqlite', CTX_STORAGE_MOVE: '1' }, 'CTX_STORAGE_DRIVER'],
   ])('[the-engine-r-mov01] a storage variable other than the token refuses every command rc 1, named, before any read', async (env, name) => {
     const sb = fresh(await snap('base'));

@@ -2,9 +2,9 @@
 # lifecycle hooks (prepare, finish, cleanup), so all of them read one database place. Needs
 # MODULE_DIR (the driver part's folder) and the working folder inside the workspace. Sets
 # ROOT, the nearest folder above the working folder holding a drawer, and DB_PATH: the
-# CTX_STORAGE_SQLITE_PATH override when set (the package installer never passes it to a
-# hook), else the configuration's storage.database (a relative value read from the workspace
-# root), else the driver's default inside the drawer.
+# configuration's storage.database (a relative value read from the workspace root), else
+# the driver's default inside the drawer. No environment variable places the database, so
+# an ordinary write never lands in a database the configuration does not name.
 
 find_workspace_root() {
   curr="$PWD"
@@ -82,9 +82,7 @@ read_conf_db() {
   return 1
 }
 
-if [ -n "${CTX_STORAGE_SQLITE_PATH:-}" ]; then
-  DB_PATH="$CTX_STORAGE_SQLITE_PATH"
-elif sqlite_db_val=$(read_conf_db "$ROOT") && [ -n "$sqlite_db_val" ]; then
+if sqlite_db_val=$(read_conf_db "$ROOT") && [ -n "$sqlite_db_val" ]; then
   case "$sqlite_db_val" in
     /*) DB_PATH="$sqlite_db_val" ;;
     *)  DB_PATH="$ROOT/$sqlite_db_val" ;;

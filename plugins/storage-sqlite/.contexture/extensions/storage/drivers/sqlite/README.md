@@ -14,6 +14,8 @@ guide and reference; this page is the off-path maintainer map.
 | `db-init.sh` | the open path, sourced by the driver: the sqlite3 3.44 minimum, the whole schema 6 in a new or empty file, the version 6 open, and the refusal of any other version |
 | `driver` | the contract 4 store-only entry point: the six store functions, the exact store search, `capability`, and `storage.health` |
 | `config` | the driver configuration schema: `database: optional path` |
+| `location.sh` | the one database location reader, sourced by the driver and its hooks: the configuration's `storage.database` (relative to the workspace root or absolute, with its legacy reads), else the drawer default; no environment variable places the database, so an ordinary write never lands in a database the configuration does not name |
+| `hooks/` | the `prepare`, `finish`, and `cleanup` hooks the package installer runs around a move, each reading the location through `location.sh` |
 
 ## The record
 

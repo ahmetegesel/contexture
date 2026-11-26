@@ -24,7 +24,8 @@ function at(dbName: string) {
   dataFile(sb, 'extensions', 'docs', DOCS_SHAPED);
   const dir = sandbox('db');
   const db = join(dir, dbName);
-  return { db, dir, sb, s: store(sb, 'sqlite', { CTX_STORAGE_SQLITE_PATH: db }) };
+  appendFileSync(join(sb, '.contexture/config'), `storage.database: ${db}\n`);
+  return { db, dir, sb, s: store(sb, 'sqlite') };
 }
 
 const version = (db: string) => sqlite(db, 'PRAGMA user_version;').trim();
@@ -187,19 +188,28 @@ describe.skipIf(!sqliteAvailable())('the sqlite store location', { concurrent: t
     expect((await s.get('docs', 'workspace/placed')).stdout).toBe('placed\n');
   });
 
-  it('[plugins-r12] CTX_STORAGE_SQLITE_PATH is taken as given ahead of the configuration key, and a read of an absent database makes nothing while the first write makes it', async () => {
+  it('[plugins-r12] a set CTX_STORAGE_SQLITE_PATH changes nothing: the configured database answers every read and takes every write, a read of an absent one making nothing while the first write makes it', async () => {
+    const other = at('other.db');
+    answer(await other.s.put('docs', 'workspace/other', 'other\n'), 'store.put');
+    sqlite(other.db, 'PRAGMA wal_checkpoint(TRUNCATE);');
+    const otherBefore = digest(other.db);
     const sb = stage('sqlite');
     dataFile(sb, 'extensions', 'docs', DOCS_SHAPED);
     appendFileSync(join(sb, '.contexture/config'), 'storage.database: .contexture/configured.db\n');
-    const db = join(sandbox('given'), 'given.db');
-    const s = store(sb, 'sqlite', { CTX_STORAGE_SQLITE_PATH: db });
-    answer(await s.list('docs'), 'store.list');
-    answer(await s.scan('docs'), 'store.scan');
-    refused(await s.get('docs', 'workspace/none'), 'store.get', 1, 'ERR_ENTITY_NOT_FOUND', "key 'workspace/none' not found in namespace 'docs'");
-    expect(existsSync(db)).toBe(false);
-    answer(await s.put('docs', 'workspace/given', 'given\n'), 'store.put');
-    expect(sqlite(db, "SELECT key FROM store WHERE namespace = 'docs';").trim()).toBe('workspace/given');
-    expect(existsSync(join(sb, '.contexture/configured.db'))).toBe(false);
+    const configured = join(sb, '.contexture/configured.db');
+    const s = store(sb, 'sqlite', { CTX_STORAGE_SQLITE_PATH: other.db });
+    expect(answer(await s.list('docs'), 'store.list').keys).toEqual([]);
+    expect((await s.scan('docs')).stdout).toBe('{"namespace":"docs","items":[]}\n');
+    refused(await s.get('docs', 'workspace/other'), 'store.get', 1, 'ERR_ENTITY_NOT_FOUND', "key 'workspace/other' not found in namespace 'docs'");
+    expect(existsSync(configured)).toBe(false);
+    answer(await s.put('docs', 'workspace/put', 'put\n'), 'store.put');
+    answer(await s.batch('docs', [{ action: 'put', key: 'workspace/batched', value: 'batched\n' }, { action: 'delete', key: 'workspace/put' }]), 'store.batch');
+    answer(await s.put('docs', 'workspace/gone', 'gone\n'), 'store.put');
+    answer(await s.del('docs', 'workspace/gone'), 'store.delete');
+    expect(sqlite(configured, "SELECT key FROM store WHERE namespace = 'docs';").trim()).toBe('workspace/batched');
+    expect(answer(await s.list('docs'), 'store.list').keys).toEqual(['workspace/batched']);
+    expect((await s.get('docs', 'workspace/batched')).stdout).toBe('batched\n');
+    expect(digest(other.db)).toBe(otherBefore);
     expect(existsSync(join(sb, SQLITE_DB))).toBe(false);
   });
 

@@ -173,7 +173,6 @@ describe('the driver behavior test: what it catches, what it refuses, and what i
       CTX_ROOT: live,
       CTX_DIR: join(live, '.contexture'),
       CTX_STORAGE_DRIVER: 'sqlite',
-      CTX_STORAGE_SQLITE_PATH: join(live, SQLITE_DB),
       CTX_SCRATCH_ROOT: join(scratch(live), 'verb.1'),
     };
     const outside = () => treeState(live).split('\n').filter((l) => !l.startsWith('.contexture/tmp/')).join('\n');
@@ -185,9 +184,7 @@ describe('the driver behavior test: what it catches, what it refuses, and what i
     expect(r.code).toBe(0);
     expect(outside()).toBe(fingerprint);
     expect(treeState(scratch(live))).toBe(found);
-    const naive = stage('posix', 'behavior-naive');
-    dataFile(naive, 'modules', 'live', 'key: <a>/<b>\n');
-    const leak = await exec(join(naive, RESOLVER), ['store.put', 'live', 'leak/x'], { cwd: naive, input: 'leak\n', env });
+    const leak = await exec(join(live, RESOLVER), ['store.put', 'live', 'leak/x'], { cwd: live, input: 'leak\n', env });
     expect(leak.code).toBe(0);
     expect(outside()).not.toBe(fingerprint);
   });

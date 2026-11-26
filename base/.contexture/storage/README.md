@@ -555,8 +555,9 @@ store-move retire <source> <backup|delete> [<stamp>] [--rescan]  after a passed 
 ```
 
 Every command first refuses rc 1 `ERR_INVALID_ARGUMENT` while a `CTX_STORAGE_` variable
-other than the token is set (a `CTX_STORAGE_SQLITE_PATH` or `CTX_STORAGE_DRIVER` would point
-a driver at another store), and a namespace listing that exits non zero refuses rc 2
+other than the token is set (a `CTX_STORAGE_DRIVER` override, or a location variable a
+custom driver reads, would point a driver at another store), and a namespace listing that
+exits non zero refuses rc 2
 `ERR_STORAGE_READ` quoting its first reason. The preflight reads every namespace, then
 refuses in this order: rc 2 `ERR_STORAGE_READ` a source namespace whose `store.list` reads
 no key while its `storage.health` reads the store present (a blind source); rc 1
@@ -688,8 +689,8 @@ candidate that does not resolve there (a core driver of its name shadowing it) a
 cannot run. Every call runs that workspace's own `driver-resolver` from its root under
 `env -i` with `PATH`, `HOME`, `USER`, `TZ`, `LC_ALL=C`, `TMPDIR` and `CTX_SCRATCH_ROOT`
 inside the root, and `CTX_ROOT` the root, so an exported `CTX_ROOT`, a `CTX_DIR`, a
-`CTX_STORAGE_DRIVER` override, and a `CTX_STORAGE_SQLITE_PATH` never reach it. The two
-sides run as two background jobs over the same steps, every one through the resolver's
+`CTX_STORAGE_DRIVER` override, and any other `CTX_STORAGE_` variable never reach it. The
+two sides run as two background jobs over the same steps, every one through the resolver's
 dispatch (the handshake and the key and value gate before the driver) and none sending an
 input the gate refuses, since that compares the core with itself.
 

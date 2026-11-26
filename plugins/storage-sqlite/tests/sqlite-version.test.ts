@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DOCS_SHAPED, dataFile } from '@support/data-file';
@@ -15,7 +16,8 @@ const PROBE = join(ROOT, 'plugins/storage-sqlite/hooks/probe');
 function under(version: string) {
   const sb = stage('sqlite');
   dataFile(sb, 'extensions', 'docs', DOCS_SHAPED);
-  return store(sb, 'sqlite', { ...fakeSqlite(version), CTX_STORAGE_SQLITE_PATH: join(sb, 'store.db') });
+  appendFileSync(join(sb, '.contexture/config'), 'storage.database: store.db\n');
+  return store(sb, 'sqlite', fakeSqlite(version));
 }
 
 const probe = (env: Record<string, string>) => exec('/bin/sh', [PROBE], { cwd: sandbox('probe'), env });
