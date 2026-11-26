@@ -338,11 +338,13 @@ for (const driver of DRIVERS) {
     });
 
     describe('faults the driver re-frames', () => {
-      it('[the-engine-r21] a failing value read leaves no partial scan answer: posix names the key its encoder failed on, sqlite refuses its one read whole', async () => {
+      it('[the-engine-r21] a failing value read leaves no partial scan answer: posix, its one pass read failing, names the key its encoder then failed on, sqlite refuses its one read whole', async () => {
         const sb = fresh(keyed);
         if (driver === 'posix') {
           plantScript(sb, 'store-b64', 'printf "store-b64: planted encoder failure\\n" >&2\nexit 2');
-          refused(await store(sb, driver).scan('docs'), 'store.scan', 2, 'ERR_STORAGE_READ', "cannot read key 'workspace/B' in namespace 'docs'");
+          const od = spawnSync('sh', ['-c', 'command -v od'], { encoding: 'utf8' }).stdout.trim();
+          const plant = pathPlant('od', `case "$3" in -tx1) printf 'od: planted read failure\\n' >&2; exit 1 ;; esac\nexec "${od}" "$@"`);
+          refused(await store(sb, driver, plant).scan('docs'), 'store.scan', 2, 'ERR_STORAGE_READ', "cannot read key 'workspace/B' in namespace 'docs'");
           return;
         }
         const real = spawnSync('sh', ['-c', 'command -v sqlite3'], { encoding: 'utf8' }).stdout.trim();

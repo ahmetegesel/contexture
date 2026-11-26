@@ -169,6 +169,7 @@ STORE_SDERR=""
 STORE_TEMPS=""
 STORE_FB_SERVED=0
 SB_ON=0
+SC_BG=""
 
 # store_temp <path>: a read's temp file, named for store_cleanup as soon as mktemp answers it,
 # so a HUP, INT, or TERM during the read removes it (a signal inside mktemp's own fork,
@@ -179,6 +180,12 @@ store_temp() {
 }
 
 store_cleanup() {
+  if [ -n "${SC_BG:-}" ]; then
+    SC_BG=""
+    set +u
+    [ -z "$!" ] || { kill "$!"; wait "$!"; } 2>/dev/null
+    set -u
+  fi
   [ "${SB_ON:-0}" -eq 1 ] && sb_rollback
   SB_ON=0
   [ -n "${STORE_SDERR:-}" ] && rm -f "$STORE_SDERR" 2>/dev/null
@@ -1279,10 +1286,178 @@ store_batch() {
   printf '{"namespace":"%s","actions":%s}\n' "$(escape_json "$SB_NS")" "$SB_N"
 }
 
+# SC_ENC: the awk of one run of the one pass scan. Its first file is the run's wc -c answer, a
+# size and a path a line in the run's order (a total line ignored); stdin is od -An -v -tx1 of
+# the run's files, one stream split back into the files by those sizes. Each path (./, the
+# root or the fallback root, the key, the suffix) opens its item, and its bytes are encoded in
+# groups of three from a buffer never longer than one od line, two table lookups a group, so
+# the time is linear in a value's size on every awk. A run whose answer does not name its paths
+# in order, or whose stream is not the sizes' sum in hex, exits 3.
+SC_ENC='
+function item(   p, k) {
+  for (;;) {
+    if (++cur > np) return
+    p = P[cur]
+    k = (substr(p, 1, lr) == pr) ? substr(p, lr + 1) : substr(p, lf + 1)
+    printf "%s{\"key\":\"%s\",\"value_b64\":\"", sep, substr(k, 1, length(k) - ls)
+    sep = ","
+    left = S[cur]
+    if (left > 0) return
+    printf "\"}"
+  }
+}
+function enc(   n, m, j, o) {
+  n = length(h)
+  m = n - n % 6
+  o = ""
+  for (j = 1; j <= m; j += 6) o = o T[substr(h, j, 3)] T[substr(h, j + 3, 3)]
+  printf "%s", o
+  h = substr(h, m + 1)
+}
+function done(   a, c) {
+  if (length(h) == 2) {
+    a = V[h]
+    printf "%s%s==", substr(B, int(a / 4) + 1, 1), substr(B, (a % 4) * 16 + 1, 1)
+  } else if (length(h) == 4) {
+    a = V[substr(h, 1, 2)]
+    c = V[substr(h, 3, 2)]
+    printf "%s%s%s=", substr(B, int(a / 4) + 1, 1), substr(B, (a % 4) * 16 + int(c / 16) + 1, 1), substr(B, (c % 16) * 4 + 1, 1)
+  }
+  h = ""
+  printf "\"}"
+  item()
+}
+BEGIN {
+  B = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+  H = "0123456789abcdefABCDEF"
+  for (i = 1; i <= 22; i++) D[i] = (i <= 16) ? i - 1 : i - 7
+  for (a = 1; a <= 22; a++) for (b = 1; b <= 22; b++) {
+    v = D[a] * 16 + D[b]
+    x = substr(H, a, 1) substr(H, b, 1)
+    V[x] = v
+    for (c = 1; c <= 22; c++) {
+      n = v * 16 + D[c]
+      T[x substr(H, c, 1)] = substr(B, int(n / 64) + 1, 1) substr(B, n % 64 + 1, 1)
+    }
+  }
+  np = split(ENVIRON["SC_RUN"], P, /\t/)
+  pr = "./" ENVIRON["SC_ROOT"] "/"
+  lr = length(pr)
+  lf = length("./" ENVIRON["SC_FB"] "/")
+  ls = length(ENVIRON["SC_SFX"])
+  sep = ENVIRON["SC_SEP"]
+}
+FILENAME == ARGV[1] {
+  if (substr($2, 1, 2) != "./") next
+  if (++ns > np || $2 != P[ns] || $1 !~ /^[0-9]+$/) bad = 1
+  S[ns] = $1 + 0
+  next
+}
+!go {
+  if (bad || ns != np) { bad = 1; exit }
+  go = 1
+  item()
+}
+{
+  gsub(/[ \t]/, "")
+  s = $0
+  if (length(s) % 2 || s ~ /[^0-9a-fA-F]/) { bad = 1; exit }
+  while (s != "") {
+    if (cur > np) { bad = 1; exit }
+    t = 2 * left
+    if (length(s) < t) { h = h s; left -= length(s) / 2; s = "" }
+    else { h = h substr(s, 1, t); s = substr(s, t + 1); left = 0 }
+    enc()
+    if (left == 0) done()
+  }
+}
+END {
+  if (!bad && !go) {
+    if (ns != np) bad = 1
+    else { go = 1; item() }
+  }
+  if (bad || cur <= np) exit 3
+}'
+
+# store_scan_run <paths> <separator>: one run of the one pass scan appended to the answer: the
+# run's paths (relative to the workspace root, tab separated, at most 32768 bytes, so no call
+# meets the system's argument limit) sized by wc -c, read by one od into SC_ENC, and sized
+# again; rc 1 when a file cannot be sized or read, or changed size while the run read it, so
+# the bytes of one value never land in another's. The od and its awk run in the background
+# under the wait builtin, which a trapped signal interrupts at once, and the trap stops them
+# (SC_BG marks the job from before its fork, so $! names its awk, and the od ends on its pipe).
+store_scan_run() {
+  sc_s1=$(set -f; IFS='	'; CDPATH="" cd "$STORE_WS" 2>/dev/null && exec wc -c $1 < /dev/null 2>/dev/null) || return 1
+  { printf '%s\n' "$sc_s1" > "$sc_keys.sizes"; } 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  SC_BG=1
+  (set -f; IFS='	'; CDPATH="" cd "$STORE_WS" && exec od -An -v -tx1 $1) 2>/dev/null \
+    | SC_RUN="$1" SC_ROOT="$SD_ROOT" SC_FB="$SD_FALLBACK" SC_SFX="$SD_SUFFIX" SC_SEP="$2" LC_ALL=C \
+      awk "$SC_ENC" "$sc_keys.sizes" - 2>/dev/null >> "$sc_out" &
+  wait "$!"
+  sc_rc=$?
+  SC_BG=""
+  [ "$sc_rc" -eq 0 ] || return 1
+  sc_s2=$(set -f; IFS='	'; CDPATH="" cd "$STORE_WS" 2>/dev/null && exec wc -c $1 < /dev/null 2>/dev/null) || return 1
+  [ "$sc_s1" = "$sc_s2" ]
+}
+
+# store_scan_pass: the answer's items in one pass over the namespace's files: the root's keys
+# as the listing walk reads them, then each key only the fallback root lists resolved as a read
+# resolves it (the root's copy when the root holds it in its stored spelling, a key that is no
+# regular file skipped), merged in bytewise order into runs of paths, each run read by
+# store_scan_run, so the external commands of a scan grow with its runs, never with its keys;
+# rc 1 when a run cannot be read in one pass
+store_scan_pass() {
+  { store_list_root "$STORE_WS/$SD_ROOT" > "$sc_keys"; } 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  store_temp "$sc_keys.more"
+  store_temp "$sc_keys.runs"
+  store_temp "$sc_keys.sizes"
+  scratch_new "$sc_keys.more" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  if [ -n "$SD_FALLBACK" ]; then
+    store_temp "$sc_keys.fb"
+    store_temp "$sc_keys.fb.only"
+    { store_list_root "$STORE_WS/$SD_FALLBACK" > "$sc_keys.fb" \
+        && LC_ALL=C awk 'FILENAME == ARGV[1] { R[$0] = 1; next } !($0 in R)' "$sc_keys" "$sc_keys.fb" > "$sc_keys.fb.only"; } 2>/dev/null \
+      || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+    [ -s "$sc_keys.fb.only" ] && STORE_FB_SERVED=1
+    while IFS= read -r sc_key; do
+      if store_key_exists_in "$STORE_WS/$SD_ROOT" "$sc_key"; then sc_dir=$SD_ROOT; else sc_dir=$SD_FALLBACK; fi
+      [ -f "$STORE_WS/$sc_dir/$sc_key$SD_SUFFIX" ] || continue
+      scratch_add "$sc_keys.more" '%s\t./%s/%s%s\n' "$sc_key" "$sc_dir" "$sc_key" "$SD_SUFFIX" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+    done < "$sc_keys.fb.only"
+  fi
+  { SC_ROOT="$SD_ROOT" SC_SFX="$SD_SUFFIX" LC_ALL=C awk '
+    function add(p) {
+      if (n && len + length(p) + 1 > 32768) { printf "\n"; n = len = 0 }
+      printf "%s%s", (n ? "\t" : ""), p
+      n++
+      len += length(p) + 1
+    }
+    FILENAME == ARGV[1] { i = index($0, "\t"); m++; MK[m] = substr($0, 1, i - 1); MP[m] = substr($0, i + 1); next }
+    {
+      k = $0 ""
+      while (j < m && MK[j + 1] < k) add(MP[++j])
+      add("./" ENVIRON["SC_ROOT"] "/" k ENVIRON["SC_SFX"])
+    }
+    END {
+      while (j < m) add(MP[++j])
+      if (n) printf "\n"
+    }' "$sc_keys.more" "$sc_keys" > "$sc_keys.runs"; } 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  sc_sep=""
+  while IFS= read -r sc_run; do
+    store_scan_run "$sc_run" "$sc_sep" || return 1
+    sc_sep=,
+  done < "$sc_keys.runs"
+  return 0
+}
+
 # store_scan: every key the module pattern admits with its raw value in base64, bytewise,
-# one compact JSON answer; no limit (the module stops after the keys it needs). The answer
-# is staged and printed whole, so a read failure mid-scan prints nothing on stdout: the
-# refusal is the one stderr line and the call is all or none.
+# one compact JSON answer; no limit (the module stops after the keys it needs). The one pass
+# (store_scan_pass) answers it; when a run cannot be read in one pass (a value that cannot be
+# read, or one written while the scan read it), the scan is read again key by key through the
+# storage core's encoder, which skips a key gone since the listing and names the key it cannot
+# read. The answer is staged and printed whole, so a read failure mid-scan prints nothing on
+# stdout: the refusal is the one stderr line and the call is all or none.
 store_scan() {
   FN=store.scan
   [ $# -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "store.scan takes one argument, the namespace"
@@ -1297,8 +1472,24 @@ store_scan() {
   store_temp "$sc_keys"
   sc_out=$(mktemp "$(scratch_dir)/store-scan-out.XXXXXX" 2>/dev/null) || { rm -f "$sc_keys"; refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"; }
   store_temp "$sc_out"
+  sc_head=$(escape_json "$sc_ns")
+  scratch_add "$sc_out" '{"namespace":"%s","items":[' "$sc_head" || { rm -f "$sc_keys" "$sc_out"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
+  if ! store_scan_pass; then
+    store_scan_keys
+  fi
+  rm -f "$sc_keys" "$sc_keys.more" "$sc_keys.runs" "$sc_keys.sizes" "$sc_keys.fb" "$sc_keys.fb.only"
+  scratch_add "$sc_out" ']}\n' || { rm -f "$sc_out"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
+  cat "$sc_out"
+  rm -f "$sc_out"
+  store_notice
+}
+
+# store_scan_keys: the answer read again key by key from a fresh listing, each value through
+# the storage core's encoder
+store_scan_keys() {
+  STORE_FB_SERVED=0
   { store_list_keys > "$sc_keys"; } 2>/dev/null \
-    && scratch_add "$sc_out" '{"namespace":"%s","items":[' "$(escape_json "$sc_ns")" \
+    && scratch_new "$sc_out" && scratch_add "$sc_out" '{"namespace":"%s","items":[' "$sc_head" \
     || { rm -f "$sc_keys" "$sc_out"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
   sc_first=1
   while IFS= read -r sc_key; do
@@ -1312,11 +1503,6 @@ store_scan() {
     scratch_add "$sc_out" '%s{"key":"%s","value_b64":"%s"}' "$sc_sep" "$(escape_json "$sc_key")" "$sc_v" \
       || { rm -f "$sc_keys" "$sc_out"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
   done < "$sc_keys"
-  rm -f "$sc_keys"
-  scratch_add "$sc_out" ']}\n' || { rm -f "$sc_out"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
-  cat "$sc_out"
-  rm -f "$sc_out"
-  store_notice
 }
 
 # store_query_read: the query payload line, decoded (backslash, n, t, r), with a sentinel

@@ -355,7 +355,19 @@ ignored on entry, which no shell can trap or reset, so that caller stops it with
 TERM.
 
 The scan answers the namespace's admitted keys with the raw value in
-base64, no limit; the module decodes and stops after the keys it needs. No driver keeps a
+base64, no limit; the module decodes and stops after the keys it needs. The posix scan reads
+the namespace in one pass: the root's keys as the listing walk reads them and each key only
+the fallback root lists placed where a get reads it, merged bytewise into runs of paths of at
+most 32768 bytes (so no call meets the system's argument limit), each run sized by `wc -c`,
+read by one `od -tx1` into one `awk` that splits the stream back into the values by those
+sizes and encodes three bytes at a time from a buffer never longer than one `od` line (linear
+in a value's size on every supported awk), then sized again; its external commands grow with
+its runs, never with its keys. A run whose file cannot be sized or read, or changed size while
+the run read it (a write landing beside the unlocked scan), drops the pass, and the scan is
+read again key by key through `store-b64`, which skips a key gone since the listing and names
+the key it cannot read, so one value's bytes never land in another's. A run's `od` and `awk`
+run in the background under the `wait` builtin, so a hangup, interrupt, or termination stops
+them at once, the `od` ending on its pipe. No driver keeps a
 change log: a module's delta is its own (the docs module's is git), and `store.changes` is
 an unknown function rc 2.
 
@@ -667,10 +679,12 @@ and `retire` `<ns>: <n> keys retired` and `retired <n> keys in <m> namespaces` c
 `backup stamped <stamp>`, `no backup kept`, or `nothing to back up`. A refusal is one stderr
 line, `store-move <command>: error: <message> (<CODE>)`, rc 1 semantic and rc 2 storage over
 the existing codes, its keys, counts, or diagnosis on indented lines after it; nothing printed
-names a storage, scratch, or driver path. Measured on one host, posix and sqlite, each leg
-alone: 83 small keys copy in about 6 s and check in about 3.5 s either way; a 6 MiB value
-adds about 7 s to a copy and 5.5 s to a check; 1003 keys of 10 KB copy in about 45 s, check in
-about 22 s, and retire or unwind in 13 to 19 s.
+names a storage, scratch, or driver path. Measured on one host through the storage-sqlite
+install and uninstall at 3428 records (37.9 MB of unit values): the copy into sqlite takes
+about 106 s (the posix scans 13 s, the sqlite batches 76 s), its check 29 s, and its retire
+57 s; the copy back into posix about 104 s (the posix batches 76 s, the posix verify scan
+13 s) and its check 29 s. A posix scan of that unit namespace takes about 12.5 s, 3.7 ms a
+key, where a key by key scan took about 60 s.
 
 ## The behavior test a driver meets
 
