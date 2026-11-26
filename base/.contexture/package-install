@@ -864,6 +864,7 @@ driver_traps() {
 }
 
 driver_pre() {
+  driver_traps
   _v=$(dl_env_vars)
   [ -z "$_v" ] || die 1 "the environment sets $_v; a storage variable can point a driver elsewhere, so unset it and run again"
   _o=$(dl_driver_pkgs | awk -v p="$pkg_name" '$1 != p { print $1; exit }')
@@ -914,7 +915,6 @@ driver_pre() {
       dl_ask "$scratch/old.counts" "updating '$pkg_name' from storage format $dl_old_format to $pkg_format moves the record out through posix and leaves the '$pkg_driver' driver's old storage, the old copy" || exit $?
       ;;
   esac
-  driver_traps
   case "$dl_mode" in
     plain)
       dl_phase=plain-pre
@@ -993,11 +993,13 @@ driver_post() {
   cp "$DL_SCR/move.out" "$scratch/copy.lines"
   grep ': note: ' "$DL_SCR/move.err" > "$scratch/copy.notes" 2>/dev/null
   dl_step="the switch"
+  { printf '%s %s %s\n' "$pkg_name" "$pkg_driver" "$pkg_version" > "$DL_RUN/run" \
+    && printf 'check\nretire\nfinish\n' > "$DL_RUN/pending"; } 2> /dev/null \
+    || { dl_why="the run folder cannot be written"; in_fail; }
   in_switch=1
   dl_conf_set storage.driver "$pkg_driver" || { dl_why=$(dl_first "$DL_SCR/conf.err"); in_fail; }
   dl_step="the check"
   dl_move "$DL_RUN/in" check posix || { dl_why=$(dl_first "$DL_SCR/move.err"); in_fail; }
-  printf '%s %s %s\n' "$pkg_name" "$pkg_driver" "$pkg_version" > "$DL_RUN/run"
   printf 'retire\nfinish\n' > "$DL_RUN/pending"
   dl_keep=1
   dl_phase=past

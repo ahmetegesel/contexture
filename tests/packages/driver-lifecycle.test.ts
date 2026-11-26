@@ -187,9 +187,10 @@ describe.concurrent('a driver package install: a failure at each step unwinds to
 
 describe.concurrent('a driver package install: a hangup or termination during a held step', () => {
   it.each([
-    ['SIGTERM', 143, 'slow-prepare', 'twin-prepare.pid'],
-    ['SIGHUP', 129, 'slow-batch', 'twin-batch.pid'],
-  ] as const)('[the-engine-r17] %s stops the held step, unwinds, exits %i, and leaves no process', SLOW, async (sig, rc, slow, pidFile) => {
+    ['SIGTERM', 'slow-prepare', 143, 'twin-prepare.pid'],
+    ['SIGHUP', 'slow-batch', 129, 'twin-batch.pid'],
+    ['SIGTERM', 'slow-prepare-child', 143, 'twin-prepare-child.pid'],
+  ] as const)('[the-engine-r17] %s while the %s seam holds stops the held step with every process under it, unwinds, exits %i, and leaves no process', SLOW, async (sig, slow, rc, pidFile) => {
     const sb = sandbox();
     await seed(sb);
     const p = twinPkg(sb);
@@ -379,6 +380,51 @@ describe.concurrent('crash recovery from the move state', () => {
     expect(again.stdout).toMatch(/; the record reads as before\n$/);
     expect(await keys(sb, 'posix', 'unit')).toEqual([]);
     expect(runs(sb)).toEqual([]);
+    expect(await moveState(sb)).toBe('free');
+  });
+
+  it('[the-engine-r17, the-engine-r-mvf01] a crash during the check, after the switch, is rolled forward by the next install: the check run again in the stopped run\'s folder, then its old copy step under its stamp', SLOW, async () => {
+    const sb = sandbox();
+    await seed(sb);
+    const p = twinPkg(sb);
+    seam(sb, 'slow-check');
+    const run = launch('sh', ['.contexture/package-install', p], { cwd: sb, input: null, group: true, env: { CTX_ROOT: sb, CTX_PACKAGE_OLD: 'backup' }, timeout: 600_000 });
+    await waitFor(join(sb, '.contexture/tmp/twin-scan.pid'));
+    run.signal('SIGKILL');
+    await run.result;
+    rmSync(join(sb, '.contexture/twin-seams'), { recursive: true });
+    expect(conf(sb)).toMatch(/^storage\.driver: twin$/m);
+    expect(await keys(sb, 'posix', 'unit')).toHaveLength(4);
+    const again = await install(sb, p, '--backup-old');
+    expect(again.code, again.stderr).toBe(0);
+    expect(again.stdout).toMatch(/^package-install: finished what a stopped run of 'twin-pkg' left after its verify: its check passed again; retired 4 keys in \d+ namespaces, backup stamped [0-9-]+; the driver's finish ran\n/m);
+    expect(await keys(sb, 'posix', 'unit')).toEqual([]);
+    expect(runs(sb)).toEqual([]);
+    expect(await moveState(sb)).toBe('free');
+  });
+
+  it.each([
+    ['SIGTERM', 'install', 143],
+    ['SIGHUP', 'uninstall', 129],
+  ] as const)('[the-engine-r17, the-engine-r-mvf01] %s while the %s run recovers a stale move stops the held hook and leaves no process, the freeze kept for the next run', SLOW, async (sig, verb, rc) => {
+    const sb = sandbox();
+    const p = twinPkg(sb);
+    expect((await install(sb, p)).code).toBe(0);
+    expect((await ctx(sb, ['store', 'config', 'unset', 'driver'])).code).toBe(0);
+    holdMove(sb, 'twin', 'dead');
+    seam(sb, 'slow-cleanup');
+    const script = verb === 'install' ? ['.contexture/package-install', p] : ['.contexture/package-uninstall', 'twin-pkg'];
+    const run = launch('sh', script, { cwd: sb, input: null, env: { CTX_ROOT: sb }, timeout: 600_000 });
+    const held = await waitFor(join(sb, '.contexture/tmp/twin-cleanup.pid'));
+    run.signal(sig);
+    const r = await run.result;
+    expect(r.code, r.stderr).toBe(rc);
+    expect(alive(held)).toBe(false);
+    expect(await moveState(sb)).toBe('stale twin');
+    rmSync(join(sb, '.contexture/twin-seams'), { recursive: true });
+    const again = await uninstall(sb, 'twin-pkg');
+    expect(again.code, again.stderr).toBe(0);
+    expect(again.stdout).toContain("package-uninstall: recovered a move into 'twin' stopped before its switch");
     expect(await moveState(sb)).toBe('free');
   });
 });

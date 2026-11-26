@@ -23,10 +23,12 @@ export const SEAMS = '.contexture/twin-seams';
 // rebased under one drawer folder (.contexture/<root>) and its card naming the twin, so it
 // stores apart from posix and answers the behavior test as posix does. A wrapper in front
 // reads the seams: fail-batch refuses every batch, slow-batch holds a batch (its pid noted in
-// the drawer's scratch), flip-scan changes the values of a namespace's second scan on, and
-// scanFlip names a namespace whose every scan this version changes. Its hooks keep that one
-// folder: prepare refuses a folder that holds a file (and the prepare-refuse and slow-prepare
-// seams), cleanup removes it, finish out moves it into the backup folder or deletes it, each
+// the drawer's scratch), slow-check holds a scan through the twin once the configuration names
+// it (the check's), flip-scan changes the values of a namespace's second scan on, and scanFlip
+// names a namespace whose every scan this version changes. Its hooks keep that one folder:
+// prepare refuses a folder that holds a file (and the prepare-refuse, slow-prepare, and
+// slow-prepare-child seams, the last holding a child of its own), cleanup removes it (and
+// slow-cleanup holds it), finish out moves it into the backup folder or deletes it, each
 // noting its environment in the drawer's scratch.
 export function twinPkg(sb: string, o: TwinOptions = {}): string {
   const name = o.name ?? 'twin-pkg';
@@ -52,6 +54,7 @@ export function twinPkg(sb: string, o: TwinOptions = {}): string {
     '    if [ -f "$s/slow-batch" ]; then printf \'%s\\n\' "$$" > .contexture/tmp/twin-batch.pid; exec sleep 60; fi',
     '    ;;',
     `  store.scan)${flip}`,
+    `    if [ -f "$s/slow-check" ] && grep -qx 'storage.driver: ${driver}' .contexture/config 2>/dev/null; then printf '%s\\n' "$$" > .contexture/tmp/twin-scan.pid; exec sleep 60; fi`,
     '    if [ -f "$s/flip-scan" ]; then',
     '      f=.contexture/tmp/twin-scans.$2',
     '      n=$(( $(cat "$f" 2>/dev/null || echo 0) + 1 ))',
@@ -72,10 +75,17 @@ export function twinPkg(sb: string, o: TwinOptions = {}): string {
       `[ -z "$(find .contexture/${root} -type f 2>/dev/null | head -n 1)" ] || { echo 'the twin store already holds records' >&2; exit 1; }`,
       `[ ! -f ${SEAMS}/prepare-refuse ] || { echo 'the twin refuses to prepare' >&2; exit 1; }`,
       `if [ -f ${SEAMS}/slow-prepare ]; then echo $$ > .contexture/tmp/twin-prepare.pid; exec sleep 60; fi`,
+      `if [ -f ${SEAMS}/slow-prepare-child ]; then sleep 60 & echo $! > .contexture/tmp/twin-prepare-child.pid; wait; fi`,
       'exit 0',
       '',
     ].join('\n'), 0o755);
-    put(join(part, 'hooks/cleanup'), ['#!/bin/sh', note('cleanup'), `rm -rf .contexture/${root}`, ''].join('\n'), 0o755);
+    put(join(part, 'hooks/cleanup'), [
+      '#!/bin/sh',
+      note('cleanup'),
+      `if [ -f ${SEAMS}/slow-cleanup ]; then echo $$ > .contexture/tmp/twin-cleanup.pid; exec sleep 60; fi`,
+      `rm -rf .contexture/${root}`,
+      '',
+    ].join('\n'), 0o755);
     put(join(part, 'hooks/finish'), [
       '#!/bin/sh',
       `${note('finish')}.$CTX_DRIVER_DIRECTION`,

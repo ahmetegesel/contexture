@@ -219,16 +219,6 @@ if [ "$pkg_kind" = driver ]; then
   [ -z "$_v" ] || die 1 "the environment sets $_v; a storage variable can point a driver elsewhere, so unset it and run again"
   dl_run_make || die 2 "the drawer's scratch folder cannot hold the driver run, and a driver run never uses the system temp (nothing removed)"
   trap 'rm -rf "$scratch"; [ "$dl_keep" -eq 1 ] || dl_run_drop' EXIT
-  dl_recover || exit $?
-  if [ "$(cfg_effective_driver "$ws_root/.contexture")" = "$pkg_driver" ]; then
-    dl_mode=out
-    _lead="uninstalling '$pkg_name' moves the record back into posix and leaves the '$pkg_driver' driver's own storage, the old copy"
-  else
-    dl_mode=idle
-    _lead="uninstalling '$pkg_name' leaves the '$pkg_driver' driver's own storage, the old copy"
-  fi
-  dl_count "$pkg_driver" "$scratch/old.counts" || die 2 "the namespaces cannot be listed, so the driver's storage cannot be counted (nothing removed)"
-  dl_ask "$scratch/old.counts" "$_lead" || exit $?
 
   on_sig() {
     trap '' HUP INT TERM
@@ -251,6 +241,17 @@ if [ "$pkg_kind" = driver ]; then
   trap 'on_sig 129' HUP
   trap 'on_sig 130' INT
   trap 'on_sig 143' TERM
+
+  dl_recover || exit $?
+  if [ "$(cfg_effective_driver "$ws_root/.contexture")" = "$pkg_driver" ]; then
+    dl_mode=out
+    _lead="uninstalling '$pkg_name' moves the record back into posix and leaves the '$pkg_driver' driver's own storage, the old copy"
+  else
+    dl_mode=idle
+    _lead="uninstalling '$pkg_name' leaves the '$pkg_driver' driver's own storage, the old copy"
+  fi
+  dl_count "$pkg_driver" "$scratch/old.counts" || die 2 "the namespaces cannot be listed, so the driver's storage cannot be counted (nothing removed)"
+  dl_ask "$scratch/old.counts" "$_lead" || exit $?
 fi
 
 # driver_finish_out: the driver's own storage, the old copy, backed up or deleted as answered
