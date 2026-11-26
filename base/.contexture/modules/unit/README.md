@@ -40,7 +40,6 @@ lib/ops.awk       the record rules: the writes, the reads, the audit, the livene
 lib/search.awk    the exact search over the canonical render
 lib/refs.awk      the refs of a write payload
 lib/payfield.awk  one decoded payload value
-lib/b64           the store.batch value encoder
 lib/fold-*.awk    the fold verb's programs, each run with fold-lib.awk (the flat answer
                   reader): fold-find-active.awk (the live fold start), fold-plan-gen.awk
                   and fold-plan-load.awk (the plan written and read back),
@@ -99,7 +98,12 @@ key absent from the batch reads absent exactly as its one key read did.
 
 A write fetches under the unit lock (`.contexture/tmp/locks/unit/<unit>.lock`), stages the
 changed artifacts with the record engine, and lands them through one `store.batch`, all or
-none. The multi-key writes are the batch's: `session.create`
+none. Each staged value enters the batch through the storage core's encoder, `store-b64`,
+found beside the library the data script loaded, its exit code read: it answers a value only
+when it read the staged file whole, so a failed or short read refuses the write rc 2
+`ERR_STORAGE_WRITE` naming the key (`cannot encode the staged value of '<key>': its encoder
+did not read it whole`) before the batch, nothing written; the module keeps no encoder of
+its own. The multi-key writes are the batch's: `session.create`
 the four fresh artifacts, `task.start` the backlog alone (the state no longer holds a
 next action), `task.complete` and
 `task.drop` the backlog and the journal, `session.stamp` the state and the journal,
@@ -341,13 +345,14 @@ refusal, the file-pointer exemption, the legacy ref, the active listing, the per
 read), the audit classes, and
 the record engine alone (`lib/canon.awk`, `lib/model.awk`, `lib/ops.awk`), held equal to
 this data script for every dispatched function by a differential test, with the search,
-render, payload, and base64 programs each tested alone. The vitest project
+render, and payload programs each tested alone. The vitest project
 `unit-verbs` (`tests/unit-verbs`, `bun run test:unit-verbs`; `bun run test:unit` runs both
 unit projects) proves the `ctx unit` and `ctx lane` verbs once, on posix: one file per verb
 family, each over its own seeded snapshot built through the verbs, the input matrices of
 `lib/verb.sh` (the REF shapes, the UTF-8 and NUL checks, the newline and carriage return
 refusals) one function at a time with one wiring test per write path, the fold protocol
 and its defect classes, and the fault cases (a read-only store, an interrupted waiter, a
-killed writer, a held lock, concurrent writers). The store fuzzer's
+killed writer, a held lock, concurrent writers, and an encoder whose `od` fails or reads
+short under a write and under the pointer rewrite). The store fuzzer's
 unit-shaped profile (`tests/drivers/store-fuzz.test.ts`) is the seeded differential proof of the
 store calls the module makes across posix and sqlite.

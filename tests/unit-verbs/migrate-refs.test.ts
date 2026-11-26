@@ -1,9 +1,11 @@
+import { spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { data } from '../support/data';
 import { FALLBACK_ROOT, RECORD_ROOT } from '../support/drawer';
 import { shVerb, writeModule } from '../support/modules';
+import { pathPlant } from '../support/plants';
 import { appendArtifact, readArtifact } from '../support/record';
 import { ROOT } from '../support/root';
 import { fresh, seed } from '../support/snapshot';
@@ -372,6 +374,16 @@ describe.concurrent('ctx unit migrate: the pointer rewrite', () => {
     expect(dry.stdout.endsWith('dry run: 2 would migrate, nothing written\n')).toBe(true);
     const strip = (s: string): string => s.replace(/^token list: .*\n/m, '').replace(/\n(migrated|dry run): .*\n$/, '\n');
     expect(strip(dry.stdout)).toBe(strip(out));
+  });
+
+  it('[the-record-r-4gj4k, the-record-r9] a pointer rewrite whose encoder\'s od fails after its first line refuses rc 2 naming the key it could not encode, the storage byte equal', async () => {
+    const sb = fresh(sb0);
+    const before = treeState(join(sb, RECORD_ROOT));
+    const od = spawnSync('sh', ['-c', 'command -v od'], { encoding: 'utf8' }).stdout.trim();
+    const r = await run(sb, ['unit', 'migrate', U], { env: pathPlant('od', `'${od}' "$@" | head -n 1\nexit 1`) });
+    expect(treeState(join(sb, RECORD_ROOT)), `rc ${r.code} [${r.stderr}]`).toBe(before);
+    expect([r.code, r.stdout]).toEqual([2, '']);
+    expect(r.stderr).toMatch(new RegExp(`^unit\\.migrate: error: cannot encode the staged value of '${U}/[a-z0-9/-]+': its encoder did not read it whole \\(ERR_STORAGE_WRITE\\)\\n$`));
   });
 
   it('[the-record-r14] a load of a unit still holding old REF forms warns once after its answer, naming the verb; after the migration it warns no more', async () => {

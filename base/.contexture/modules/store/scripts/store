@@ -155,7 +155,7 @@ parse_writes() {
       [ -z "$pw_stdin" ] || die 1 ERR_INVALID_ARGUMENT "one block per call: --stdin names '$pw_stdin' already"
       pw_stdin=$pw_f
       cat > "$SCR/block"
-      pw_v=$("$CORE/store-b64" "$SCR/block") || die 2 ERR_STORAGE_READ 'cannot read the block on stdin'
+      pw_v=$("$CORE/store-b64" "$SCR/block" 2>/dev/null) || die 2 ERR_STORAGE_READ 'cannot read the block on stdin'
       [ -s "$SCR/block" ] || pw_v=""
     fi
     case "$pw_op" in
@@ -591,9 +591,10 @@ case "$verb" in
       sed "s|^$PC/\\(.*\\)\$|retired: \"\\1\"|" "$SCR/drop.keys" > "$SCR/ret.new"
       retire_into "$SCR/ret.new" "$SCR/d.new"
       printf 'state: "dropped"\n' >> "$SCR/d.new"
+      dl_b64=$("$CORE/store-b64" "$SCR/d.new" 2>/dev/null) || die 2 ERR_STORAGE_READ "cannot encode the declaration of container '$PC'"
       {
         while IFS= read -r dk; do printf 'action=delete\nkey=%s\n' "$dk"; done < "$SCR/drop.keys"
-        printf 'action=put\nkey=containers/%s\nvalue_b64=%s\n' "$PC" "$("$CORE/store-b64" "$SCR/d.new")"
+        printf 'action=put\nkey=containers/%s\nvalue_b64=%s\n' "$PC" "$dl_b64"
       } > "$SCR/batch"
       lib_or_die store_batch < "$SCR/batch" > /dev/null
       printf '%s\n' "$PC"
@@ -605,9 +606,10 @@ case "$verb" in
     fetch "$PC/$PI" "$SCR/old" || record_missing
     printf 'retired: "%s"\n' "$PI" > "$SCR/ret.new"
     retire_into "$SCR/ret.new" "$SCR/d.new"
+    dl_b64=$("$CORE/store-b64" "$SCR/d.new" 2>/dev/null) || die 2 ERR_STORAGE_READ "cannot encode the declaration of container '$PC'"
     {
       printf 'action=delete\nkey=%s\n' "$PC/$PI"
-      printf 'action=put\nkey=containers/%s\nvalue_b64=%s\n' "$PC" "$("$CORE/store-b64" "$SCR/d.new")"
+      printf 'action=put\nkey=containers/%s\nvalue_b64=%s\n' "$PC" "$dl_b64"
     } > "$SCR/batch"
     lib_or_die store_batch < "$SCR/batch" > /dev/null
     printf '%s\n' "$PI"

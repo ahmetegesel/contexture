@@ -29,6 +29,7 @@ describe.concurrent('store-b64, the base64 encoder of a scan value', () => {
     ['a NUL and 0xFF', Buffer.from([0x00, 0x41, 0xff, 0x0a])],
     ['every byte value', Buffer.from(Array.from({ length: 256 }, (_, i) => i))],
     ['1 KB of mixed bytes', Buffer.from(Array.from({ length: 1024 }, (_, i) => (i * 37) % 256))],
+    ['a 1 MB value', Buffer.from(Array.from({ length: 1 << 20 }, (_, i) => (i * 7919) % 256))],
   ])('encodes %s exactly as Buffer base64, with no line end', async (_, bytes) => {
     const [dir, path] = file(bytes);
     const r = await encode(dir, path);

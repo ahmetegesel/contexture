@@ -372,7 +372,19 @@ the key it cannot read, so one value's bytes never land in another's. `store-b64
 value only when its `od` succeeded and read as many bytes as the file held, sized before or
 after the read (a value renamed over the file between the two answers one version whole), so
 a failed or short read refuses the scan rc 2 naming the key, never answering part of the
-value. A run's `od` and `awk`
+value. Every caller reads that exit code before it uses the answer, the encoder's own line
+sent to `/dev/null` where the caller prints its own refusal: the scan's key by key read, the
+codec's NUL values (below), the behavior test's fixtures, the store module's block write and
+the declaration its record delete and container drop rewrite (rc 2 `ERR_STORAGE_READ`,
+nothing written), and the unit module's batch values, which it encodes through this one
+encoder found beside the library it loaded (rc 2 `ERR_STORAGE_WRITE` naming the key, nothing
+written). The governance encoder census (`tests/governance/encoder-status.test.ts`) holds
+every encoder call in the shipped code to it: a call of `store-b64`, of a variable assigned
+from it, or of `od` reads its status (`||` after it with no pipe between, or a condition),
+an encoding embedded in another command's argument reads red whatever its context, and the
+three calls that read no stored value whole by design stand on an exact allow list (this
+one pass `od`, whose stream the `awk` counts against the sizes, and the two `od` reads of
+random bytes for a generated id and a seed). A run's `od` and `awk`
 run in the background under the `wait` builtin, so a hangup, interrupt, or termination stops
 them at once, the `od` ending on its pipe. No driver keeps a
 change log: a module's delta is its own (the docs module's is git), and `store.changes` is

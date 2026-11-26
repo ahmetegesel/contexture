@@ -54,6 +54,7 @@ if [ -z "$U_LIB" ]; then
   printf 'unit: error: the storage core library is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
   exit 2
 fi
+U_B64=${U_LIB%/library}/store-b64
 
 U_SCR=""
 U_LOCK=""
@@ -907,7 +908,7 @@ u_mig_rewrite() {
   u_new "$U_SCR/batch" "$U_SCR/batch.out" "$U_SCR/batch.err"
   while IFS='	' read -r um_part um_key um_o um_f um_kind um_lane; do
     grep -qxF "$um_part" "$U_SCR/mg.changed" 2>/dev/null || continue
-    um_b64=$("$ULIB/b64" "$um_o") || u_refuse 2 ERR_STORAGE_WRITE "cannot encode $um_part"
+    um_b64=$("$U_B64" "$um_o" 2>/dev/null) || u_refuse 2 ERR_STORAGE_WRITE "cannot encode the staged value of '$um_key': its encoder did not read it whole"
     { {
       printf 'action=put\n' &&
       printf 'key=%s\n' "$(store_lib_escape "$um_key")" &&
@@ -1004,7 +1005,7 @@ u_commit() {
     uc_src="$U_STAGE/$uc_n"
     [ -f "$uc_src" ] || u_refuse 2 ERR_STORAGE_WRITE "the staged write of $uc_rel is missing"
     uc_key="$U_UNIT/${uc_rel%.md}"
-    uc_b64=$("$ULIB/b64" "$uc_src") || u_refuse 2 ERR_STORAGE_WRITE "cannot encode $uc_rel"
+    uc_b64=$("$U_B64" "$uc_src" 2>/dev/null) || u_refuse 2 ERR_STORAGE_WRITE "cannot encode the staged value of '$uc_key': its encoder did not read it whole"
     { {
       printf 'action=put\n' &&
       printf 'key=%s\n' "$(store_lib_escape "$uc_key")" &&
