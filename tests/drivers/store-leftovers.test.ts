@@ -7,7 +7,7 @@ import { FALLBACK_ROOT, RECORD_ROOT } from '../support/drawer';
 import { driverPath } from '../support/driver';
 import { launch } from '../support/exec';
 import { ROOT_USER, chmodPlant } from '../support/plants';
-import { DRIVERS, fts5Available, stage } from '../support/stage';
+import { DRIVERS, sqliteAvailable, stage } from '../support/stage';
 import { listAnswer, store } from '../support/store';
 import { answer, refused } from '../support/wire';
 
@@ -199,10 +199,10 @@ describe('the leftovers probe on posix', { concurrent: true }, () => {
   });
 });
 
-for (const driver of DRIVERS.filter((d) => d === 'fts5')) {
-  describe.skipIf(!fts5Available())('the leftovers probe on fts5', () => {
+for (const driver of DRIVERS.filter((d) => d === 'sqlite')) {
+  describe.skipIf(!sqliteAvailable())('the leftovers probe on sqlite', () => {
     it('[the-engine-r-lf7vr] a driver that keeps no file tree answers its unknown function line rc 2', async () => {
-      const sb = stage(driver, 'leftovers-fts5');
+      const sb = stage(driver, 'leftovers-sqlite');
       refused(await store(sb, driver).op('storage.leftovers', ['unit']), 'storage.leftovers', 2, 'ERR_CAPABILITY_UNSUPPORTED', "unknown function 'storage.leftovers'");
     });
   });

@@ -1,18 +1,18 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect } from 'vitest';
-import { FALLBACK_ROOT, FTS5_DB, RECORD_ROOT, declaredRoots } from '../support/drawer';
+import { FALLBACK_ROOT, SQLITE_DB, RECORD_ROOT, declaredRoots } from '../support/drawer';
 import { exec } from '../support/exec';
-import { probeFts5, stage } from '../support/stage';
+import { probeSqlite, stage } from '../support/stage';
 import { unit } from '../support/unit';
 
-export function needFts5(): void {
-  expect(probeFts5(), 'sqlite3 with FTS5 on PATH: the pre-release set fails without it, since a skipped bypass guard proves nothing').toBe(true);
+export function needSqlite(): void {
+  expect(probeSqlite(), 'sqlite3 3.44 or later on PATH: the pre-release set fails without it, since a skipped bypass guard proves nothing').toBe(true);
 }
 
 export function sqliteStage(label: string): string {
-  needFts5();
-  return stage('fts5', label);
+  needSqlite();
+  return stage('sqlite', label);
 }
 
 function dataFiles(sb: string): string[] {
@@ -35,7 +35,7 @@ export async function storeKeys(sb: string, ns: string): Promise<string[]> {
 }
 
 export async function inSqliteStore(sb: string, ns: string, keys: readonly string[]): Promise<void> {
-  expect(existsSync(join(sb, FTS5_DB)), 'the store is the SQLite database').toBe(true);
+  expect(existsSync(join(sb, SQLITE_DB)), 'the store is the SQLite database').toBe(true);
   expect(namespaceRoots(sb)).toEqual(expect.arrayContaining([RECORD_ROOT, FALLBACK_ROOT]));
   expect(residue(sb), 'a namespace root folder under a SQLite store is a posix residue').toEqual([]);
   expect(await storeKeys(sb, ns)).toEqual(expect.arrayContaining([...keys]));

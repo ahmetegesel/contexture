@@ -121,8 +121,7 @@ read_conf_driver() {
 # Locate driver executable: the storage core's drivers first, then the extension root's
 # package drivers, then the transitional locations (workspace drivers, module-owned
 # drivers, the base mirror, PATH). The core drivers and the extension root are the
-# settled end shape; the module tree carries the fts5 driver until the module system
-# moves it to the extension root.
+# settled end shape; no shipped driver lives in a transitional tier.
 find_driver_executable() {
   ctx_dir="$1"
   driver="$2"
@@ -167,8 +166,7 @@ find_driver_executable() {
     return 0
   fi
 
-  # Tier 4: Module-owned drivers (transitional; the fts5 driver lives here until the
-  # module system moves it to the extension root)
+  # Tier 4: Module-owned drivers (transitional; no shipped driver lives here)
   for mod_dir in "$ctx_dir"/modules/*; do
     [ -d "$mod_dir" ] || continue
     if [ -x "$mod_dir/drivers/$driver/driver" ]; then

@@ -103,7 +103,7 @@ async function writeCorpus(sb: string): Promise<void> {
   if (pending.length) throw new Error(`the store seed refused: ${pending.map(([k]) => k).join(', ')}`);
 }
 
-export const fts5Corpus = seedSteps('docs-fts5', [
+export const sqliteCorpus = seedSteps('docs-sqlite', [
   {
     name: 'corpus',
     build: async (sb) => {
@@ -112,4 +112,4 @@ export const fts5Corpus = seedSteps('docs-fts5', [
       rmSync(join(sb, 'docs'), { recursive: true });
     },
   },
-], 'fts5');
+], 'sqlite');

@@ -205,7 +205,7 @@ describe.concurrent('the ctx config builtin', () => {
     const before = treeState(sb);
 
     for (const args of [
-      ['config', 'set', 'storage.driver', 'fts5'],
+      ['config', 'set', 'storage.driver', 'sqlite'],
       ['config', 'unset', 'storage.driver'],
       ['config', 'set'],
       ['config', 'unset'],

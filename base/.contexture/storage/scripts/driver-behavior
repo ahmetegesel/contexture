@@ -399,15 +399,33 @@ bh_shape() {
   SH_F=${sh_s#*;}
 }
 
-# bh_health <stdout file>: the health and store fields of a health answer
+# bh_health <stdout file>: the health and store fields of a health answer in its shape, one
+# stdout line holding exactly the four keys driver, health, detail, and store in that order
+# (the driver and detail values free); an empty answer reads its fields as none, and any
+# other answer outside the shape reads as such
 bh_health() {
   awk '
+    function lit(s) { if (substr(t, p, length(s)) != s) ok = 0; p += length(s) }
+    function word(   q) { q = p; while (substr(t, p, 1) ~ /[a-z]/) p++; return substr(t, q, p - q) }
+    function str(   c) {
+      while (p <= length(t)) {
+        c = substr(t, p, 1)
+        if (c == "\\") p += 2
+        else if (c == "\"") { p++; return }
+        else p++
+      }
+      ok = 0
+    }
     { t = t $0 }
     END {
-      h = "none"; s = "none"
-      if (match(t, /"health":"[a-z]*"/)) h = substr(t, RSTART + 10, RLENGTH - 11)
-      if (match(t, /"store":"[a-z]*"/)) s = substr(t, RSTART + 9, RLENGTH - 10)
-      printf "health %s, store %s", h, s
+      if (NR == 0) { printf "health none, store none"; exit }
+      ok = (NR == 1); p = 1
+      lit("{\"driver\":\""); str()
+      lit(",\"health\":\""); h = word(); lit("\"")
+      lit(",\"detail\":\""); str()
+      lit(",\"store\":\""); s = word(); lit("\"}")
+      if (!ok || p != length(t) + 1 || h == "" || s == "") printf "an answer outside the health shape"
+      else printf "health %s, store %s", h, s
     }' "$1"
 }
 

@@ -9,7 +9,7 @@ import { holdLock } from '../support/locks';
 import { pathPlant } from '../support/plants';
 import { sandbox } from '../support/sandbox';
 import { fresh } from '../support/snapshot';
-import { DRIVERS, fts5Available } from '../support/stage';
+import { DRIVERS, sqliteAvailable } from '../support/stage';
 import { docsStore, listAnswer, store } from '../support/store';
 import { answer, refused } from '../support/wire';
 
@@ -36,7 +36,7 @@ function reading(sb: string): boolean {
 }
 
 for (const driver of DRIVERS) {
-  describe.skipIf(driver === 'fts5' && !fts5Available())(`the namespace lock on ${driver}`, { concurrent: true }, () => {
+  describe.skipIf(driver === 'sqlite' && !sqliteAvailable())(`the namespace lock on ${driver}`, { concurrent: true }, () => {
     let empty: string;
     beforeAll(async () => {
       empty = await docsStore(driver, false);

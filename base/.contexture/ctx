@@ -21,10 +21,10 @@
 # "# version: <token>" (the installer's), and a "# description:" hash block
 # last (the compose's preamble); a "# requires:" line is reserved and refused.
 # The private reader ctx _module <file> validate|summary|version|description
-# is the one module-file parser; ctx _package <file> validate|summary|version|kind|parts|driver|category|pitch|when|needs|tags|description
+# is the one module-file parser; ctx _package <file> validate|summary|version|kind|parts|driver|format|category|pitch|when|needs|tags|description
 # is the one package-manifest parser (the package root's manifest: summary, version,
-# kind feature|driver, the repeated part lines, a driver name for the driver kind,
-# and optional category, pitch, when, needs, tags, and trailing description block;
+# kind feature|driver, the repeated part lines, a driver name and a storage format
+# version for the driver kind, and optional category, pitch, when, needs, tags, and trailing description block;
 # requires is reserved and refused); ctx _reserved <name> answers the engine's reserved set
 # (rc0 reserved, rc1 not) for the package installer and the composer; ctx _builtin <name>
 # answers the engine's builtin set (unit, run, lane, rhythm, store; rc0 builtin, rc1 not) for the
@@ -264,7 +264,8 @@ module_reader() {
 #   # kind: feature|driver             required; the two package kinds
 #   # part: <type> <path>              repeatable; at least one
 #   # driver: <name>                   required exactly when kind is driver
-#   # category: <token>                optional; lowercase slug [a-z][a-z0-9-]*
+#   # format: <positive whole number>  required exactly when kind is driver; the storage format version
+#   # category: <token>               optional; lowercase slug [a-z][a-z0-9-]*
 #   # pitch: <one line>                optional; adopter-facing value pitch
 #   # when: <one line>                 optional; when to install
 #   # needs: <one line>                optional; host prerequisites summary
@@ -276,8 +277,8 @@ module_reader() {
 # module part is one folder under modules/, a driver part is storage/drivers/<name>,
 # and a rhythms part is under rhythms/. A bare # line is a comment; any other
 # "# <key>:" line is an unknown field and refuses. ctx _package answers validate,
-# summary, version, kind, parts, driver, category, pitch, when, needs, tags, and
-# description.
+# summary, version, kind, parts, driver, format, category, pitch, when, needs, tags,
+# and description.
 
 package_file_parse() {
   pf_file=$1
@@ -285,6 +286,8 @@ package_file_parse() {
   pf_version=""
   pf_kind=""
   pf_driver=""
+  pf_format=""
+  pf_format_line=0
   pf_parts=""
   pf_category=""
   pf_pitch=""
@@ -444,6 +447,21 @@ package_file_parse() {
         PF_ERROR="line $pf_lineno: the driver name is empty"
         return 1
         ;;
+      '# format: '*)
+        [ "$pf_format_line" -eq 0 ] || { PF_ERROR="line $pf_lineno: duplicate # format:"; return 1; }
+        pf_format=${pf_line#'# format: '}
+        pf_format=$(printf '%s' "$pf_format" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        case "$pf_format" in
+          '') PF_ERROR="line $pf_lineno: the format is empty"; return 1 ;;
+          *[!0-9]*|0*[1-9]*) PF_ERROR="line $pf_lineno: malformed format '$pf_format' (a positive whole number)"; return 1 ;;
+          0*) PF_ERROR="line $pf_lineno: the format is zero (a positive whole number)"; return 1 ;;
+        esac
+        pf_format_line=$pf_lineno
+        ;;
+      '# format:')
+        PF_ERROR="line $pf_lineno: the format is empty"
+        return 1
+        ;;
       '# category: '*)
         [ "$pf_seen_category" -eq 0 ] || { PF_ERROR="line $pf_lineno: duplicate # category:"; return 1; }
         pf_category=${pf_line#'# category: '}
@@ -539,7 +557,7 @@ package_file_parse() {
         PF_ERROR="line $pf_lineno: requires is reserved and refused"
         return 1
         ;;
-      '# summary:'*|'# version:'*|'# kind:'*|'# part:'*|'# driver:'*|'# category:'*|'# pitch:'*|'# when:'*|'# needs:'*|'# tags:'*|'# description:'*)
+      '# summary:'*|'# version:'*|'# kind:'*|'# part:'*|'# driver:'*|'# format:'*|'# category:'*|'# pitch:'*|'# when:'*|'# needs:'*|'# tags:'*|'# description:'*)
         PF_ERROR="line $pf_lineno: malformed field line (expected '# <field>: <value>')"
         return 1
         ;;
@@ -570,12 +588,14 @@ package_file_parse() {
   [ "$pf_part_count" -ge 1 ] || { PF_ERROR="the package manifest declares no # part: line"; return 1; }
   if [ "$pf_kind" = driver ]; then
     [ "$pf_seen_driver" -eq 1 ] || { PF_ERROR="a driver package carries no # driver: line"; return 1; }
+    [ "$pf_format_line" -gt 0 ] || { PF_ERROR="a driver package carries no # format: line"; return 1; }
     pf_dcount=$(printf '%s\n' "$pf_parts" | awk '$1 == "driver" { n++ } END { print n + 0 }')
     [ "$pf_dcount" -eq 1 ] || { PF_ERROR="a driver package declares exactly one driver part"; return 1; }
     pf_dpath=$(printf '%s\n' "$pf_parts" | awk '$1 == "driver" { print $2; exit }')
     [ "$pf_dpath" = "storage/drivers/$pf_driver" ] || { PF_ERROR="the driver part is storage/drivers/$pf_driver"; return 1; }
   else
     [ "$pf_seen_driver" -eq 0 ] || { PF_ERROR="a feature package carries no # driver: line"; return 1; }
+    [ "$pf_format_line" -eq 0 ] || { PF_ERROR="line $pf_format_line: a feature package carries no # format: line"; return 1; }
     pf_dcount=$(printf '%s\n' "$pf_parts" | awk '$1 == "driver" { n++ } END { print n + 0 }')
     [ "$pf_dcount" -eq 0 ] || { PF_ERROR="a feature package carries no driver part"; return 1; }
   fi
@@ -584,7 +604,7 @@ package_file_parse() {
 
 package_reader() {
   if [ $# -ne 2 ]; then
-    ctx_err "_package: usage: ctx _package <file> validate|summary|version|kind|parts|driver|category|pitch|when|needs|tags|description"
+    ctx_err "_package: usage: ctx _package <file> validate|summary|version|kind|parts|driver|format|category|pitch|when|needs|tags|description"
     exit 1
   fi
   if ! package_file_parse "$1"; then
@@ -597,6 +617,7 @@ package_reader() {
     version) printf '%s\n' "$pf_version" ;;
     kind) printf '%s\n' "$pf_kind" ;;
     driver) printf '%s\n' "$pf_driver" ;;
+    format) printf '%s\n' "$pf_format" ;;
     parts) printf '%s' "$pf_parts" ;;
     category) printf '%s\n' "$pf_category" ;;
     pitch) printf '%s\n' "$pf_pitch" ;;
@@ -2403,7 +2424,7 @@ package_info() {
   done
   package_run_probe "$pi_name" "$pi_pkg" "$pf_version" "$pi_noprobe"
   if [ "$pi_json" -eq 1 ]; then
-    PI_NAME="$pi_name" PI_VER="$pf_version" PI_KIND="$pf_kind" PI_DRV="$pf_driver" \
+    PI_NAME="$pi_name" PI_VER="$pf_version" PI_KIND="$pf_kind" PI_DRV="$pf_driver" PI_FMT="$pf_format" \
       PI_CAT="$pf_category" PI_SUM="$pf_summary" PI_PITCH="$pf_pitch" PI_WHEN="$pf_when" \
       PI_NEEDS="$pf_needs" PI_TAGS="$pf_tags" PI_PARTS="$pf_parts" PI_DESC="$pf_desc" \
       PI_HAS_DESC="$pf_seen_desc" PI_INST="$pi_inst" PI_IVER="$pi_iver" PI_DECL="$pi_is_decl" \
@@ -2465,8 +2486,9 @@ package_info() {
         inst = (ENVIRON["PI_INST"] == "1" ? "true" : "false")
         decl = (ENVIRON["PI_DECL"] == "1" ? "true" : "false")
         pcode = (ENVIRON["PI_PCODE"] == "" ? "null" : ENVIRON["PI_PCODE"])
-        printf "{\"name\":%s,\"version\":%s,\"kind\":%s,\"driver\":%s,\"category\":%s,\"summary\":%s,\"pitch\":%s,\"when\":%s,\"needs\":%s,\"tags\":%s,\"parts\":%s,\"description\":%s,\"installed\":%s,\"installed_version\":%s,\"declared\":%s,\"lifecycle\":%s,\"probe\":{\"status\":%s,\"code\":%s,\"lines\":%s}}\n", \
+        printf "{\"name\":%s,\"version\":%s,\"kind\":%s,\"driver\":%s,\"format\":%s,\"category\":%s,\"summary\":%s,\"pitch\":%s,\"when\":%s,\"needs\":%s,\"tags\":%s,\"parts\":%s,\"description\":%s,\"installed\":%s,\"installed_version\":%s,\"declared\":%s,\"lifecycle\":%s,\"probe\":{\"status\":%s,\"code\":%s,\"lines\":%s}}\n", \
           jq(ENVIRON["PI_NAME"]), jq(ENVIRON["PI_VER"]), jq(ENVIRON["PI_KIND"]), jopt(ENVIRON["PI_DRV"]), \
+          (ENVIRON["PI_FMT"] == "" ? "null" : ENVIRON["PI_FMT"]), \
           jopt(ENVIRON["PI_CAT"]), jq(ENVIRON["PI_SUM"]), jopt(ENVIRON["PI_PITCH"]), jopt(ENVIRON["PI_WHEN"]), \
           jopt(ENVIRON["PI_NEEDS"]), tarr, parr, jdesc, inst, jopt(ENVIRON["PI_IVER"]), decl, harr, \
           jq(ENVIRON["PI_PSTATUS"]), pcode, larr
@@ -2492,6 +2514,7 @@ package_info() {
   printf 'version: %s\n' "$pf_version"
   printf 'kind: %s\n' "$pf_kind"
   [ -z "$pf_driver" ] || printf 'driver: %s\n' "$pf_driver"
+  [ -z "$pf_format" ] || printf 'format: %s\n' "$pf_format"
   [ -z "$pf_category" ] || printf 'category: %s\n' "$pf_category"
   printf 'summary: %s\n' "$pf_summary"
   [ -z "$pf_pitch" ] || printf 'pitch: %s\n' "$pf_pitch"

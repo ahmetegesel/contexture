@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { TestProject } from 'vitest/node';
-import { PRERELEASE, probeFts5 } from './fts5';
+import { PRERELEASE, probeFts5, probeSqlite } from './probe';
 import { ROOT } from './root';
 
 declare module 'vitest' {
@@ -11,8 +11,8 @@ declare module 'vitest' {
 }
 
 export default function setup(project: TestProject): () => void {
-  if (PRERELEASE && !probeFts5()) {
-    throw new Error('the pre-release set needs sqlite3 with FTS5 on PATH: a skipped fts5 case or bypass guard proves nothing');
+  if (PRERELEASE && !(probeSqlite() && probeFts5())) {
+    throw new Error('the pre-release set needs sqlite3 3.44 or later with FTS5 on PATH: a skipped sqlite driver case, FTS5 graph case, or bypass guard proves nothing');
   }
   const scratch = join(ROOT, '.contexture', 'tmp');
   mkdirSync(scratch, { recursive: true });

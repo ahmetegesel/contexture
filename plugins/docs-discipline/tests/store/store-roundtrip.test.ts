@@ -2,13 +2,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { fresh } from '@support/snapshot';
-import { fts5Available } from '@support/stage';
-import { docs, fts5Corpus, stagedDocs } from '../support/corpus';
+import { sqliteAvailable } from '@support/stage';
+import { docs, sqliteCorpus, stagedDocs } from '../support/corpus';
 
-describe.skipIf(!fts5Available())('the corpus in the fts5 store', { concurrent: true }, () => {
+describe.skipIf(!sqliteAvailable())('the corpus in the sqlite store', { concurrent: true }, () => {
   let corpus: string;
   beforeAll(async () => {
-    corpus = await fts5Corpus('corpus');
+    corpus = await sqliteCorpus('corpus');
   });
 
   it('RS8 [docs-module-r1, plugins-r2] every staged doc was written through ctx docs write, and the docs folder is gone', async () => {

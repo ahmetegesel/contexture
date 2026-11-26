@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { exec, launch } from '../support/exec';
 import { shVerb, writeModule } from '../support/modules';
 import { fresh, seed } from '../support/snapshot';
-import { fts5Available, stage } from '../support/stage';
+import { sqliteAvailable, stage } from '../support/stage';
 import { run } from '../support/unit';
 
 const MANIFEST = (name: string) => `# summary: the ${name} search fixture\n# version: 1.0.0\n`;
@@ -306,9 +306,9 @@ describe.concurrent('the ctx search builtin', () => {
   });
 });
 
-describe.skipIf(!fts5Available())('the ctx search builtin over the fts5 registry', () => {
-  it('[the-engine-r-ha7uc] the fts5 registry holds exact alone, so a ranked mode refuses before any module runs', async () => {
-    const sb = stage('fts5', 'search-exact-alone');
+describe.skipIf(!sqliteAvailable())('the ctx search builtin over the sqlite registry', () => {
+  it('[the-engine-r-ha7uc] the sqlite registry holds exact alone, so a ranked mode refuses before any module runs', async () => {
+    const sb = stage('sqlite', 'search-exact-alone');
     writeModule(sb, 'modules', 'xmod', { manifest: MANIFEST('xmod'), files: { 'scripts/search': SEARCH(`printf '%s\\n' '${answer('xmod', 1, ['a'])}'`) } });
     const modes = await run(sb, ['search', '--modes']);
     expect([modes.code, modes.stdout.split('\n').filter(Boolean).map((l) => l.split(/\s/)[0])]).toEqual([0, ['exact']]);

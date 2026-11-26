@@ -12,7 +12,7 @@ import { refused } from '../support/wire';
 
 const scratch = (sb: string): string[] => readdirSync(join(sb, '.contexture/tmp')).filter((f) => f !== 'locks').sort();
 const added = (sb: string, before: readonly string[]): string[] => scratch(sb).filter((f) => !before.includes(f));
-const RESIDUE = /^(backlog|knowledge|state|journal|payload|rec|fts5-ws)\./;
+const RESIDUE = /^(backlog|knowledge|state|journal|payload|rec|sqlite-ws)\./;
 const CEILING_MS = 60_000;
 
 function groupGone(pid: number): boolean {

@@ -3,18 +3,18 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Run } from '@support/exec';
 import { fresh } from '@support/snapshot';
-import { fts5Available } from '@support/stage';
+import { sqliteAvailable } from '@support/stage';
 import { docs, gwWorkspace } from '../support/corpus';
 import { git, gitCommit } from '../support/git';
 
 const PROCESS_OWNED = 'UNTRACKED CLAIMANT: workspace/gw-unit';
 const CLEAN = 'CLEAN (PROCESS-OWNED)';
 
-describe.skipIf(!fts5Available())('the gate on fts5 the posix way: git carries the delta, the store keeps no corpus file, so every claimant reads untracked', { concurrent: true }, () => {
+describe.skipIf(!sqliteAvailable())('the gate on sqlite the posix way: git carries the delta, the store keeps no corpus file, so every claimant reads untracked', { concurrent: true }, () => {
   let gw: string;
   let px: string;
   beforeAll(async () => {
-    [gw, px] = await Promise.all([gwWorkspace('fts5', 'gw-gate'), gwWorkspace('posix', 'gw-gate-posix')]);
+    [gw, px] = await Promise.all([gwWorkspace('sqlite', 'gw-gate'), gwWorkspace('posix', 'gw-gate-posix')]);
   });
 
   const committed = async (snap: string): Promise<string> => {

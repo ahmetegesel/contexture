@@ -1,0 +1,2 @@
+database: optional path
+  SQLite database path for the sqlite driver (uses the driver's built-in store path when unset).

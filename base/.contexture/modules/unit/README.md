@@ -119,8 +119,8 @@ every dead holder, so the wait exists only to bound a live one, busy or hung (a 
 process, a holder blocked on its input, a pid reused by another process), turning an
 endless wait into a named error. Its size is measured on a 1 MB unit:
 six writers arriving at once (five lanes and their dispatcher) wait at most 6.8 s on
-posix and 29 s on fts5 with four more writers busy on other units, eight writers 9.3 s and
-42 s, so the 60 s floor holds a margin over that need, while the error still surfaces
+posix and 29 s on the SQLite driver (measured while its writes still derived search
+documents) with four more writers busy on other units, eight writers 9.3 s and 42 s, so the 60 s floor holds a margin over that need, while the error still surfaces
 inside an agent's two-minute command budget at a moderate load; the driver's namespace
 lock waits the same 600 polls. Writers looping without pause can starve one waiter past
 any bound, since the polling lock keeps no queue.
@@ -350,4 +350,4 @@ refusals) one function at a time with one wiring test per write path, the fold p
 and its defect classes, and the fault cases (a read-only store, an interrupted waiter, a
 killed writer, a held lock, concurrent writers). The store fuzzer's
 unit-shaped profile (`tests/drivers/store-fuzz.test.ts`) is the seeded differential proof of the
-store calls the module makes across posix and fts5.
+store calls the module makes across posix and sqlite.

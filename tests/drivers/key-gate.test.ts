@@ -7,7 +7,7 @@ import { exec, launch } from '../support/exec';
 import { alive } from '../support/procs';
 import { sandbox } from '../support/sandbox';
 import { moduleCall } from '../support/sh';
-import { DRIVERS, fts5Available, stage } from '../support/stage';
+import { DRIVERS, sqliteAvailable, stage } from '../support/stage';
 import { batchPayload, listAnswer, store } from '../support/store';
 import { waitFor } from '../support/unit';
 import { answer, refused } from '../support/wire';
@@ -160,7 +160,7 @@ describe('the key and value gate at the resolver\'s dispatch', { concurrent: tru
 });
 
 for (const driver of DRIVERS) {
-  describe.skipIf(driver === 'fts5' && !fts5Available())(`the key and value rule at its boundaries on ${driver}, through the resolver`, { concurrent: true }, () => {
+  describe.skipIf(driver === 'sqlite' && !sqliteAvailable())(`the key and value rule at its boundaries on ${driver}, through the resolver`, { concurrent: true }, () => {
     const seg = (c: string, n: number) => c.repeat(n);
     const sandboxOf = (label: string) => {
       const sb = stage(driver, label);
@@ -230,7 +230,7 @@ function shimPath(): string {
 }
 
 for (const driver of DRIVERS) {
-  describe.skipIf(driver === 'fts5' && !fts5Available())(`the twin check in one pass per batch on ${driver}`, () => {
+  describe.skipIf(driver === 'sqlite' && !sqliteAvailable())(`the twin check in one pass per batch on ${driver}`, () => {
     let shims: string;
     beforeAll(() => {
       shims = shimPath();

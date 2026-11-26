@@ -17,7 +17,7 @@ The mechanism in one paragraph: every repository gets unit docs addressed
 asset inside the module, enforced by the write verbs), and the workspace gets its own docs addressed
 `docs/workspace/<slug>.md` (the conventions and the map); the configured
 storage driver holds them (the files driver as those very files, a store
-driver such as the storage-fts5 plugin's in its store) and every verb reaches
+driver such as the storage-sqlite plugin's in its store) and every verb reaches
 them through it; the write verbs change a doc block by block; `ctx docs search` finds the entities a term names and `ctx docs get` prints one; `ctx docs query` serves the index, the projections, the lookups, and the
 rule and pitfall views; `ctx docs check` compares a git change delta against
 the corpus (coverage, freshness, dead sources); `ctx docs gate` runs the audit
@@ -59,7 +59,7 @@ What lands where:
 | `.contexture/extensions/rhythms/docs-authoring.md`, `.contexture/extensions/rhythms/docs-drift.md` | the two procedure rhythms | install (rhythms part) |
 | `docs/work.md` | the docs-shaped work rhythm: the canonical 10 steps with the docs discipline at EXECUTE and REVIEW | reference (copy it into the workspace's own `.contexture/rhythms/` to own it; the starter-rhythms plugin owns the installed generic `work`) |
 | `tests/sample/` | the fictional two-repo demo corpus plus a demo backlog | reference (never copied) |
-| `tests/` | the plugin's vitest project `docs-discipline`: the engines and helpers alone (`unit/`), the census, the grammar agreement, the flag collision check, the glob rule's one home, and the package shape (`static/`), the verbs end to end on posix (`integration/`), the read refusal on a driver without a store (`fault/`), and the git path cases on fts5 (`store/`) | reference (never copied) |
+| `tests/` | the plugin's vitest project `docs-discipline`: the engines and helpers alone (`unit/`), the census, the grammar agreement, the flag collision check, the glob rule's one home, and the package shape (`static/`), the verbs end to end on posix (`integration/`), the read refusal on a driver without a store (`fault/`), and the git path cases on sqlite (`store/`) | reference (never copied) |
 | `tests/write/` | the edit engine's seeds, payloads, and goldens: every write verb's result byte for byte | reference (never copied) |
 | `tests/census.awk`, `tests/census-allow.txt` | the single-door census of the module and its classified allow-list | reference (never copied) |
 | `tests/grammar-agreement.awk` | the grammar agreement check the static tests run: the `#%` schema, the prose shapes, and the audit's kind and block lists agree | reference (never copied) |
@@ -191,7 +191,7 @@ into an existing file; `seed` means it is starting content to adapt; and
    guides under a deny-by-default `.gitignore`; the agent-facing corpus
    (`docs/workspace/` and `docs/<repo>/`) stays gitignored working state, and
    a corpus kept in a store driver needs none, since no corpus file lives
-   there (the storage-fts5 README names the git steps for moving a tracked
+   there (the storage-sqlite README names the git steps for moving a tracked
    corpus into its store).
 
    ```gitignore
@@ -225,7 +225,7 @@ into an existing file; `seed` means it is starting content to adapt; and
    fictional and never part of the adopted corpus; `tests/` holds the
    plugin's own vitest project (the engines, the write verbs, the read verbs,
    the gate matrix over the sample, the census, the grammar agreement check,
-   and the git path cases on fts5), lives with the plugin, and is never
+   and the git path cases on sqlite), lives with the plugin, and is never
    copied.
 
 ## Verify
@@ -389,7 +389,7 @@ it walk below runs every one of these.
   logical address `docs/<repo>/<slug>.md`, whatever the caller's spelling.
 - A driver that does not serve the store contract (without the capability `store`)
   makes every read verb refuse rc 2 naming the capability.
-- Under a store driver (the storage-fts5 plugin among them) the corpus leaves
+- Under a store driver (the storage-sqlite plugin among them) the corpus leaves
   git and no driver keeps a change log, so the check and the gate read git's
   delta as they do under the files driver with an untracked corpus: a doc
   write rides no git delta, every claimant reads untracked, and a changed
@@ -541,7 +541,7 @@ from the release that carries the generic storage layer; an older base makes eve
 read verb refuse rc 2), and git for the close gate's delta, the check's claimant trackedness
 probe, and the matrix's planted fixture repository (a non-repository run of
 the check reads claimants untracked and reports the process-owned verdict;
-the audit needs no repository). A store driver brings its own needs (the storage-fts5 plugin: sqlite3 with FTS5).
+the audit needs no repository). A store driver brings its own needs (the storage-sqlite plugin: sqlite3 3.44 or later).
 Nothing is installed: no runtime, no network.
 The optional ast-doc-graph plugin pairs with this one: its docs extractor
 reads the corpus grammar.
@@ -553,8 +553,8 @@ the plugin's test, and the plugin's vitest project (`bun run
 test:docs-discipline` from the repository's `tests/` folder) drives the
 engines, the verbs, and the gate matrix, staged from the repository's shipped
 core (`base/`) and this plugin's own copies, never an adopted drawer; the
-logic runs once on posix, and the git path cases run on fts5 (the
-storage-fts5 plugin's copy configured; skipped without sqlite3 FTS5). The
+logic runs once on posix, and the git path cases run on sqlite (the
+storage-sqlite plugin's copy configured; skipped without sqlite3 3.44 or later). The
 project also runs the single-door census (`tests/census.awk` over
 `tests/census-allow.txt`): a new corpus read or path print outside
 `scripts/docs-io.sh` fails it until the allow-list names it on purpose. The
@@ -586,7 +586,7 @@ corpus through), and this plugin's module (its grammar rides inside); it commits
 since the check reads a claimant outside git as untracked (the process-owned
 verdict) and never as stale. The commands then run through the staged `ctx`
 (in an adopted workspace the same commands run as `ctx docs ...`). The first
-part runs on the files driver, the second on the fts5 store.
+part runs on the files driver, the second on the sqlite store.
 
 ```sh
 scratch="../../.contexture/tmp/docs-walk"
@@ -987,8 +987,8 @@ kept a block scalar, the new rule placed after its neighbor):
     evidence: "publishOrderAccepted"
 ```
 
-The same corpus on the fts5 store (the storage-fts5 plugin beside this one;
-needs sqlite3 with FTS5). No command moves a corpus between drivers: once the
+The same corpus on the sqlite store (the storage-sqlite plugin beside this one;
+needs sqlite3 3.44 or later). No command moves a corpus between drivers: once the
 driver is set, each doc goes into the store through `ctx docs write` (the
 grammar check and the repo's audit on every doc, as on any write). The writes
 are committed first, and after the move the files leave git in a commit of
@@ -997,8 +997,8 @@ their own:
 ```sh
 git -c user.name=walk -c user.email=walk@example.invalid commit -qam writes
 mkdir -p .contexture/extensions/storage/drivers
-cp -R ../../../plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5 .contexture/extensions/storage/drivers/
-printf 'storage.driver: fts5\n' > .contexture/config
+cp -R ../../../plugins/storage-sqlite/.contexture/extensions/storage/drivers/sqlite .contexture/extensions/storage/drivers/
+printf 'storage.driver: sqlite\n' > .contexture/config
 for f in docs/*/*.md; do r=${f#docs/}; s=${f##*/}; ./.contexture/ctx docs write "${r%%/*}" "${s%.md}" < "$f"; done
 git rm -r -q --cached docs && git -c user.name=walk -c user.email=walk@example.invalid commit -qm "the corpus moves into the store"
 rm -rf docs
@@ -1108,7 +1108,7 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 | `docs/workspace/conventions.md` | neutralized from the source ruleset: the docs, git, security, and typography rules kept; the authoring and drift procedure rules added; the sources header narrowed to `[AGENTS.workspace.md]` and evidence fields pointed at the module |
 | `tests/sample/docs/...` | authored fresh: a fictional two-repo demo (a map, two unit docs, one operational doc) |
 | `tests/sample/backlog.md` | authored fresh: a demo backlog used by the nudge walk |
-| `tests/` (the vitest project) | authored fresh: the engines alone over the sample, the write goldens, and committed expected output; the verbs end to end on posix; the read refusal on a planted driver; the git path cases on fts5; the corpus under an alias's declared folder |
+| `tests/` (the vitest project) | authored fresh: the engines alone over the sample, the write goldens, and committed expected output; the verbs end to end on posix; the read refusal on a planted driver; the git path cases on sqlite; the corpus under an alias's declared folder |
 | `tests/write/` | authored fresh: the write verbs' seeds, payloads, and expected docs |
 | `tests/census.awk`, `tests/census-allow.txt` | authored fresh: the single-door census of the module (two instruments, names read with quotes deleted and the file-reading commands of a shell script counted, the classified allow-list by file and exact line, remainder zero) |
 | `tests/grammar-agreement.awk` | authored fresh: the agreement check of the `#%` schema, the prose shapes, and the audit's lists, refusing an empty side as a pass |

@@ -8,7 +8,7 @@ import { holdLock, sleepShim } from '../support/locks';
 import { pathPlant } from '../support/plants';
 import { moduleCall } from '../support/sh';
 import { fresh, seed } from '../support/snapshot';
-import { DRIVERS, fts5Available } from '../support/stage';
+import { DRIVERS, sqliteAvailable } from '../support/stage';
 import { batchPayload } from '../support/store';
 
 const LIBRARY = '.contexture/storage/scripts/library';
@@ -28,7 +28,7 @@ async function until(test: () => boolean, ms = 60_000): Promise<void> {
 }
 
 for (const driver of DRIVERS) {
-  describe.skipIf(driver === 'fts5' && !fts5Available())(`the library lock on ${driver}`, { concurrent: true }, () => {
+  describe.skipIf(driver === 'sqlite' && !sqliteAvailable())(`the library lock on ${driver}`, { concurrent: true }, () => {
     let snap: string;
     beforeAll(async () => {
       snap = await seed(async (sb) => void dataFile(sb, 'modules', 'libprobe', LIBPROBE), driver, 'library-lock');

@@ -27,7 +27,7 @@ const SURFACES = [
   'plugins/docs-discipline/README.md',
   'plugins/ast-doc-graph/README.md',
   'plugins/git/README.md',
-  'plugins/storage-fts5/README.md',
+  'plugins/storage-sqlite/README.md',
   'tests/README.md',
 ];
 

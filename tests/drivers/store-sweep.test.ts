@@ -8,7 +8,7 @@ import { FALLBACK_ROOT, RECORD_ROOT, namespaceLock } from '../support/drawer';
 import { launch } from '../support/exec';
 import { holdLock } from '../support/locks';
 import { ROOT_USER } from '../support/plants';
-import { DRIVERS, fts5Available, stage } from '../support/stage';
+import { DRIVERS, sqliteAvailable, stage } from '../support/stage';
 import { store } from '../support/store';
 import { answer, refused } from '../support/wire';
 
@@ -390,10 +390,10 @@ describe('the sweep on posix', { concurrent: true }, () => {
   });
 });
 
-for (const driver of DRIVERS.filter((d) => d === 'fts5')) {
-  describe.skipIf(!fts5Available())('the sweep on fts5', () => {
+for (const driver of DRIVERS.filter((d) => d === 'sqlite')) {
+  describe.skipIf(!sqliteAvailable())('the sweep on sqlite', () => {
     it('[the-engine-r-swp01] a driver that keeps no file tree answers its unknown function line rc 2', async () => {
-      const sb = stage(driver, 'sweep-fts5');
+      const sb = stage(driver, 'sweep-sqlite');
       refused(await store(sb, driver).op('storage.sweep', ['unit']), 'storage.sweep', 2, 'ERR_CAPABILITY_UNSUPPORTED', "unknown function 'storage.sweep'");
     });
   });

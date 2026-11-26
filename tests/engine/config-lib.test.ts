@@ -79,7 +79,7 @@ describe.concurrent('config-lib: core storage schema and unified config reader',
         '  storage.driver.extra: wrong',
         'storage.driver: "" # empty quoted skipped',
         'storage.driver:   # empty unquoted skipped',
-        '  storage.driver  =  "fts5"  # inline comment\r',
+        '  storage.driver  =  "sqlite"  # inline comment\r',
         'storage.driver: posix # later value loses',
         "hash.single: 'keep # hash' # trailing comment",
         'hash.double: "keep \\"quotes\\" and \\\\slash # hash" # note',
@@ -89,7 +89,7 @@ describe.concurrent('config-lib: core storage schema and unified config reader',
       ].join('\n'),
     );
 
-    expect((await runLib(sb, 'cfg_get_file', [conf, 'storage.driver'])).stdout).toBe('fts5\n');
+    expect((await runLib(sb, 'cfg_get_file', [conf, 'storage.driver'])).stdout).toBe('sqlite\n');
     expect((await runLib(sb, 'cfg_get_file', [conf, 'storage.driver.extra'])).stdout).toBe('wrong\n');
     expect((await runLib(sb, 'cfg_get_file', [conf, 'hash.single'])).stdout).toBe('keep # hash\n');
     expect((await runLib(sb, 'cfg_get_file', [conf, 'hash.double'])).stdout).toBe('keep "quotes" and \\slash # hash\n');
@@ -104,7 +104,7 @@ describe.concurrent('config-lib: core storage schema and unified config reader',
     expect(list.stdout).toBe(
       [
         'storage.driver.extra\twrong',
-        'storage.driver\tfts5',
+        'storage.driver\tsqlite',
         'hash.single\tkeep # hash',
         'hash.double\tkeep "quotes" and \\slash # hash',
         'url.val\thttps://example.com:8443/path=1',
@@ -491,7 +491,7 @@ describe.concurrent('config-lib: schema discovery, driver collisions, and --as a
     const ctxDir = join(sb, '.contexture');
 
     // Driver configs in extensions/storage/drivers and storage/drivers
-    put(join(ctxDir, 'extensions/storage/drivers/fts5/config'), 'database: optional path\n  SQLite database path.\n');
+    put(join(ctxDir, 'extensions/storage/drivers/sqlite/config'), 'database: optional path\n  SQLite database path.\n');
     put(join(ctxDir, 'storage/drivers/posix/config'), 'sync_mode: optional string one-of fast|safe default safe\n  Sync policy.\n');
 
     // Manifestless hook/filter workspace module with config

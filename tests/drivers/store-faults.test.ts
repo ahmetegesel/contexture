@@ -5,12 +5,12 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { driverPath } from '../support/driver';
 import { launch } from '../support/exec';
-import { FTS5_DB, lockPath, namespaceLock } from '../support/drawer';
+import { SQLITE_DB, lockPath, namespaceLock } from '../support/drawer';
 import { readOnlyLockShim } from '../support/locks';
 import { ROOT_USER, chmodPlant, mktempPlant, pathPlant } from '../support/plants';
 import { sandbox } from '../support/sandbox';
 import { fresh } from '../support/snapshot';
-import { DRIVERS, type Driver, fts5Available } from '../support/stage';
+import { DRIVERS, type Driver, sqliteAvailable } from '../support/stage';
 import { batchPayload, docsStore, plantScript, store } from '../support/store';
 import { answer, refused, refusedLike } from '../support/wire';
 
@@ -41,7 +41,7 @@ const OLD = { 'workspace/x': 'old x\n', 'workspace/y': 'old y\n' };
 const NEW = [{ action: 'put', key: 'workspace/x', value: 'new x\n' }, { action: 'put', key: 'workspace/y', value: 'new y\n' }] as const;
 
 const scratchPlant = (entry: string): Record<string, string> =>
-  mktempPlant(`case "$p" in\n  */store-batch.*|*/fts5-ws.*) /bin/mkdir "$p/${entry}" ;;\n  */store-keys.*) chmod 400 "$p" ;;\nesac`);
+  mktempPlant(`case "$p" in\n  */store-batch.*|*/sqlite-ws.*) /bin/mkdir "$p/${entry}" ;;\n  */store-keys.*) chmod 400 "$p" ;;\nesac`);
 
 describe.skipIf(ROOT_USER)('posix write faults', { concurrent: true }, () => {
   let empty: string;
@@ -117,11 +117,11 @@ describe.skipIf(ROOT_USER)('posix write faults', { concurrent: true }, () => {
 });
 
 for (const driver of DRIVERS) {
-  describe.skipIf(ROOT_USER || (driver === 'fts5' && !fts5Available()))(`a read-only store on ${driver}`, () => {
+  describe.skipIf(ROOT_USER || (driver === 'sqlite' && !sqliteAvailable()))(`a read-only store on ${driver}`, () => {
     it('[the-engine-r18, the-engine-r21] refuses put, delete, and batch rc 2 with one line each and keeps its bytes; writable again, it serves', async ({ onTestFinished }) => {
       const sb = await seeded(await docsStore(driver, false), driver, OLD);
       const s = store(sb, driver);
-      const ro = driver === 'fts5' ? [join(sb, FTS5_DB)] : [join(sb, 'docs/workspace/x.md'), join(sb, 'docs/workspace/y.md'), join(sb, 'docs/workspace')];
+      const ro = driver === 'sqlite' ? [join(sb, SQLITE_DB)] : [join(sb, 'docs/workspace/x.md'), join(sb, 'docs/workspace/y.md'), join(sb, 'docs/workspace')];
       for (const p of ro) chmodPlant(p, p.endsWith('workspace') ? 0o555 : 0o444, p.endsWith('workspace') ? 0o755 : 0o644, onTestFinished);
       for (const [fn, r] of [
         ['store.put', await s.put('docs', 'workspace/x', 'never lands\n')],
@@ -142,7 +142,7 @@ for (const driver of DRIVERS) {
 }
 
 for (const driver of DRIVERS) {
-  describe.skipIf(driver === 'fts5' && !fts5Available())(`an interrupt while the ${driver} driver reads the namespace declaration`, { concurrent: true }, () => {
+  describe.skipIf(driver === 'sqlite' && !sqliteAvailable())(`an interrupt while the ${driver} driver reads the namespace declaration`, { concurrent: true }, () => {
     let empty: string;
     beforeAll(async () => {
       empty = await docsStore(driver, false);
@@ -179,13 +179,13 @@ const READS = [
   ['posix', 'store.list', 'SIGTERM', [], 'find', ['store-keys']],
   ['posix', 'store.scan', 'SIGTERM', [], 'find', ['store-scan', 'store-scan-out']],
   ['posix', 'store.search', 'SIGTERM', ['exact', '20'], 'find', ['store-search', 'store-search-err']],
-  ['fts5', 'store.list', 'SIGHUP', [], 'sqlite3', ['store-keys']],
-  ['fts5', 'store.list', 'SIGINT', [], 'sqlite3', ['store-keys']],
-  ['fts5', 'store.list', 'SIGTERM', [], 'sqlite3', ['store-keys']],
+  ['sqlite', 'store.list', 'SIGHUP', [], 'sqlite3', ['store-keys']],
+  ['sqlite', 'store.list', 'SIGINT', [], 'sqlite3', ['store-keys']],
+  ['sqlite', 'store.list', 'SIGTERM', [], 'sqlite3', ['store-keys']],
 ] as const;
 
 for (const driver of DRIVERS) {
-  describe.skipIf(driver === 'fts5' && !fts5Available())(`an interrupt while the ${driver} driver reads the store`, { concurrent: true }, () => {
+  describe.skipIf(driver === 'sqlite' && !sqliteAvailable())(`an interrupt while the ${driver} driver reads the store`, { concurrent: true }, () => {
     let keyed: string;
     beforeAll(async () => {
       keyed = await docsStore(driver, true);
@@ -207,7 +207,7 @@ for (const driver of DRIVERS) {
 }
 
 for (const driver of DRIVERS) {
-  describe.skipIf(ROOT_USER || (driver === 'fts5' && !fts5Available()))(`a write into a folder the ${driver} driver just made fails with its one refusal line`, { concurrent: true }, () => {
+  describe.skipIf(ROOT_USER || (driver === 'sqlite' && !sqliteAvailable()))(`a write into a folder the ${driver} driver just made fails with its one refusal line`, { concurrent: true }, () => {
     let empty: string;
     beforeAll(async () => {
       empty = await docsStore(driver, false);
@@ -222,14 +222,14 @@ for (const driver of DRIVERS) {
 
     it('[the-engine-r21] a batch whose value cannot be staged refuses rc 2 ERR_STORAGE_WRITE naming its action, with nothing else on stderr', async () => {
       const sb = await seeded(empty, driver, OLD);
-      const r = await store(sb, driver, scratchPlant(driver === 'fts5' ? 'batch-val.1' : 'val.1')).batch('docs', NEW);
+      const r = await store(sb, driver, scratchPlant(driver === 'sqlite' ? 'batch-val.1' : 'val.1')).batch('docs', NEW);
       refused(r, 'store.batch', 2, 'ERR_STORAGE_WRITE', "action 1 (put 'workspace/x'): cannot stage the value");
       expect(await bytesOf(sb, driver, Object.keys(OLD))).toEqual(Object.values(OLD));
     });
 
     it('[the-engine-r18, the-engine-r21] a batch value both malformed and unstageable refuses as the input it is, rc 1 ERR_INVALID_ARGUMENT', async () => {
       const sb = await seeded(empty, driver, OLD);
-      const r = await store(sb, driver, scratchPlant(driver === 'fts5' ? 'batch-val.1' : 'val.1')).batch('docs', 'action=put\nkey=workspace/x\nvalue_b64=***\n');
+      const r = await store(sb, driver, scratchPlant(driver === 'sqlite' ? 'batch-val.1' : 'val.1')).batch('docs', 'action=put\nkey=workspace/x\nvalue_b64=***\n');
       refused(r, 'store.batch', 1, 'ERR_INVALID_ARGUMENT', "action 1 (put 'workspace/x'): malformed base64 value");
       expect(await bytesOf(sb, driver, Object.keys(OLD))).toEqual(Object.values(OLD));
     });
@@ -240,11 +240,11 @@ const BASE64 = ['/usr/bin/base64', '/bin/base64'].find((p) => existsSync(p));
 
 const manifestPlant = (): Record<string, string> => {
   if (!BASE64) throw new Error('no base64 binary for the manifest plant');
-  return pathPlant('base64', `for m in .contexture/tmp/store-batch.*/man .contexture/tmp/fts5-ws.*/man; do\n  [ -f "$m" ] && [ "$(wc -l < "$m")" -eq 1 ] && chmod 400 "$m"\ndone\nexec "${BASE64}" "$@"`);
+  return pathPlant('base64', `for m in .contexture/tmp/store-batch.*/man .contexture/tmp/sqlite-ws.*/man; do\n  [ -f "$m" ] && [ "$(wc -l < "$m")" -eq 1 ] && chmod 400 "$m"\ndone\nexec "${BASE64}" "$@"`);
 };
 
 for (const driver of DRIVERS) {
-  describe.skipIf(ROOT_USER || (driver === 'fts5' && !fts5Available()))(`a batch on ${driver} whose manifest append fails after its first action`, { concurrent: true }, () => {
+  describe.skipIf(ROOT_USER || (driver === 'sqlite' && !sqliteAvailable()))(`a batch on ${driver} whose manifest append fails after its first action`, { concurrent: true }, () => {
     let empty: string;
     beforeAll(async () => {
       empty = await docsStore(driver, false);
@@ -266,10 +266,10 @@ for (const driver of DRIVERS) {
   });
 }
 
-describe.skipIf(ROOT_USER || !fts5Available())('an fts5 key listing into a scratch the call just made fails with its one refusal line', { concurrent: true }, () => {
+describe.skipIf(ROOT_USER || !sqliteAvailable())('an sqlite key listing into a scratch the call just made fails with its one refusal line', { concurrent: true }, () => {
   let keyed: string;
   beforeAll(async () => {
-    keyed = await docsStore('fts5', true);
+    keyed = await docsStore('sqlite', true);
   });
 
   it.each([
@@ -278,11 +278,11 @@ describe.skipIf(ROOT_USER || !fts5Available())('an fts5 key listing into a scrat
     ['store.search', ['docs', 'exact', '20'], 'query=a\n'],
   ] as const)('[the-engine-r21] %s refuses rc 2 with nothing else on stderr', async (fn, args, input) => {
     const sb = fresh(keyed);
-    refusedLike(await store(sb, 'fts5', scratchPlant('keys')).op(fn, args, input), fn, 2, 'ERR_STORAGE_READ');
+    refusedLike(await store(sb, 'sqlite', scratchPlant('keys')).op(fn, args, input), fn, 2, 'ERR_STORAGE_READ');
   });
 
   it('[the-engine-r21] store.list whose filtered keys cannot be written refuses rc 2 with its one line, never a short answer', async () => {
     const sb = fresh(keyed);
-    refusedLike(await store(sb, 'fts5', mktempPlant('case "$p" in */store-keys-out.*) chmod 400 "$p" ;; esac')).list('docs'), 'store.list', 2, 'ERR_STORAGE_WRITE');
+    refusedLike(await store(sb, 'sqlite', mktempPlant('case "$p" in */store-keys-out.*) chmod 400 "$p" ;; esac')).list('docs'), 'store.list', 2, 'ERR_STORAGE_WRITE');
   });
 });

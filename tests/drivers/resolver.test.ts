@@ -7,7 +7,7 @@ import { exec } from '../support/exec';
 import { ROOT_USER, chmodPlant } from '../support/plants';
 import { sandbox } from '../support/sandbox';
 import { fresh, seed } from '../support/snapshot';
-import { DRIVERS, type Driver, fts5Available, stage } from '../support/stage';
+import { DRIVERS, type Driver, sqliteAvailable, stage } from '../support/stage';
 import { answer } from '../support/wire';
 
 const SIX = ['list', 'get', 'put', 'delete', 'batch', 'scan'];
@@ -297,7 +297,7 @@ describe('the resolver', { concurrent: true }, () => {
 });
 
 for (const driver of DRIVERS) {
-  describe.skipIf(driver === 'fts5' && !fts5Available())(`the dispatch handshake serving ${driver}`, { concurrent: true }, () => {
+  describe.skipIf(driver === 'sqlite' && !sqliteAvailable())(`the dispatch handshake serving ${driver}`, { concurrent: true }, () => {
     let snap: string;
     beforeAll(async () => {
       snap = await seed(async () => undefined, driver, 'handshake');

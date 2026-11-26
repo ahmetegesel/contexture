@@ -13,7 +13,7 @@ const RESIDUE: readonly [string, RegExp][] = [
   [P2, /^\.tmp/],
   [P2, /\.XXXXXX$/],
   ['.contexture/tmp', /^rec\./],
-  ['.contexture/tmp', /^fts5-ws\./],
+  ['.contexture/tmp', /^sqlite-ws\./],
   ['.contexture/tmp', /^posix\./],
   ['.contexture/tmp', /^verb\./],
 ];
@@ -61,7 +61,7 @@ describe.concurrent('concurrent writers of one unit serialize: no refusal, no re
     }
   });
 
-  it.for([join(P2, '.tmpplant'), join(P2, 'plant.XXXXXX'), '.contexture/tmp/rec.plant', '.contexture/tmp/fts5-ws.plant', '.contexture/tmp/posix.plant', '.contexture/tmp/verb.plant'])('L-c [the-record-r9]: a single planted leak %s reads as residue, while the retired one-ls probe misses it', async (plant) => {
+  it.for([join(P2, '.tmpplant'), join(P2, 'plant.XXXXXX'), '.contexture/tmp/rec.plant', '.contexture/tmp/sqlite-ws.plant', '.contexture/tmp/posix.plant', '.contexture/tmp/verb.plant'])('L-c [the-record-r9]: a single planted leak %s reads as residue, while the retired one-ls probe misses it', async (plant) => {
     const sb = fresh(p2);
     const path = join(sb, plant);
     mkdirSync(dirname(path), { recursive: true });

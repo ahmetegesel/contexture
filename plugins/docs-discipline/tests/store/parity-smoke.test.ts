@@ -2,16 +2,16 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { fresh } from '@support/snapshot';
-import { fts5Available } from '@support/stage';
-import { docs, fts5Corpus, TESTS } from '../support/corpus';
+import { sqliteAvailable } from '@support/stage';
+import { docs, sqliteCorpus, TESTS } from '../support/corpus';
 
 const expected = (path: string): string => readFileSync(join(TESTS, 'unit/expected', path), 'utf8');
 const asTheVerbPrints = (engine: string): string => engine.replace(/\n+$/, '\n');
 
-describe.skipIf(!fts5Available())('the read verbs on the fts5 store answer what the engines answer over files', { concurrent: true }, () => {
+describe.skipIf(!sqliteAvailable())('the read verbs on the sqlite store answer what the engines answer over files', { concurrent: true }, () => {
   let corpus: string;
   beforeAll(async () => {
-    corpus = await fts5Corpus('corpus');
+    corpus = await sqliteCorpus('corpus');
   });
 
   it.each([

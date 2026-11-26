@@ -54,7 +54,7 @@ export function writeManifest(pkg: string, version = '1.0.0'): void {
   if (entries(join(ext, 'laws')).length > 0) parts.push('laws laws');
   const name = pkg.split('/').pop();
   const head = [`# summary: fixture package ${name}`, `# version: ${version}`, `# kind: ${driver ? 'driver' : 'feature'}`];
-  if (driver) head.push(`# driver: ${driver}`);
+  if (driver) head.push(`# driver: ${driver}`, '# format: 1');
   writeFileSync(join(pkg, 'manifest'), [...head, ...parts.map((p) => `# part: ${p}`)].join('\n') + '\n');
 }
 

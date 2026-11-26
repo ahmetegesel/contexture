@@ -7,7 +7,7 @@ import { sandbox } from '../support/sandbox';
 import { exec } from '../support/exec';
 import { moduleCall, moduleScript, shFunction } from '../support/sh';
 import { fresh, seed } from '../support/snapshot';
-import { DRIVERS, type Driver, fts5Available } from '../support/stage';
+import { DRIVERS, type Driver, sqliteAvailable } from '../support/stage';
 import { batchPayload } from '../support/store';
 import { answer, refused, refusedLike } from '../support/wire';
 
@@ -20,7 +20,7 @@ const own = (sb: string, fn: string, args: string[] = [], input = '', env: Recor
 const SHELLS = ['sh', ...(['/bin/dash', '/usr/bin/dash'].some((p) => existsSync(p)) ? ['dash'] : [])];
 
 for (const driver of DRIVERS) {
-  describe.skipIf(driver === 'fts5' && !fts5Available())(`the library's store calls on ${driver}`, { concurrent: true }, () => {
+  describe.skipIf(driver === 'sqlite' && !sqliteAvailable())(`the library's store calls on ${driver}`, { concurrent: true }, () => {
     let snap: string;
     beforeAll(async () => {
       snap = await seed(async (sb) => void dataFile(sb, 'modules', 'libprobe', LIBPROBE), driver, 'library');

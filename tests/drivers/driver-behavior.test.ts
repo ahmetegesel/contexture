@@ -2,20 +2,20 @@ import { cpSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, onTestFinished } from 'vitest';
 import { dataFile } from '../support/data-file';
-import { FTS5_DB } from '../support/drawer';
+import { SQLITE_DB } from '../support/drawer';
 import { exec, launch } from '../support/exec';
 import { ROOT_USER, chmodPlant } from '../support/plants';
 import { alive } from '../support/procs';
 import { ROOT } from '../support/root';
 import { sandbox } from '../support/sandbox';
-import { fts5Available, stage } from '../support/stage';
+import { sqliteAvailable, stage } from '../support/stage';
 import { treeState } from '../support/tree';
 import { waitFor } from '../support/unit';
 
 const SCRIPT = '.contexture/storage/scripts/driver-behavior';
 const RESOLVER = '.contexture/storage/scripts/driver-resolver';
 const POSIX_PART = join(ROOT, 'base/.contexture/storage/drivers/posix');
-const FTS5_PART = join(ROOT, 'plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5');
+const SQLITE_PART = join(ROOT, 'plugins/storage-sqlite/.contexture/extensions/storage/drivers/sqlite');
 const STEPS = 100;
 const BOUND_MS = 60_000;
 const RUN_MS = 180_000;
@@ -71,14 +71,14 @@ describe('the driver behavior test: a candidate the same as posix', () => {
     expect(treeState(scratch(sb))).toBe(before);
   });
 
-  it.skipIf(!fts5Available())('[the-engine-r-bhv01] the interim fts5 part reads same within 60 s', async () => {
-    const sb = stage('posix', 'behavior-fts5');
+  it.skipIf(!sqliteAvailable())('[the-engine-r-bhv01] the sqlite part reads same within 60 s', async () => {
+    const sb = stage('posix', 'behavior-sqlite');
     const before = treeState(scratch(sb));
     const t0 = Date.now();
-    const r = await behavior(sb, [FTS5_PART, '--all']);
+    const r = await behavior(sb, [SQLITE_PART, '--all']);
     const took = Date.now() - t0;
     expect(r.stderr).toBe('');
-    expect(r.stdout).toBe(same('fts5'));
+    expect(r.stdout).toBe(same('sqlite'));
     expect(r.code).toBe(0);
     expect(took, `the run took ${took} ms`).toBeLessThan(BOUND_MS);
     expect(treeState(scratch(sb))).toBe(before);
@@ -92,6 +92,16 @@ describe('the driver behavior test: what it catches, what it refuses, and what i
     expect(r.stdout).toMatch(/^driver behavior: differs at step h01 \(health of the empty store\): health degraded, store absent on posix, health none, store none on blind\n$/);
     expect(r.code).toBe(1);
     expect(r.stdout).not.toContain(sb);
+  });
+
+  it.each([
+    ['an extra line after the health answer', 'extraline', 'case "$1" in storage.health) "$0.real" "$@"; rc=$?; printf \'extra\\n\'; exit $rc ;; esac'],
+    ['a bare health and store pair', 'barepair', 'case "$1" in storage.health) out=$("$0.real" "$@"); rc=$?; printf \'%s\\n\' "$out" | sed \'s/"driver":"[^"]*",//; s/,"detail":"[^"]*"//\'; exit $rc ;; esac'],
+  ] as const)('[the-engine-r-bhv01] a health answer outside its shape, %s with the health and store fields kept, differs at the first health step', async (_, name, line) => {
+    const sb = stage('posix', `behavior-${name}`);
+    const r = await behavior(sb, [wrapped(name, line)]);
+    expect(r.stdout).toBe(`driver behavior: differs at step h01 (health of the empty store): health degraded, store absent on posix, an answer outside the health shape on ${name}\n`);
+    expect(r.code).toBe(1);
   });
 
   it('[the-engine-r-bhv01] one byte added to every list answer differs at the first list step', async () => {
@@ -153,24 +163,24 @@ describe('the driver behavior test: what it catches, what it refuses, and what i
     expect(r.code).toBe(2);
   });
 
-  it.skipIf(!fts5Available())('[the-engine-r-bhv01] from a live workspace whose storage variables all name it, a run leaves that workspace byte identical and its scratch folder as found, while a naive call lands in it', async () => {
-    const live = stage('fts5', 'behavior-live');
+  it.skipIf(!sqliteAvailable())('[the-engine-r-bhv01] from a live workspace whose storage variables all name it, a run leaves that workspace byte identical and its scratch folder as found, while a naive call lands in it', async () => {
+    const live = stage('sqlite', 'behavior-live');
     dataFile(live, 'modules', 'live', 'key: <a>/<b>\n');
     const seed = await exec(join(live, RESOLVER), ['store.put', 'live', 'live/one'], { cwd: live, input: 'live value\n', env: { CTX_ROOT: live } });
     expect(seed.code).toBe(0);
     const env = {
       CTX_ROOT: live,
       CTX_DIR: join(live, '.contexture'),
-      CTX_STORAGE_DRIVER: 'fts5',
-      CTX_STORAGE_SQLITE_PATH: join(live, FTS5_DB),
+      CTX_STORAGE_DRIVER: 'sqlite',
+      CTX_STORAGE_SQLITE_PATH: join(live, SQLITE_DB),
       CTX_SCRATCH_ROOT: join(scratch(live), 'verb.1'),
     };
     const outside = () => treeState(live).split('\n').filter((l) => !l.startsWith('.contexture/tmp/')).join('\n');
     const fingerprint = outside();
     const found = treeState(scratch(live));
-    expect(fingerprint).toContain(`${FTS5_DB} `);
-    const r = await behavior(live, [join(live, '.contexture/extensions/storage/drivers/fts5')], env);
-    expect(r.stdout).toBe(same('fts5'));
+    expect(fingerprint).toContain(`${SQLITE_DB} `);
+    const r = await behavior(live, [join(live, '.contexture/extensions/storage/drivers/sqlite')], env);
+    expect(r.stdout).toBe(same('sqlite'));
     expect(r.code).toBe(0);
     expect(outside()).toBe(fingerprint);
     expect(treeState(scratch(live))).toBe(found);

@@ -34,6 +34,7 @@ function makePkg(
   if (kind === 'driver') {
     const drv = opts.driver ?? name;
     lines.push(`# driver: ${drv}`);
+    lines.push('# format: 3');
     lines.push(`# part: driver storage/drivers/${drv}`);
     addFile(p, `storage/drivers/${drv}/driver`, '#!/bin/sh\nexit 0', 0o755);
   } else {
@@ -223,6 +224,7 @@ describe.concurrent('ctx package info', () => {
       version: '1.0.0',
       kind: 'feature',
       driver: null,
+      format: null,
       category: 'docs',
       pitch: 'concise pitch',
       when: 'when writing docs',
@@ -238,7 +240,7 @@ describe.concurrent('ctx package info', () => {
     });
   });
 
-  it('[the-engine-r22] inspects a driver package and handles error, missing, malformed, and usage refusals', async () => {
+  it('[the-engine-r22, the-engine-r23] inspects a driver package and handles error, missing, malformed, and usage refusals', async () => {
     const sb = sandbox('info-errors');
     const drv = makePkg(join(sb, 'plugins'), 'drvpkg', {
       kind: 'driver',
@@ -249,10 +251,13 @@ describe.concurrent('ctx package info', () => {
     expect([r.code, r.stderr]).toEqual([0, '']);
     expect(r.stdout).toContain('root: plugins/drvpkg');
     expect(r.stdout).toContain('kind: driver');
-    expect(r.stdout).toContain('driver: customdrv');
+    expect(r.stdout).toContain('driver: customdrv\nformat: 3\n');
     expect(r.stdout).toContain('parts (under .contexture/extensions/): driver: storage/drivers/customdrv');
     expect(r.stdout).toContain('probe: error (rc 7)\n  boom');
     for (const line of r.stdout.split('\n')) expect(leaks(line)).toBe(false);
+    const drvJson = await ctx(sb, 'package', 'info', 'drvpkg', '--json', '--no-probe');
+    expect([drvJson.code, drvJson.stderr]).toEqual([0, '']);
+    expect(JSON.parse(drvJson.stdout)).toMatchObject({ kind: 'driver', driver: 'customdrv', format: 3 });
 
     const multiDir = sandbox('info-multi-ext');
     const multiPkg = makePkg(multiDir, 'multi', {

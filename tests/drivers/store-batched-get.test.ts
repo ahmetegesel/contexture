@@ -5,7 +5,7 @@ import { dataFile } from '../support/data-file';
 import { ROOT_USER, chmodPlant } from '../support/plants';
 import { moduleCall } from '../support/sh';
 import { fresh } from '../support/snapshot';
-import { DRIVERS, fts5Available } from '../support/stage';
+import { DRIVERS, sqliteAvailable } from '../support/stage';
 import { docsStore, store } from '../support/store';
 import { answer, refused } from '../support/wire';
 
@@ -27,7 +27,7 @@ function targets(sb: string, name: string, keys: readonly string[]): { file: str
 }
 
 for (const driver of DRIVERS) {
-  describe.skipIf(driver === 'fts5' && !fts5Available())(`the batched store.get on ${driver}`, { concurrent: true }, () => {
+  describe.skipIf(driver === 'sqlite' && !sqliteAvailable())(`the batched store.get on ${driver}`, { concurrent: true }, () => {
     let empty: string;
     let keyed: string;
     beforeAll(async () => {

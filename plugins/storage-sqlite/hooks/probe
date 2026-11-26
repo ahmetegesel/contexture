@@ -1,9 +1,9 @@
 #!/bin/sh
-# readiness probe for storage-fts5 (read-only, :memory: only; POSIX sh)
+# readiness probe for storage-sqlite (read-only, :memory: only; POSIX sh)
 set -u
 
 if ! command -v sqlite3 >/dev/null 2>&1; then
-  printf 'sqlite3 not found on PATH (needs 3.44 or later with FTS5)\n'
+  printf 'sqlite3 not found on PATH (needs 3.44 or later)\n'
   exit 1
 fi
 
@@ -19,10 +19,5 @@ if [ "${ver_n:-0}" -lt 3044000 ]; then
   exit 1
 fi
 
-if ! sqlite3 :memory: "CREATE VIRTUAL TABLE _p USING fts5(x, tokenize='trigram');" >/dev/null 2>&1; then
-  printf 'sqlite3 %s lacks FTS5 trigram support\n' "$ver"
-  exit 1
-fi
-
-printf 'sqlite3 %s with FTS5 and trigram ready\n' "$ver"
+printf 'sqlite3 %s ready\n' "$ver"
 exit 0

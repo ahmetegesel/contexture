@@ -10,7 +10,7 @@ const COMMENT = /^[ \t]*(#|\/\/)/;
 
 const UNIT = 'base/.contexture/modules/unit';
 const POSIX = 'base/.contexture/storage/drivers/posix/driver';
-const FTS5 = 'plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5/driver';
+const SQLITE = 'plugins/storage-sqlite/.contexture/extensions/storage/drivers/sqlite/driver';
 const LIBRARY = 'base/.contexture/storage/scripts/library';
 const BEHAVIOR = 'base/.contexture/storage/scripts/driver-behavior';
 
@@ -21,9 +21,9 @@ const OWNERS: readonly [file: string, line: string, why: string][] = [
   [`${UNIT}/scripts/data`, '  U_LT="$u_tmp/locks/unit/$1.lock"', 'the unit lock (u_lock)'],
   [POSIX, '  sl_lock="$(get_lock_dir)/store-$1.lock"', 'the posix namespace lock (store_lock)'],
   [POSIX, '  lh_lock="$lh_tmp/locks/store-$1.lock"', 'the posix namespace lock probe (store_lock_held)'],
-  [FTS5, '  DB_PATH="$ROOT/.contexture/sessions.db"', 'the fts5 database default name'],
-  [FTS5, '  sl_lock="$LOCK_BASE/locks/store-$1.lock"', 'the fts5 namespace lock (store_lock)'],
-  [FTS5, '  lh_lock="$LOCK_BASE/locks/store-$1.lock"', 'the fts5 namespace lock probe (store_lock_held)'],
+  [SQLITE, '  DB_PATH="$ROOT/.contexture/sessions.db"', 'the sqlite database default name'],
+  [SQLITE, '  sl_lock="$LOCK_BASE/locks/store-$1.lock"', 'the sqlite namespace lock (store_lock)'],
+  [SQLITE, '  lh_lock="$LOCK_BASE/locks/store-$1.lock"', 'the sqlite namespace lock probe (store_lock_held)'],
   [LIBRARY, '  ll_dir="$(store_lib_root)/.contexture/tmp/locks/lib"', 'the library lock folder, its own family (lib_lock)'],
   [BEHAVIOR, '  BL_DIR="$1/.contexture/tmp/locks/store-$2.lock"', 'the namespace lock the behavior test plants in a scratch workspace for its locked health step (bh_lock)'],
   ['base/.contexture/config-lib', '    cwl_lock_dir="$cwl_ctx/tmp/locks"', 'the config lock folder (cfg_write_locked)'],
@@ -145,7 +145,7 @@ describe.concurrent('the drawer literal census: the record root, the database na
 
   it.each([
     ['a record read in a copied posix driver', POSIX, 'cat "$STORE_WS/.contexture/sessions/$1/state.md"'],
-    ['a database path in a copied fts5 driver', FTS5, 'sqlite3 "$ROOT/.contexture/sessions.db" "SELECT 1;"'],
+    ['a database path in a copied sqlite driver', SQLITE, 'sqlite3 "$ROOT/.contexture/sessions.db" "SELECT 1;"'],
     ['a lock folder in a copied composer', 'base/.contexture/laws/compose', 'rm -rf "$root/.contexture/tmp/locks/unit"'],
     ['a record root split by quoting', 'base/.contexture/storage/scripts/library', 'cat "$sr_root/.contexture/"sess"ions/u/state.md"'],
     ['a record root in an escaped regex', 'base/.contexture/storage/scripts/store-data', "grep -E '\\.contexture\\/sessions' \"$sd_file\""],
@@ -167,7 +167,7 @@ describe.concurrent('the drawer literal census: the record root, the database na
     ['a record path in a core test', 'tests/drivers/store-posix.test.ts', "const planted = join(sb, '.contexture/sessions/u/state.md');"],
     ['a join split record root in a plugin test', 'plugins/docs-discipline/tests/unit/io-helpers.test.ts', "const planted = join(sb, '.contexture', 'sessions', 'u');"],
     ['a lock folder split by join in a support helper', 'tests/support/record.ts', "const held = join(sb, '.contexture', 'tmp', 'locks', 'store-unit.lock');"],
-    ['the database name in a template literal', 'plugins/storage-fts5/tests/fts5-store.test.ts', 'const db = `${sb}/.contexture/sessions.db`;'],
+    ['the database name in a template literal', 'plugins/storage-sqlite/tests/sqlite-store.test.ts', 'const db = `${sb}/.contexture/sessions.db`;'],
     ['a join split new record root in a core test', 'tests/drivers/store-posix.test.ts', "const planted = join(sb, '.contexture', 'units', 'u');"],
   ])('%s reads red with exactly one remainder', (_name, rel, line) => {
     const r = scanTests(plantedTree(rel, line));

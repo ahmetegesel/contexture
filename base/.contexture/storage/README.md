@@ -13,8 +13,8 @@ storage/
   scripts/store-data        the private reader and validator of a module's data file, and its listing
   scripts/store-key.awk     the one key rule: the awk functions the dispatch gate and every bundled
                             driver read (the key, the prefixes, the leading run fold set)
-  scripts/store-search      the private exact and document-derivation search engine
-  scripts/store-search.awk  the engine's parser, extractor, matcher, and SQL deriver
+  scripts/store-search      the private exact search engine
+  scripts/store-search.awk  the engine's parser, extractor, and matcher
   scripts/store-b64         the private base64 encoder of a stored value
   scripts/store-pack        the private codec of a batched store.get answer: pack, unpack
   scripts/store-fields.awk  the private field validator engine the library's fields functions
@@ -37,11 +37,11 @@ like any store function (a missing, extra, or malformed argument refuses rc 1
 `ERR_INVALID_ARGUMENT`, an undeclared namespace rc 1 `ERR_ENTITY_NOT_FOUND`, a
 declaration the core cannot read rc 2 `ERR_STORAGE_READ`), by one table on both drivers:
 the store not made (posix: the declared root and the declared fallback root both absent;
-fts5: no database file, or a file holding no table) reads `degraded`, absent; made but
+sqlite: no database file, or a file holding no table) reads `degraded`, absent; made but
 unreadable (posix: either existing root) reads `error`, absent; presence is then counted
 (posix: the first key the namespace's pattern admits under its root or its fallback root,
-never a stray file; fts5: the namespace's rows alone); unwritable (posix: either existing
-root) reads `error` with that presence, as do the fts5 checks (another schema reads
+never a stray file; sqlite: the namespace's rows alone); unwritable (posix: either existing
+root) reads `error` with that presence, as do the sqlite checks (another schema reads
 present, a failed integrity check, an sqlite3 older than 3.44 with the store by the
 file's existence); `locked` replaces `ok` whatever the presence; the detail names no
 folder, and the probe prints no fallback notice.
@@ -97,7 +97,7 @@ kinds `stray_files`, `nonkey_folders`, `empty_folders`, `links`, `special_files`
 `newline_names` in that order, each `{"count","bytes"}` (`keys` is `documents` plus the
 `outside_keys` count, a refused key never a key; `entries` counts each name holding a newline once) (a leftover folder counts once,
 its regular files' bytes rolled in; a file `wc` cannot read and an unreadable folder count
-0 bytes). The fts5 driver keeps one database and no key file tree, so
+0 bytes). The sqlite driver keeps one database and no key file tree, so
 it answers its unknown function line rc 2 `ERR_CAPABILITY_UNSUPPORTED`. A walk costs what
 the roots hold, every entry once: it is the whole walk the leftovers explain, so it runs
 only where a caller asks for it (`ctx unit diagnose --leftovers`, `ctx store check
@@ -158,7 +158,7 @@ sweep would move the folder it moves into, or the lock it holds); a root that is
 another namespace's root or fallback root (as `store-data --list` names them) refuses rc 1
 `ERR_INVALID_ARGUMENT` naming both namespaces, a listing that cannot be read whole rc 2
 `ERR_STORAGE_READ`; a missing, unknown, or repeated argument, a malformed stamp or
-prefix, and both scopes refuse rc 1. The fts5 driver answers its unknown function line rc
+prefix, and both scopes refuse rc 1. The sqlite driver answers its unknown function line rc
 2. Its callers are `ctx unit migrate --sweep`
 (per unit under its unit lock, `--prefix=<unit>/`, then `--loose` under `--all`) and
 `ctx store check --leftovers --sweep` (the store namespace whole).
@@ -189,7 +189,7 @@ is escaped, so the item separator and a key's closing quote cannot occur in one.
 drivers pack the line with `store-pack`, so their answers are byte identical; the posix
 driver finds the asked keys by listing their own folders alone, one level each, as the
 walk of their common folder would list them (the exact stored spelling, the root's copy
-first), so a read across many units never walks the namespace, and fts5 writes them in one
+first), so a read across many units never walks the namespace, and sqlite writes them in one
 `sqlite3` call.
 
 Keys are exact and meet one key and value rule, the text of `scripts/store-key.awk`, so
@@ -271,7 +271,7 @@ first, a killed writer's residue moving with the folder), the card declaring the
 `store.promote` token; a move that empties the fallback root removes it as the write
 path's does, and a `none` answer over an empty fallback root removes that root too, so a
 sweep after every prefix has moved leaves no empty deprecated root, while the storage
-layer keeps its empty root when it holds no unit, the sweep then promoting nothing; fts5 keeps namespace and key
+layer keeps its empty root when it holds no unit, the sweep then promoting nothing; sqlite keeps namespace and key
 with no root, never reads a fallback, and does not declare it. The batch holds that lock once, validates the whole action list against the live keys, stages
 a value per put, and commits every key under one store-scope undo log; its first failure
 prints `store.batch: error: action <n> (<op> '<key>'): <message> (<CODE>)`, 1-based, and
@@ -426,9 +426,8 @@ line when none applies) and the rules from line 12, the form the posix driver re
 order) answers, after the rules, one tagged line per declared field,
 `@field<TAB><name>: <spec>`, in declaration order, the form the library's `fields_own`
 reads; no document rule starts with `@`, and a reader that does not ask never sees the
-family, so the plain and fallback answers stay byte for byte as before (the fts5 driver
-hashes every line past the fixed ones into its search schema signature, so a field line
-never reaches it); `store-data <namespace> --with-unsearched`, beside the other flags in
+family, so the plain and fallback answers stay byte for byte as before (the sqlite driver
+reads only its fixed lines, so a field line never reaches it); `store-data <namespace> --with-unsearched`, beside the other flags in
 any order, answers after the rules and before any field line one tagged line per
 `unsearched` line, `<TAB><pattern>`, in declaration order, the form the posix
 driver's leftovers probe and sweep read, every other answer byte for byte as without it;
@@ -507,7 +506,9 @@ shell variable or awk), and the stderr shape, nothing on rc 0 and on a refusal o
 both sides with the same function before `: error: ` (the resolver's `driver-resolver:
 ERROR:` line counting as its function) and the same code in its last parentheses, the
 message free. `k01` compares the exit code and the stderr shape alone; the health steps
-compare the `health` and `store` fields, the driver name and detail free. posix is the
+compare the `health` and `store` fields of an answer in its shape, one stdout line holding
+exactly the keys `driver`, `health`, `detail`, and `store` in that order, the driver name
+and detail free (an answer outside that shape reads as such and differs from posix's). posix is the
 reference, so no answer is kept here: each step carries its intent alone, hold or refuse,
 and a reference that refuses a step it must hold, holds one it must refuse, writes to stderr
 while it holds one, or refuses without one line naming its function and code answers cannot
@@ -548,7 +549,7 @@ transitional compatibility. The resolver searches, in order:
 1. the workspace custom drivers, `.contexture/drivers/<name>/driver` (transitional);
 2. the storage core's drivers, `.contexture/storage/drivers/<name>/driver`;
 3. the extension root's package drivers,
-   `.contexture/extensions/storage/drivers/<name>/driver` (the settled home; the fts5
+   `.contexture/extensions/storage/drivers/<name>/driver` (the settled home; the sqlite
    driver is installed there);
 4. the module-owned drivers, `.contexture/modules/*/drivers/<name>/driver` (transitional);
 5. the base mirror's core, extension, and module drivers (transitional);

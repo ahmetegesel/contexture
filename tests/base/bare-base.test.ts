@@ -58,10 +58,10 @@ describe.concurrent('the bare base: the no-plugin boot and help surface', () => 
     expect(modules(r.stdout)).toEqual(['lane', 'rhythm', 'store', 'unit']);
   });
 
-  it('[the-engine-r5] ctx run answers its help, and docs and storage-fts5 are unknown without their plugins', async () => {
+  it('[the-engine-r5] ctx run answers its help, and docs and storage-sqlite are unknown without their plugins', async () => {
     const sb = bare();
     expect((await ctx(sb, 'run', '--help')).code).toBe(0);
-    for (const name of ['docs', 'storage-fts5']) {
+    for (const name of ['docs', 'storage-sqlite']) {
       const r = await ctx(sb, name, 'help');
       expect(r.code, name).toBe(1);
       expect(r.stderr).toBe(`ctx: unknown command: ${name}\n`);

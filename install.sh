@@ -125,7 +125,7 @@ parse_plugins_arg() {
     return 0
   fi
   if [ "$pa_raw" = "all" ]; then
-    die 1 "--plugins=all is not supported (git has no default and storage-fts5 changes the storage driver; list plugins explicitly)"
+    die 1 "--plugins=all is not supported (git has no default and storage-sqlite changes the storage driver; list plugins explicitly)"
   fi
   pa_rest=$pa_raw
   pa_out=""
@@ -749,8 +749,8 @@ printf '  law layer: AGENTS.generated.md (composed)\n'
 if [ -n "$installed_plugins" ]; then
   printf '  plugins installed: %s\n' "$installed_plugins"
   case " $installed_plugins " in
-    *" storage-fts5 "*)
-      printf '  storage-fts5 installed: activate with .contexture/ctx store config set driver fts5\n'
+    *" storage-sqlite "*)
+      printf '  storage-sqlite installed: activate with .contexture/ctx store config set driver sqlite\n'
       ;;
   esac
 else

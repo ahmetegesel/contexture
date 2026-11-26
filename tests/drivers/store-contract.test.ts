@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -8,7 +9,7 @@ import { ROOT_USER, chmodPlant, pathPlant } from '../support/plants';
 import { sandbox } from '../support/sandbox';
 import { NEEDLE_ROWS, SEARCH_DATA, SEARCH_VALUES, modeList, searchAnswer } from '../support/search-fixture';
 import { fresh } from '../support/snapshot';
-import { DRIVERS, fts5Available, stage } from '../support/stage';
+import { DRIVERS, sqliteAvailable, stage } from '../support/stage';
 import { DOCS_KEYS, docsStore, listAnswer, plantScript, store } from '../support/store';
 import { answer, refused, refusedLike } from '../support/wire';
 
@@ -16,12 +17,12 @@ const ALL_KEYS = DOCS_KEYS.map(([k]) => k);
 
 const CARDS = {
   posix: `${JSON.stringify({ driver: 'posix', version: '4.0.0', contract: '4', store: ['list', 'get', 'put', 'delete', 'batch', 'scan'], search_modes: modeList('exact'), optional: ['store', 'store.promote'] })}\n`,
-  fts5: `${JSON.stringify({ driver: 'fts5', version: '4.0.0', contract: '4', store: ['list', 'get', 'put', 'delete', 'batch', 'scan'], search_modes: modeList('exact'), optional: ['store'] })}\n`,
+  sqlite: `${JSON.stringify({ driver: 'sqlite', version: '4.0.0', contract: '4', store: ['list', 'get', 'put', 'delete', 'batch', 'scan'], search_modes: modeList('exact'), optional: ['store'] })}\n`,
 };
 
 const HEALTH_ABSENT = {
   posix: { driver: 'posix', health: 'degraded', detail: 'the storage layer is not made yet for the namespace (the first write makes it)', store: 'absent' },
-  fts5: { driver: 'fts5', health: 'degraded', detail: 'database not created yet (will be initialized on the first write)', store: 'absent' },
+  sqlite: { driver: 'sqlite', health: 'degraded', detail: 'database not created yet (will be initialized on the first write)', store: 'absent' },
 };
 
 async function healthOf(s: ReturnType<typeof store>, namespace: string): Promise<{ driver: string; health: string; detail: string; store: string }> {
@@ -31,7 +32,7 @@ async function healthOf(s: ReturnType<typeof store>, namespace: string): Promise
 }
 
 for (const driver of DRIVERS) {
-  describe.skipIf(driver === 'fts5' && !fts5Available())(`the store contract on ${driver}`, { concurrent: true }, () => {
+  describe.skipIf(driver === 'sqlite' && !sqliteAvailable())(`the store contract on ${driver}`, { concurrent: true }, () => {
     let empty: string;
     let keyed: string;
     beforeAll(async () => {
@@ -337,10 +338,16 @@ for (const driver of DRIVERS) {
     });
 
     describe('faults the driver re-frames', () => {
-      it('[the-engine-r21] a failing encoder leaves no partial scan answer and names the key', async () => {
+      it('[the-engine-r21] a failing value read leaves no partial scan answer: posix names the key its encoder failed on, sqlite refuses its one read whole', async () => {
         const sb = fresh(keyed);
-        plantScript(sb, 'store-b64', 'printf "store-b64: planted encoder failure\\n" >&2\nexit 2');
-        refused(await store(sb, driver).scan('docs'), 'store.scan', 2, 'ERR_STORAGE_READ', "cannot read key 'workspace/B' in namespace 'docs'");
+        if (driver === 'posix') {
+          plantScript(sb, 'store-b64', 'printf "store-b64: planted encoder failure\\n" >&2\nexit 2');
+          refused(await store(sb, driver).scan('docs'), 'store.scan', 2, 'ERR_STORAGE_READ', "cannot read key 'workspace/B' in namespace 'docs'");
+          return;
+        }
+        const real = spawnSync('sh', ['-c', 'command -v sqlite3'], { encoding: 'utf8' }).stdout.trim();
+        const plant = pathPlant('sqlite3', `case "$*" in *"hex(value)"*) printf 'Error: planted read failure\\n' >&2; exit 1 ;; esac\nexec "${real}" "$@"`);
+        refused(await store(sb, driver, plant).scan('docs'), 'store.scan', 2, 'ERR_STORAGE_READ', 'the storage read failed');
       });
     });
 
@@ -351,7 +358,7 @@ for (const driver of DRIVERS) {
         expect(r.stdout).toBe(CARDS[driver]);
       });
 
-      it('[the-engine-r-b3r6t, the-engine-r19] store.promote: posix answers none for a namespace with no fallback root; fts5 declares no promotion and answers its unknown function line', async () => {
+      it('[the-engine-r-b3r6t, the-engine-r19] store.promote: posix answers none for a namespace with no fallback root; sqlite declares no promotion and answers its unknown function line', async () => {
         const r = await store(fresh(empty), driver).op('store.promote', ['docs', 'workspace/']);
         if (driver === 'posix') expect(answer(r, 'store.promote')).toEqual({ namespace: 'docs', prefix: 'workspace/', state: 'none' });
         else refused(r, 'store.promote', 2, 'ERR_CAPABILITY_UNSUPPORTED', "unknown function 'store.promote'");

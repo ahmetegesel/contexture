@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { PRERELEASE } from '../support/fts5';
+import { PRERELEASE } from '../support/probe';
 import { ROOT } from '../support/root';
 import { sandbox } from '../support/sandbox';
 import { put } from '../support/tree';

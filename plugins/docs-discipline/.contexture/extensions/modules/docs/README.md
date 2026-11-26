@@ -282,8 +282,8 @@ The plugin's tests are the vitest project `docs-discipline` in
 harness). Every test stages a sandbox under the workspace's `.contexture/tmp/`
 from the shipped copies alone: the runtime, the unit and lane modules, and the
 storage core from `base/`, this module (its grammar asset riding inside it)
-from the plugin, and on fts5 the storage-fts5 plugin's driver copy with
-`storage.driver: fts5`; the engines run under the system awk. The logic runs
+from the plugin, and on sqlite the storage-sqlite plugin's driver copy with
+`storage.driver: sqlite`; the engines run under the system awk. The logic runs
 once, on posix. `unit/` drives each engine alone over files: `docs-edit.awk`
 against the `tests/write/` goldens (every success byte for byte, every
 refusal) and the opaque ids under a fixed seed (the draw, the draw again past
@@ -349,14 +349,14 @@ delta naming a doc by its path there and by its logical address, an untracked
 doc beside a tracked claimant, the `--since` untracked count, an adopter file
 at a doc's logical address read as an ordinary file in the gate's git halves,
 and the store roots refusal under the gate and the check. `store/` keeps the
-cases on the fts5 driver: the corpus written through `ctx docs write` with the
+cases on the sqlite driver: the corpus written through `ctx docs write` with the
 docs folder removed and read back unchanged through `ctx docs write --replace
 --dry-run`, the gate on the git path (a code change alone reading `UNTRACKED
 CLAIMANT` and the process-owned clean with the same lines posix prints, a doc
 written through the store never riding, the `--since` notice, `--stdin`), and a
 parity smoke of the read verbs against the engines' expected output; it skips when
-sqlite3 lacks FTS5. Needs: POSIX awk and sh, `base/` beside `plugins/`, git,
-and for `store/` sqlite3 with FTS5.
+sqlite3 3.44 or later is absent. Needs: POSIX awk and sh, `base/` beside `plugins/`, git,
+and for `store/` sqlite3 3.44 or later.
 
 ## The gate's matrix
 
