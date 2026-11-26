@@ -1005,6 +1005,8 @@ move_take() {
   { [ -d "$mt_dir" ] || mkdir -p "$mt_dir"; } 2>/dev/null && [ -w "$mt_dir" ] \
     || move_fail 2 ERR_STORAGE_WRITE "the drawer's lock folder cannot hold the storage moving marker"
   cd "$mt_ws" 2>/dev/null || move_fail 2 ERR_STORAGE_READ "the workspace root cannot be entered"
+  CTX_STORE_WORKSPACE=$mt_ws
+  export CTX_STORE_WORKSPACE
   trap 'move_abort 129' HUP
   trap 'move_abort 130' INT
   trap 'move_abort 143' TERM
@@ -1037,10 +1039,10 @@ move_take() {
   exit 0
 }
 
-# move_drain <source driver path>: every namespace the declaration listing names probed
-# through the source driver's storage.health until none reads locked for 20 polls in a row,
-# 0.1 s apart; one still locked past the 600 polls every lock wait shares refuses the take.
-# A namespace found locked is probed first from then on, so a held poll costs one probe
+# move_drain <source driver path>: every namespace the workspace's declaration listing names
+# probed through the source driver's storage.health until none reads locked for 20 polls in
+# a row, 0.1 s apart; one still locked past the 600 polls every lock wait shares refuses the
+# take. A namespace found locked is probed first from then on, so a held poll costs one probe
 move_drain() {
   md_probe=$MV_MARK/probe
   move_wait "$KV_HOME/store-data" --list > "$md_probe" 2>/dev/null < /dev/null \

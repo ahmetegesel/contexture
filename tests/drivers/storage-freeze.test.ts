@@ -360,6 +360,17 @@ for (const driver of DRIVERS) {
   });
 }
 
+describe('the drain reads the namespaces of the workspace it freezes', () => {
+  it('[the-engine-r-mvf01] with CTX_STORE_WORKSPACE exported toward another workspace, a live lock on a namespace only this one declares still holds the take to the bound', { timeout: DRAIN_CEILING }, async () => {
+    const sb = fresh(await seeded('posix', 'freeze-ws'));
+    const elsewhere = stage('posix', 'freeze-elsewhere');
+    holdLock(sb, namespaceLock('mv'), 'live');
+    const r = await rsv(sb, ['move-freeze', PID, 'posix'], '', { ...sleepShim(), CTX_STORE_WORKSPACE: elsewhere }, DRAIN_CEILING - 10_000);
+    expect([r.code, r.stdout, r.stderr]).toEqual([2, '', own("the storage layer's namespace 'mv' is still locked by a writer (60 s timeout)", LOCKED)]);
+    expect(held(sb)).toBeUndefined();
+  });
+});
+
 describe.skipIf(!sqliteAvailable())('the move\'s own writes between two drivers', { concurrent: true }, () => {
   for (const [source, target] of [['posix', 'sqlite'], ['sqlite', 'posix']] as const) {
     describe(`${source} to ${target}`, { concurrent: true }, () => {

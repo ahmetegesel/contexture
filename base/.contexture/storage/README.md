@@ -325,7 +325,10 @@ are deletes alone. A marker whose holder pid is gone freezes nothing (a writer p
 and leaves it for the next take, which could otherwise remove a new move's marker); a
 pid-less one counts as held. With no marker a write pays one `[ -d ]` test and a read
 nothing; a marker is read with the `read` and `kill` builtins alone. A HUP, INT, or TERM
-to a draining take stops its probe, removes its marker, and exits 129, 130, or 143.
+to a draining take stops its probe, removes its marker, and exits 129, 130, or 143. A
+caller that runs the take in the background from a non-interactive shell hands it INT
+ignored on entry, which no shell can trap or reset, so that caller stops it with HUP or
+TERM.
 
 The scan answers the namespace's admitted keys with the raw value in
 base64, no limit; the module decodes and stops after the keys it needs. No driver keeps a
