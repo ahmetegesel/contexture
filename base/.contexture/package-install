@@ -476,7 +476,9 @@ if [ -x "$sd_bin" ] && grep -q '^modules/[^/]*/data$' "$scratch/files"; then
     [ -n "$_or" ] && [ "$_or" != "$_nr" ] || continue
     _dk=$(keys_held "$_dn")
     [ -n "$_dk" ] || continue
-    die 1 "the re-install would move the storage root of module '$_do' (namespace '$_dn', $_dk) from '$_or' to '$_nr', where its verbs would not read its keys; uninstall the package with --keep-data or --delete-data as the human answers, then install it"
+    [ "$_dk" != "key count unknown" ] || _dk="keys (key count unknown)"
+    _dv=$(awk '$1 == "version" && NF == 2 { print $2; exit }' "$state_file" 2>/dev/null)
+    die 1 "the new version moves the storage root of module '$_do' (namespace '$_dn'), so its $_dk cannot follow it; uninstall the package first, as the human answers: --delete-data deletes that data and then the new version installs, --keep-data keeps it for the version that holds it (${_dv:-unknown}), which installs again over it, the new version refused while it is kept"
   done < "$scratch/data_stays"
   _clash=$(awk '
     FILENAME == ARGV[1] { own[$0] = 1; next }

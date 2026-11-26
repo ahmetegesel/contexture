@@ -331,13 +331,14 @@ describe.concurrent('ctx package uninstall: the data answer', () => {
     expect((await install(sb, p)).code).toBe(0);
     expect((await ctx(sb, ['memos', 'put', 'a/b'], 'a/b\n')).code).toBe(0);
     const before = tree(sb);
-    const way = 'where its verbs would not read its keys; uninstall the package with --keep-data or --delete-data as the human answers, then install it';
+    const line = "package-install: the new version moves the storage root of module 'memos' (namespace 'memos'), so its 1 key cannot follow it; uninstall the package first, as the human answers: --delete-data deletes that data and then the new version installs, --keep-data keeps it for the version that holds it (1.0.0), which installs again over it, the new version refused while it is kept\n";
     memosPkg(sb, 'pkg-memos', 'memos', 'root: memos-v2\nfallback_root: memos-old\nkey: <a>/<b>\n', '2.0.0');
     const moved = await install(sb, p);
-    expect([moved.code, moved.stdout, moved.stderr]).toEqual([1, '', `package-install: the re-install would move the storage root of module 'memos' (namespace 'memos', 1 key) from 'memos-v1' and 'memos-old' to 'memos-v2' and 'memos-old', ${way}\n`]);
+    expect([moved.code, moved.stdout, moved.stderr]).toEqual([1, '', line]);
+    expect(moved.stderr).not.toMatch(/memos-v|memos-old|\.contexture/);
     memosPkg(sb, 'pkg-memos', 'memos', 'root: memos-v1\nkey: <a>/<b>\n', '2.1.0');
     const dropped = await install(sb, p);
-    expect([dropped.code, dropped.stdout, dropped.stderr]).toEqual([1, '', `package-install: the re-install would move the storage root of module 'memos' (namespace 'memos', 1 key) from 'memos-v1' and 'memos-old' to 'memos-v1', ${way}\n`]);
+    expect([dropped.code, dropped.stdout, dropped.stderr]).toEqual([1, '', line]);
     expect(tree(sb)).toBe(before);
     const empty = sandbox();
     const q = memosPkg(empty, 'pkg-memos', 'memos', 'root: memos-v1\nkey: <a>/<b>\n');
