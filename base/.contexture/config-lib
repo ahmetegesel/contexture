@@ -1120,6 +1120,7 @@ EOF
     "$cssr_ctx"/storage/drivers/posix/config \
     "$cssr_ctx"/extensions/storage/drivers/*/config; do
     [ -f "$cssr_glob" ] || continue
+    [ "$cssr_glob" != "$cssr_ctx/extensions/storage/drivers/posix/config" ] || continue
     cssr_drv_dir=${cssr_glob%/config}
     cssr_drv=${cssr_drv_dir##*/}
     case "$cssr_drivers" in
@@ -1275,13 +1276,17 @@ cfg_find_resolver() {
 }
 
 # cfg_storage_core <ctx_dir> <script> [<argument>...]: a storage core script run from the
-# workspace root, the drawer found there
+# workspace root, the drawer found there, with no CTX_STORAGE_ variable, so a driver reads
+# the place its configuration names
 cfg_storage_core() {
   csc_rsv=$(cfg_find_resolver "$1") || return 2
   csc_root=$(cfg_root_dir "$1")
   csc_s=${csc_rsv%/*}/$2
   shift 2
   (
+    for csc_v in $(env | sed -n 's/^\(CTX_STORAGE_[A-Za-z0-9_]*\)=.*/\1/p'); do
+      unset "$csc_v"
+    done
     unset CTX_DIR
     CTX_ROOT=$csc_root
     CTX_STORE_WORKSPACE=$csc_root
@@ -1293,12 +1298,13 @@ cfg_storage_core() {
 
 # cfg_storage_key_driver <ctx_dir> <key>: the driver whose config, at the extension root
 # where an installed driver package's driver lives, declares the storage key; nothing for the
-# storage core's and the posix driver's own keys
+# storage core's and the posix driver's own keys, a folder named posix there included
 cfg_storage_key_driver() {
   for cskd_f in "$1"/extensions/storage/drivers/*/config; do
     [ -f "$cskd_f" ] || continue
-    cfg_schema_parse "$cskd_f" config 2>/dev/null | LC_ALL=C awk -F '\t' -v k="$2" '$1 == k { f = 1 } END { exit !f }' || continue
     cskd_d=${cskd_f%/config}
+    [ "${cskd_d##*/}" != posix ] || continue
+    cfg_schema_parse "$cskd_f" config 2>/dev/null | LC_ALL=C awk -F '\t' -v k="$2" '$1 == k { f = 1 } END { exit !f }' || continue
     printf '%s\n' "${cskd_d##*/}"
     return 0
   done

@@ -308,9 +308,9 @@ namespace `store-data --list` names until none reads `locked` for 20 polls in a 
 apart (a namespace found locked is probed first from then on); one still locked past the
 shared 600 polls removes the marker and refuses rc 2 `ERR_STORAGE_LOCKED` naming the
 namespace, and a listing or a probe that fails removes it and refuses rc 2
-`ERR_STORAGE_READ`. A malformed holder pid (not a positive number) or a dead one refuses
-rc 1 `ERR_INVALID_ARGUMENT`, a target the resolver cannot resolve rc 2
-`ERR_DRIVER_NOT_FOUND`, a live holder's marker rc 2 `ERR_STORAGE_LOCKED` at once (one move
+`ERR_STORAGE_READ`. A malformed holder pid (not a positive number), a dead one, or a target
+name outside the driver name rule refuses rc 1 `ERR_INVALID_ARGUMENT`, a target found nowhere
+rc 2 `ERR_DRIVER_NOT_FOUND`, a live holder's marker rc 2 `ERR_STORAGE_LOCKED` at once (one move
 at a time), and a lock folder that cannot be written rc 2 `ERR_STORAGE_WRITE`, nothing
 frozen. A dead holder's marker is reported on stderr naming its target,
 `driver-resolver: notice: a crashed move to driver '<target>' left its freeze, removed now;

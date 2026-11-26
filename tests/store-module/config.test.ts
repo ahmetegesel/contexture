@@ -147,7 +147,7 @@ describe.concurrent('ctx store config', () => {
       '#!/bin/sh',
       'case "$1" in',
       `  capability) printf '%s\\n' '${card}'; exit 0 ;;`,
-      `  store.list) [ -f '${failing}' ] && exit 2; if [ "$2" = unit ] && [ -f '${flag}' ]; then printf '{"namespace":"unit","keys":["u1/state"]}\\n'; else printf '{"namespace":"%s","keys":[]}\\n' "$2"; fi; exit 0 ;;`,
+      `  store.list) [ -f '${failing}' ] && exit 2; if [ "$2" = unit ] && [ -f '${flag}' ] && [ -z "\${CTX_STORAGE_HELD_ELSEWHERE:-}" ]; then printf '{"namespace":"unit","keys":["u1/state"]}\\n'; else printf '{"namespace":"%s","keys":[]}\\n' "$2"; fi; exit 0 ;;`,
       '  *) exit 0 ;;',
       'esac',
       '',
@@ -167,6 +167,8 @@ describe.concurrent('ctx store config', () => {
       const r = await cfg(...args);
       expect([r.code, r.stdout, r.stderr], args.join(' ')).toEqual([1, '', holds]);
     }
+    const elsewhere = await run(sb, ['store', 'config', 'set', 'location', 'elsewhere'], { env: { CTX_STORAGE_HELD_ELSEWHERE: 'empty' } });
+    expect([elsewhere.code, elsewhere.stdout, elsewhere.stderr], 'a storage variable in the environment points no listing away from the configured place').toEqual([1, '', holds]);
     expect(text()).toBe('storage.location: there\n');
     const same = await cfg('set', 'location', 'there');
     expect([same.code, same.stdout, same.stderr]).toEqual([0, '', '']);
@@ -192,6 +194,17 @@ describe.concurrent('ctx store config', () => {
     expect([absent.code, absent.stdout, absent.stderr]).toEqual([0, '', '']);
     const byDefault = await cfg('set', 'location', 'here');
     expect([byDefault.code, byDefault.stdout, byDefault.stderr]).toEqual([0, '', '']);
+  });
+
+  it('[store-r-0s40c] changes a posix driver setting while posix holds data, whatever an extension folder named posix declares, since the resolver never runs that folder', async () => {
+    const sb = stage('posix', 'store-config-posix-key');
+    put(join(sb, '.contexture/storage/drivers/posix/config'), 'sync: optional string default safe\n  The posix sync policy.\n');
+    put(join(sb, '.contexture/extensions/storage/drivers/posix/config'), 'sync: optional string default safe\n  Never read.\n');
+    const seeded = await run(sb, ['store', 'put', 'containers/notes', '--description=probe notes', '--minting=given']);
+    expect([seeded.code, seeded.stderr]).toEqual([0, '']);
+    const r = await run(sb, ['store', 'config', 'set', 'sync', 'fast']);
+    expect([r.code, r.stdout, r.stderr]).toEqual([0, '', '']);
+    expect(readFileSync(join(sb, '.contexture/config'), 'utf8')).toBe('storage.sync: fast\n');
   });
 
   it('[store-r-0s40c] refuses unsetting a required driver key and, for a driver holding nothing, a setting change updates config mtime so resolver verdict cache invalidates', async () => {

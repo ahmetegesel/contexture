@@ -140,7 +140,8 @@ for (const driver of DRIVERS) {
       const sb = fresh(base);
       holdMove(sb, other(driver), 'live', driver);
       for (const [fn, args, input] of WRITES) frozen(await rsv(sb, args, input), fn);
-      for (const env of [{}, { CTX_STORAGE_DRIVER: other(driver) }, { CTX_STORAGE_DRIVER: driver }]) frozen(await rsv(sb, ['store.put', 'mv', 'a/two'], 'two\n', env), 'store.put');
+      const envs: Record<string, string>[] = [{}, { CTX_STORAGE_DRIVER: other(driver) }, { CTX_STORAGE_DRIVER: driver }];
+      for (const env of envs) frozen(await rsv(sb, ['store.put', 'mv', 'a/two'], 'two\n', env), 'store.put');
       for (const flag of [`--driver=${driver}`, `--driver=${other(driver)}`]) frozen(await rsv(sb, [flag, 'store.put', 'mv', 'a/two'], 'two\n'), 'store.put');
       writeFileSync(join(sb, '.contexture/config'), `storage.driver: ${other(driver)}\n`);
       frozen(await rsv(sb, ['store.put', 'mv', 'a/two'], 'two\n'), 'store.put');
@@ -240,9 +241,9 @@ for (const driver of DRIVERS) {
       expect(await waitFor(() => staged(sb).length === (mine ? 3 : 2), 30_000), 'every write past the check is staging its stdin').toBe(true);
       const take = await rsv(sb, ['move-freeze', PID, 'posix'], '', sleepShim(), DRAIN_CEILING - 10_000);
       expect([take.code, take.stdout, take.stderr]).toEqual([0, '', '']);
-      put.child.stdin.end('late\n');
-      batch.child.stdin.end(batchPayload([{ action: 'put', key: 'a/late2', value: 'late\n' }]));
-      mine?.child.stdin.end('own\n');
+      put.child.stdin!.end('late\n');
+      batch.child.stdin!.end(batchPayload([{ action: 'put', key: 'a/late2', value: 'late\n' }]));
+      mine?.child.stdin!.end('own\n');
       frozen(await put.result, 'store.put');
       frozen(await batch.result, 'store.batch');
       if (mine) answer(await mine.result, 'store.put');

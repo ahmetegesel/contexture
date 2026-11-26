@@ -554,17 +554,19 @@ describe.concurrent('config-lib: schema discovery, driver collisions, and --as a
     expect(dup.code).toBe(1);
     expect(dup.stderr).toContain('collides with an existing storage key');
 
-    // A storage core driver other than posix and a workspace driver are no driver the resolver finds, so their configs are never read
+    // A storage core driver other than posix, a workspace driver, and an extension folder named posix are no driver the resolver finds, so their configs are never read
     const sb3 = stage('posix', 'cfg-driver-retired');
     const ctx3 = join(sb3, '.contexture');
     put(join(ctx3, 'storage/drivers/alt/config'), 'core_opt: optional string default one\n');
     put(join(ctx3, 'drivers/wsd/config'), 'ws_opt: optional string default two\n');
     put(join(ctx3, 'extensions/storage/drivers/alt/config'), 'ext_opt: optional string default three\n');
+    put(join(ctx3, 'extensions/storage/drivers/posix/config'), 'ext_posix_opt: optional string default four\n');
     const shd = await runLib(sb3, 'cfg_discover_schemas', [ctx3, 'storage']);
     expect([shd.code, shd.stderr]).toEqual([0, '']);
     expect(shd.stdout).toContain('storage\text_opt\t');
     expect(shd.stdout).not.toContain('core_opt');
     expect(shd.stdout).not.toContain('ws_opt');
+    expect(shd.stdout).not.toContain('ext_posix_opt');
   });
 
   it('treats help as reserved, handles spaces in workspace paths, and preserves --as aliases under modified IFS', async () => {
