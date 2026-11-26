@@ -1009,29 +1009,23 @@ kept a block scalar, the new rule placed after its neighbor):
 ```
 
 The same corpus on the sqlite store (the storage-sqlite plugin beside this one;
-needs sqlite3 3.44 or later). No command moves a corpus between drivers: once the
-driver is set, each doc goes into the store through `ctx docs write` (the
-grammar check and the repo's audit on every doc, as on any write). The writes
-are committed first, and after the move the files leave git in a commit of
-their own:
+needs sqlite3 3.44 or later). Installing the driver package moves the corpus with
+the rest of the record: the installer copies every namespace from posix into the
+database, verifies it, switches the driver, and deletes the old posix copy as the
+human answered (here `--delete-old`, given ahead), so the corpus files leave the
+drawer. The writes are committed first, and after the move the files leave git in
+a commit of their own:
 
 ```sh
 git -c user.name=walk -c user.email=walk@example.invalid commit -qam writes
-mkdir -p .contexture/extensions/storage/drivers
-cp -R ../../../plugins/storage-sqlite/.contexture/extensions/storage/drivers/sqlite .contexture/extensions/storage/drivers/
-printf 'storage.driver: sqlite\n' > .contexture/config
-for f in .contexture/docs/*/*.md; do r=${f#.contexture/docs/}; s=${f##*/}; ./.contexture/ctx docs write "${r%%/*}" "${s%.md}" < "$f"; done
-git rm -r -q --cached .contexture/docs && git -c user.name=walk -c user.email=walk@example.invalid commit -qm "the corpus moves into the store"
-rm -rf .contexture/docs
+./.contexture/ctx package install ../../../plugins/storage-sqlite --delete-old
+git -c user.name=walk -c user.email=walk@example.invalid commit -qam "the corpus moves into the store"
 ```
 
-```text
-docs write: demo-orders/operational written (47 lines)
-docs write: demo-orders/order-flow written (56 lines)
-docs write: demo-web/cart-ui written (39 lines)
-docs write: workspace/conventions written (157 lines)
-docs write: workspace/system-map written (45 lines)
-```
+The installer prints the copy's line per namespace (the docs namespace's
+`docs: 5 keys copied, dumps equal` among them), the old copy step's one line,
+`retired <n> keys in <m> namespaces, no backup kept`, and its closing line, ending
+`the record reads from the 'sqlite' driver`.
 
 With no corpus folder left in the drawer, the verbs read the store and print what the files
 driver printed:

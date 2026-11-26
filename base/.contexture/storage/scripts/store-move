@@ -23,10 +23,14 @@
 #       after the switch: the source scanned again through --driver=<source> against the
 #       configured driver, compared and counted as the copy verifies
 #   store-move unwind <target>
-#       deletes the keys this run wrote that the target still lists
-#   store-move retire <source> <backup|delete>
+#       deletes the keys this run wrote that the target still lists; refused once the run
+#       holds a passed check, since the configured driver then holds the record
+#   store-move retire <source> <backup|delete> [<stamp>]
 #       after a passed check: the check's source dumps saved into a stamped move backup on
-#       backup, then the records the dumps name deleted from the source
+#       backup, then the records the dumps name deleted from the source; a given stamp
+#       (YYYYmmdd-HHMMSS-<pid>, the caller's run stamp) names the backup, which may already
+#       hold the run's other parts and is written again on a rerun, so one run keeps one
+#       backup and a retire that stopped finishes when run again in the same run folder
 #
 # Output: one line per namespace on stdout and one summary line. A refusal is one stderr
 # line, store-move <command>: error: <message> (<CODE>), with the keys, counts, or the
@@ -52,6 +56,7 @@ SM_CHILD=""
 SM_SRC=""
 SM_DST=""
 SM_ANSWER=""
+SM_STAMP=""
 
 sm_clean() {
   [ -z "$SM_WORK" ] || rm -rf "$SM_WORK"
@@ -108,13 +113,21 @@ case "$SM_CMD" in
   retire)
     shift
     SM_LABEL="store-move retire"
-    [ $# -eq 2 ] || sm_args "<source> <backup|delete>"
+    [ $# -eq 2 ] || [ $# -eq 3 ] || sm_args "<source> <backup|delete> [<stamp>]"
     SM_SRC=$1
     SM_ANSWER=$2
+    SM_STAMP=${3:-}
     case "$SM_ANSWER" in
       backup|delete) ;;
       *) sm_refuse 1 ERR_INVALID_ARGUMENT "the answer is backup or delete, not '$SM_ANSWER'" ;;
     esac
+    if [ $# -eq 3 ]; then
+      case "$SM_STAMP" in
+        [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]-[1-9]*)
+          case "${SM_STAMP#*-*-}" in *[!0-9]*) sm_refuse 1 ERR_INVALID_ARGUMENT "malformed stamp '$SM_STAMP' (YYYYmmdd-HHMMSS-<pid>)" ;; esac ;;
+        *) sm_refuse 1 ERR_INVALID_ARGUMENT "malformed stamp '$SM_STAMP' (YYYYmmdd-HHMMSS-<pid>)" ;;
+      esac
+    fi
     ;;
   "") sm_refuse 1 ERR_INVALID_ARGUMENT "takes a command: preflight, copy, check, unwind, or retire" ;;
   *) sm_refuse 1 ERR_INVALID_ARGUMENT "unknown command '$SM_CMD' (preflight, copy, check, unwind, or retire)" ;;
@@ -643,6 +656,9 @@ sm_clear() {
 }
 
 sm_unwind() {
+  sm_passed=$(sm_state checked)
+  [ -z "$sm_passed" ] \
+    || sm_refuse 1 ERR_INVALID_ARGUMENT "this run holds a passed check of the source '$sm_passed', so the configured driver holds the record; finish the old copy step with store-move retire instead"
   sm_target=$(sm_state move | cut -f 2)
   sm_all=0
   sm_m=0
@@ -688,13 +704,20 @@ sm_retire() {
   done < "$SM_WORK/ns"
   sm_stamp=""
   if [ "$SM_ANSWER" = backup ] && [ "$sm_all" -gt 0 ]; then
-    sm_stamp="$(date +%Y%m%d-%H%M%S)-$$"
-    sm_bk=$SM_WS/.contexture/backups/move-$sm_stamp
-    { mkdir -p "$SM_WS/.contexture/backups" && mkdir "$sm_bk"; } 2>/dev/null \
-      || sm_refuse 2 ERR_STORAGE_WRITE "the move's backup folder cannot be made in the drawer"
+    if [ -n "$SM_STAMP" ]; then
+      sm_stamp=$SM_STAMP
+      sm_bk=$SM_WS/.contexture/backups/move-$sm_stamp
+      { mkdir -p "$SM_WS/.contexture/backups" && { [ -d "$sm_bk" ] || mkdir "$sm_bk"; }; } 2>/dev/null \
+        || sm_refuse 2 ERR_STORAGE_WRITE "the move's backup folder cannot be made in the drawer"
+    else
+      sm_stamp="$(date +%Y%m%d-%H%M%S)-$$"
+      sm_bk=$SM_WS/.contexture/backups/move-$sm_stamp
+      { mkdir -p "$SM_WS/.contexture/backups" && mkdir "$sm_bk"; } 2>/dev/null \
+        || sm_refuse 2 ERR_STORAGE_WRITE "the move's backup folder cannot be made in the drawer"
+    fi
     while IFS= read -r ns; do
       [ -n "$ns" ] || continue
-      { mkdir "$sm_bk/$ns" && cp "$SM_RUN/checked.$ns" "$sm_bk/$ns/scan" && cp "$SM_WORK/count.$ns" "$sm_bk/$ns/count"; } 2>/dev/null \
+      { { [ -n "$SM_STAMP" ] && [ -d "$sm_bk/$ns" ] || mkdir "$sm_bk/$ns"; } && cp "$SM_RUN/checked.$ns" "$sm_bk/$ns/scan" && cp "$SM_WORK/count.$ns" "$sm_bk/$ns/count"; } 2>/dev/null \
         || sm_refuse 2 ERR_STORAGE_WRITE "the move's backup of namespace '$ns' cannot be written; nothing was retired"
     done < "$SM_WORK/ns"
   fi

@@ -126,6 +126,7 @@ describe.concurrent('ctx _package: the package manifest grammar', () => {
     ['a duplicate format', [...DRIVER, 'format: 6', 'format: 7'], 'line 7: duplicate # format:'],
     ['a driver package without a format line', DRIVER, 'a driver package carries no # format: line'],
     ['a feature package with a format line', [...HEAD, 'kind: feature', 'format: 3', 'part: module modules/x'], 'line 4: a feature package carries no # format: line'],
+    ['a driver package with a module part', [...DRIVER, 'format: 6', 'part: module modules/x'], 'a driver package carries no module part (its install and uninstall move the record)'],
   ])('[the-engine-r23, modules-r16] %s refuses rc1 naming its line', async (label, lines, message) => {
     const f = manifest(`format-${label.replace(/[^a-z]+/g, '-')}`, lines);
     for (const field of ['validate', 'format']) {

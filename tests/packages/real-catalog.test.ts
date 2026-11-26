@@ -6,7 +6,7 @@ import { exec } from '../support/exec';
 import { compose, count, layer, layerBytes, lineOf } from '../support/laws';
 import { catalogCopy, extPath, install, isExec, out, uninstall } from '../support/packages';
 import { ROOT } from '../support/root';
-import { stage } from '../support/stage';
+import { sqliteAvailable, stage } from '../support/stage';
 import { firstByteDifference, put } from '../support/tree';
 
 const sandbox = () => stage('posix', 'pkg-catalog');
@@ -71,7 +71,7 @@ describe.concurrent('the real catalog installs by catalog name through ctx packa
     ]);
   });
 
-  it('[the-engine-r19, the-engine-r23, plugins-r6] storage-sqlite resolves from the extension root ahead of the transitional module tier, never lists, and uninstalls, while the retired driver name fts5 resolves nothing', async () => {
+  it.skipIf(!sqliteAvailable())('[the-engine-r19, the-engine-r23, plugins-r6] storage-sqlite installs, moving the record in, resolves from the extension root ahead of the transitional module tier, never lists, and uninstalls, moving it back, while the retired driver name fts5 resolves nothing', { timeout: 900_000 }, async () => {
     const sb = sandbox();
     const sqlitePkg = catalogCopy(sb, 'storage-sqlite');
     expect((await install(sb, sqlitePkg)).code).toBe(0);

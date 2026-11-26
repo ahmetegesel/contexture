@@ -229,7 +229,7 @@ describe('the posix fallback root: reads after the root, writes to the root afte
 });
 
 describe.skipIf(!sqliteAvailable())('the sqlite store and the posix roots', () => {
-  it('[the-engine-r-b3r6t, plugins-p3] files planted under the record\'s root and its fallback root stay invisible to sqlite, and its database keeps its name', async () => {
+  it('[the-engine-r-b3r6t] files planted under the record\'s root and its fallback root stay invisible to sqlite, and its database keeps its name', async () => {
     const sb = stage('sqlite', 'fallback-sqlite');
     for (const root of [RECORD_ROOT, FALLBACK_ROOT]) plant(sb, `${root}/u/state.md`, `planted under ${root}\n`);
     const s = store(sb, 'sqlite');

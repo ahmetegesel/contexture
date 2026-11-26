@@ -1,0 +1,31 @@
+#!/bin/sh
+# prepare: the sqlite driver's prepare hook. The package installer runs it from the workspace
+# root before a move into the driver, after it wrote the answered settings; it reads the
+# database location through the driver's own reader and writes nothing. rc 1 (a refusal the
+# human fixes): a database or one of its side files already sits at the location, since a
+# move fills an empty store only, or the location's folder is absent or not writable. rc 0:
+# the first write of the move makes the database there. Its one stderr line names no path.
+set -u
+
+MODULE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." 2>/dev/null && pwd) || {
+  printf 'the sqlite driver part cannot be located\n' >&2
+  exit 2
+}
+. "$MODULE_DIR/location.sh"
+
+for f in "$DB_PATH" "$DB_PATH-wal" "$DB_PATH-shm"; do
+  if [ -e "$f" ] || [ -h "$f" ]; then
+    printf 'a database already sits at the configured location and a move fills an empty store only: move it away, or name another location with --driver-config=database=<path>\n' >&2
+    exit 1
+  fi
+done
+db_dir=$(dirname -- "$DB_PATH")
+if [ ! -d "$db_dir" ]; then
+  printf 'the folder of the configured database location does not exist: make it, or name another location with --driver-config=database=<path>\n' >&2
+  exit 1
+fi
+if [ ! -w "$db_dir" ] || [ ! -x "$db_dir" ]; then
+  printf 'the folder of the configured database location is not writable: fix its permissions, or name another location with --driver-config=database=<path>\n' >&2
+  exit 1
+fi
+exit 0

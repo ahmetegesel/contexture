@@ -5,6 +5,7 @@ import { exec } from '../support/exec';
 import { addFile, addModule, extPath, install, installPkg, newPkg, writeManifest } from '../support/packages';
 import { stage } from '../support/stage';
 import { put, treeState } from '../support/tree';
+import { twinPkg } from '../support/twin';
 
 const sandbox = () => stage('posix', 'pkg-refuse');
 const manifestText = (lines: readonly string[]): string => lines.map((l) => `# ${l}\n`).join('');
@@ -221,10 +222,9 @@ describe.concurrent('package-install: a driver name that already resolves ahead 
     expect(treeState(extPath(sb))).toBe(before);
   });
 
-  it('N16 [modules-r15]: null check: with nothing ahead the same driver package installs', async () => {
+  it('N16 [modules-r15]: null check: with nothing ahead the same driver package installs', { timeout: 900_000 }, async () => {
     const sb = sandbox();
-    const p = newPkg(sb, 'pkgahead');
-    addFile(p, 'storage/drivers/fakedrv/driver', '#!/bin/sh\nexit 0', 0o755);
-    expect((await installPkg(sb, p)).code).toBe(0);
+    const p = twinPkg(sb, { name: 'pkgahead', driver: 'fakedrv' });
+    expect((await install(sb, p)).code).toBe(0);
   });
 });

@@ -5,6 +5,7 @@ import { ctx } from '../support/ctx';
 import { exec } from '../support/exec';
 import { ROOT } from '../support/root';
 import { sandbox } from '../support/sandbox';
+import { sqliteAvailable } from '../support/stage';
 
 const INSTALL_SH = join(ROOT, 'install.sh');
 const CATALOG = ['ast-doc-graph', 'docs-discipline', 'git', 'starter-rhythms', 'storage-sqlite', 'toolchain-filters'];
@@ -207,17 +208,18 @@ describe.concurrent('the root installer install.sh', () => {
     expect(list.stdout).toContain('0 drift');
   });
 
-  it('--non-interactive --plugins=storage-sqlite (alone or with other plugins) prints the storage-sqlite activation notice naming .contexture/ctx store config set driver sqlite', async () => {
+  it.skipIf(!sqliteAvailable())('--non-interactive --plugins=storage-sqlite (alone or with other plugins) installs the driver package, moving the empty record into it, and prints the storage-sqlite activation notice naming .contexture/ctx store config set driver sqlite', { timeout: 600_000 }, async () => {
     const sbSolo = sandbox('install-sqlite-solo');
     const caller = sandbox('install-sqlite-caller');
-    const rSolo = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sbSolo, '--non-interactive', '--plugins=storage-sqlite'], { cwd: caller });
+    const rSolo = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sbSolo, '--non-interactive', '--plugins=storage-sqlite'], { cwd: caller, timeout: 300_000 });
     expect(rSolo.code, rSolo.stderr).toBe(0);
     expect(rSolo.stdout).toContain('plugins installed: storage-sqlite');
     expect(rSolo.stdout).toContain('storage-sqlite installed: activate with .contexture/ctx store config set driver sqlite');
     expect(readFileSync(join(sbSolo, '.contexture/config'), 'utf8')).toContain('package.storage-sqlite:');
+    expect(readFileSync(join(sbSolo, '.contexture/config'), 'utf8')).toMatch(/^storage\.driver: sqlite$/m);
 
     const sbMulti = sandbox('install-sqlite-multi');
-    const rMulti = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sbMulti, '--non-interactive', '--plugins=git,storage-sqlite'], { cwd: caller });
+    const rMulti = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sbMulti, '--non-interactive', '--plugins=git,storage-sqlite'], { cwd: caller, timeout: 300_000 });
     expect(rMulti.code, rMulti.stderr).toBe(0);
     expect(rMulti.stdout).toContain('plugins installed: git storage-sqlite');
     expect(rMulti.stdout).toContain('storage-sqlite installed: activate with .contexture/ctx store config set driver sqlite');

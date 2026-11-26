@@ -347,6 +347,26 @@ describe.skipIf(!sqliteAvailable())('store-move between posix and sqlite', { con
     expect(r.stderr.split('\n').filter((l) => l.endsWith(': missing in the target'))).toHaveLength(20);
   });
 
+  it('[the-engine-r-mov01] once the check passes the unwind refuses, and a retire given the run\'s stamp writes into that one backup beside what the run already put there, a rerun in the same run writing it again', { timeout: 300_000 }, async () => {
+    const sb = fresh(await snap('base'));
+    expect((await move(sb, ['copy', 'posix', 'sqlite'])).code).toBe(0);
+    configure(sb, 'sqlite');
+    expect((await move(sb, ['check', 'posix'])).code).toBe(0);
+    refusal(await move(sb, ['unwind', 'sqlite']), 'unwind', 1, 'ERR_INVALID_ARGUMENT', "this run holds a passed check of the source 'posix', so the configured driver holds the record; finish the old copy step with store-move retire instead");
+    const stamp = '20261126-101010-4242';
+    const bk = join(sb, `.contexture/backups/move-${stamp}`);
+    put(join(bk, '@other/kept'), 'a part the run backed up first\n');
+    put(join(bk, 'unit/scan'), 'a partial scan a stopped retire left\n');
+    const r = await move(sb, ['retire', 'posix', 'backup', stamp]);
+    expect([r.code, r.stderr]).toEqual([0, '']);
+    expect(r.stdout.split('\n').slice(-2)).toEqual([`retired 81 keys in 4 namespaces, backup stamped ${stamp}`, '']);
+    expect(readFileSync(join(bk, '@other/kept'), 'utf8')).toBe('a part the run backed up first\n');
+    expect(readFileSync(join(bk, 'unit/count'), 'utf8')).toBe('21\n');
+    expect(readFileSync(join(bk, 'unit/scan'), 'utf8')).toContain('"namespace":"unit"');
+    expect(readdirSync(join(sb, '.contexture/backups'))).toEqual([`move-${stamp}`]);
+    for (const ns of NAMESPACES) expect(await listed(sb, 'posix', ns), `${ns} retired`).toEqual([]);
+  });
+
   it('[the-engine-r-mov01] check and retire refuse a run that holds no copy or no passed check', async () => {
     const sb = fresh(await snap('base'));
     configure(sb, 'sqlite');
@@ -450,8 +470,10 @@ describe.skipIf(!sqliteAvailable())('store-move between posix and sqlite', { con
       [['copy', 'posix'], 'store-move copy', 'takes <source> <target>'],
       [['check'], 'store-move check', 'takes <source>'],
       [['unwind', 'a', 'b'], 'store-move unwind', 'takes <target>'],
-      [['retire', 'posix'], 'store-move retire', 'takes <source> <backup|delete>'],
+      [['retire', 'posix'], 'store-move retire', 'takes <source> <backup|delete> [<stamp>]'],
       [['retire', 'posix', 'keep'], 'store-move retire', "the answer is backup or delete, not 'keep'"],
+      [['retire', 'posix', 'backup', 'soon'], 'store-move retire', "malformed stamp 'soon' (YYYYmmdd-HHMMSS-<pid>)"],
+      [['retire', 'posix', 'backup', '20261126-101010-0'], 'store-move retire', "malformed stamp '20261126-101010-0' (YYYYmmdd-HHMMSS-<pid>)"],
       [['copy', 'posix', '../x'], 'store-move copy', "malformed driver name '../x'"],
       [['preflight', 'posix', 'posix'], 'store-move preflight', "the source and the target are both 'posix'"],
     ];

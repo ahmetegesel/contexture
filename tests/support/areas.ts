@@ -32,7 +32,7 @@ export const AREAS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['plugins/*/.contexture/**', ['governance']],
   ['plugins/*/hooks/**', ['packages', 'governance']],
   ['plugins/*/README.md', ['governance']],
-  ['plugins/storage-sqlite/**', ['storage-sqlite', 'drivers', 'sqlite-smoke']],
+  ['plugins/storage-sqlite/**', ['storage-sqlite', 'drivers', 'sqlite-smoke', 'packages']],
   ['plugins/docs-discipline/**', ['docs-discipline', 'packages', 'governance']],
   ['plugins/ast-doc-graph/**', ['ast-doc-graph', 'governance']],
   ['plugins/git/**', ['packages', 'laws', 'governance']],

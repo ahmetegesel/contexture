@@ -1,6 +1,6 @@
 # storage-sqlite: the SQLite storage driver plugin
 
-The storage-sqlite plugin packages the SQLite storage driver for Contexture: a twin of the posix driver held in one SQLite database. It answers the store-only driver card of contract 4 exactly as posix does: keys and values in one table, the storage core's key and value rule, the same refusals, the shared namespace lock, all or none batches, and `exact` search alone. The store is at schema version 6, the storage format version the package manifest declares (`# format: 6`). The plugin operates directly on the system `sqlite3` CLI (3.44 or later) with zero runtime dependencies. The record's 35 operations live in the unit module's data script over this store; the driver answers `capability`, `storage.health`, the six store functions, and the exact store search. It carries no verb of its own, and no command moves a record between it and another driver: the store holds only what the ordinary verbs write, and a store at any other schema version is refused, never upgraded.
+The storage-sqlite plugin packages the SQLite storage driver for Contexture: a twin of the posix driver held in one SQLite database. It answers the store-only driver card of contract 4 exactly as posix does: keys and values in one table, the storage core's key and value rule, the same refusals, the shared namespace lock, all or none batches, and `exact` search alone. The store is at schema version 6, the storage format version the package manifest declares (`# format: 6`). The plugin operates directly on the system `sqlite3` CLI (3.44 or later) with zero runtime dependencies. The record's 35 operations live in the unit module's data script over this store; the driver answers `capability`, `storage.health`, the six store functions, and the exact store search. It carries no verb of its own: installing the package moves the record into it from posix and uninstalling it moves the record back (the driver package lifecycle, `docs/the-engine.md`, Moving a record between backends), and a store at any other schema version is refused, never upgraded in place, since a format change moves the record out through posix and back in.
 
 ## Adoption
 
@@ -19,7 +19,7 @@ The storage-sqlite plugin serves as a single file storage backend: the single st
 6. The schema version: the whole schema 6 is laid in one transaction (`db-init.sh`) at the first open of a new or empty database file: an absent file is made by its first write (a read of an absent file makes nothing), and an existing empty file gets the schema on its first open, read or write; a store at version 6 opens with one read; a store at any other version refuses every function rc 2 `ERR_STORAGE_SCHEMA` (`the storage layer's database is at schema <v>; this driver reads 6`) and is never written, no backup made; `storage.health` reports it `error` naming both versions. A database file the driver cannot read refuses rc 2 `ERR_STORAGE_READ` (`cannot read the storage layer's database`), and an empty one it cannot lay the schema in `ERR_STORAGE_WRITE` (`cannot create the storage layer's database`), naming no folder.
 7. The storage format version: the manifest's `# format: 6`, the driver's `DB_SCHEMA_VERSION`, and a fresh store's `user_version` are one number, held together by this plugin's schema test, since the manifest is package metadata the install never copies. A change of the stored format bumps all three together. The format starts at 6 so a database an earlier SQLite driver laid at schema 1 to 5 in the same default file reads as another version and refuses loudly instead of reading as current.
 8. The docs corpus over the generic storage layer: the agent-facing docs live in the store table under the docs namespace, one value per doc keyed by `<repo>/<slug>` with its bytes verbatim, and the docs module reads and writes them through the store functions; it keeps its own parser and renders every view. The docs module's check and gate read git's delta here as under posix: no corpus file lives in git, so every claimant reads untracked and the reconciliation is the docs-drift flow's.
-9. Moving a record: no command moves a record between backends, and the plugin carries no migrate verb. A record reaches this store through the agent re-entering it with the ordinary verbs under this driver, and the corpus through the `ctx docs` write verbs.
+9. Moving a record: the plugin carries no migrate verb. The package install moves every namespace from posix into the database under the storage moving freeze and its uninstall moves it back, and the driver part's three hooks keep the database: `hooks/prepare` refuses a database or side file already at the location and a folder that is absent or not writable, writing nothing; `hooks/cleanup` removes the database and its `-wal` and `-shm` files a failed move made; `hooks/finish` out moves them into the run's backup or deletes them as the human answered, and in does nothing. Each reads the location through `location.sh`, the driver's own reader.
 
 | piece | what it is | lands as |
 |---|---|---|
@@ -28,6 +28,8 @@ The storage-sqlite plugin serves as a single file storage backend: the single st
 | `.contexture/extensions/storage/drivers/sqlite/driver` | the driver executable: the contract 4 store-only entry point (capability, storage.health, the six store functions, the exact store search); reads `storage.database` and legacy `session.storage.database` via the shared `config-lib` reader | install (driver part) |
 | `.contexture/extensions/storage/drivers/sqlite/config` | the driver configuration schema (`database: optional path`, omitting the default database path so schema views stay path-free) | install (driver part) |
 | `.contexture/extensions/storage/drivers/sqlite/db-init.sh` | the database open path: the sqlite3 3.44 minimum, the fresh schema 6 in a new or empty file, the version 6 open, the refusal of any other version, the unreadable and the unwritable open refusals naming no folder, the per-connection busy timeout | install (driver part) |
+| `.contexture/extensions/storage/drivers/sqlite/location.sh` | the database location reader the driver and its hooks share: `CTX_STORAGE_SQLITE_PATH`, else `storage.database`, else the drawer default | install (driver part) |
+| `.contexture/extensions/storage/drivers/sqlite/hooks/{prepare,finish,cleanup}` | the driver hooks the package installer runs around a move: prepare refuses an existing database or an unusable folder, finish out backs the database up or deletes it, cleanup removes what a failed move made | install (driver part) |
 | `hooks/probe` | the readiness probe: rc 0 when `sqlite3` 3.44 or later is on PATH, rc 1 naming the missing binary or the version found | reference (run by `ctx package catalog` and `info`) |
 | `tests/sqlite-schema.test.ts` | the schema (vitest project `storage-sqlite`): the one table and its three columns laid at version 6 in an absent or empty file with no backup, the manifest's format, the driver's schema version, and a fresh store's version one number, a read leaving a version 6 store byte for byte, a version 5, 0, or 7 file refusing get, list, and put naming both versions with the file untouched and no backup, the health over every database state with no detail naming a folder, the open refusals naming no folder, and the location settings (`CTX_STORAGE_SQLITE_PATH` taken as given, `storage.database` relative or absolute, the legacy reads, a read of an absent database making nothing) | reference |
 | `tests/sqlite-version.test.ts` | the sqlite3 3.44 guard and the readiness probe's three answers under a fake sqlite3 (itself null-checked) | reference |
@@ -39,7 +41,7 @@ The storage-sqlite plugin serves as a single file storage backend: the single st
 * Zero runtime dependencies: all operations execute through host `sqlite3` with zero compilation and zero Node.js or Python runtime requirements.
 * A posix twin: the storage core's differential behavior test reads this driver the same as posix on every step, and its health answers keep the contract's shape.
 * Concurrency and WAL mode: the database runs in `PRAGMA journal_mode = WAL;` and every connection waits up to ten seconds for a busy writer (`sqlite3 -cmd ".timeout 10000"`); every write also holds the namespace store lock posix takes (`.contexture/tmp/locks/store-<namespace>.lock` while the drawer's scratch folder is writable, else under the per-user `contexture-<user>` folder in the system temp), so both drivers meet one lock, and `storage.health <namespace>` reports `locked` in place of `ok` while a writer holds it. An interrupted function (HUP, INT, TERM) removes its scratch and releases the lock it holds through its exit cleanup (an open transaction rolls back with its connection); the copy of a put's, a batch's, or a search's stdin runs in the background under the wait builtin, so a signal ends the call at once even while the caller still holds stdin open. A SIGKILL leaves the lock folder, but it carries its holder pid, so a waiter removes a lock whose pid is gone and proceeds while a live holder still refuses `ERR_STORAGE_LOCKED` after 600 polls 0.1 s apart (60 s of sleep).
-* No markdown in the store: the store holds module-owned bytes opaquely and never parses them; no function reads markdown or calls another driver, and no function moves a record in or out.
+* No markdown in the store: the store holds module-owned bytes opaquely and never parses them; no function reads markdown or calls another driver, and no driver function moves a record in or out: the move is the core's, through the store functions.
 * Zero em-dash and zero spaced hyphen compliance: all documentation, scripts, and error diagnostics avoid em-dashes and spaced hyphens.
 
 ## Assess
@@ -49,25 +51,25 @@ Before adopting `storage-sqlite` in a repository, verify:
 * SQLite CLI availability: `sqlite3` on PATH at version 3.44 or later (below it every function refuses rc 2 `ERR_DRIVER_NOT_FOUND` naming the version found, and `storage.health`, which `ctx unit diagnose` prints, reports `error` naming it); `ctx package info storage-sqlite` runs the probe.
 * An older store: a database an earlier SQLite driver wrote at the same place is refused naming its schema version; move it aside, since the driver lays a fresh store in its place only once the path holds no file or an empty one.
 * Workspace storage configuration: the database lives at the drawer default `.contexture/sessions.db`, or where `CTX_STORAGE_SQLITE_PATH` names it (taken as given), or at the `storage.database` setting (a relative value resolved against the workspace root; inspect declared keys via `ctx store config schema` and current values via `ctx store config get database`, with a transitional read-only fallback for `session.storage.database` and `.contexture/storage.conf`).
-* The cutover: once `storage.driver: sqlite` is configured, every verb reads and writes the database alone, so a unit or a doc left in files is invisible to it; the units carried forward and the corpus are re-entered through the verbs (Step 3). A corpus tracked in git moves only from a committed state, and the store is a single-machine store: a team sharing its corpus through git keeps the posix driver.
+* The move: the install copies every namespace from posix into the database and verifies it before it switches `storage.driver`, every write refusing meanwhile, and leaves the old posix copy backed up or deleted on the human's answer (`--backup-old` or `--delete-old`; with neither and no terminal it refuses naming both, so the agent relays the question); a fresh workspace whose posix lists nothing needs no answer. A corpus tracked in git moves only from a committed state, and the store is a single-machine store: a team sharing its corpus through git keeps the posix driver.
 
 ## Propose
 
 * Present the destination: the package installs its driver at `.contexture/extensions/storage/drivers/sqlite/`.
 * Explain the concurrency: WAL mode with every connection waiting on a busy writer; the search is `exact` alone, as on posix.
-* Confirm the cutover plan: no command moves the record; the agent re-enters the units worth carrying through the ordinary verbs and the corpus through `ctx docs write`, and the posix files stay where they are until the maintainer removes them, so switching `storage.driver` back to posix reads them again.
+* Confirm the move: the record moves in at the install and back into posix at the uninstall, and the old copy's backup or delete is the human's answer, relayed, never defaulted.
 
 ## Execute
 
 ### Step 1: Install the Package
 
-Install the driver into the extension root, on the maintainer's go at the act:
+Install the driver into the extension root, on the maintainer's go at the act, with the human's answer for the old posix copy:
 
 ```sh
-.contexture/ctx package install storage-sqlite
+.contexture/ctx package install storage-sqlite --backup-old   # or --delete-old; --driver-config=database=<path> names another location
 ```
 
-The installer overlays the package's driver part at `.contexture/extensions/storage/drivers/sqlite/` (the executable named `driver` with `schema.sql`, `db-init.sh`, `config`, and its `README.md` beside it), records every installed path under `.contexture/extensions/.state/storage-sqlite.files`, and refuses the collision classes before writing. A re-install is an update: files the new source drops are removed when unchanged and preserved when changed.
+The installer overlays the package's driver part at `.contexture/extensions/storage/drivers/sqlite/` (the executable named `driver` with `schema.sql`, `db-init.sh`, `location.sh`, `config`, `hooks/`, and its `README.md` beside it), records every installed path and the storage format under `.contexture/extensions/.state/storage-sqlite.files`, and refuses the collision classes before writing. It then runs the storage core's behavior test on the driver, writes any `--driver-config` setting, runs `hooks/prepare`, freezes every write, copies every namespace from posix into the database, switches `storage.driver: sqlite`, checks the copy through the configured driver, and backs up or deletes the old posix copy as answered, the backup named by its stamp alone (`docs/the-engine.md`, Moving a record between backends); any failure before the check passes undoes the whole install. A re-install at the same format is a guarded update: the files land only when every namespace reads the same through the new version.
 
 ### Step 2: Configure Git Ignore
 
@@ -80,15 +82,15 @@ Add the database files to `.gitignore`:
 .contexture/sessions.db-shm
 ```
 
-### Step 3: Re-enter the Record
+### Step 3: The Way Back
 
-The maintainer sets the driver via `ctx store config set driver sqlite` (which runs the contract 4 capability handshake before writing `.contexture/config` and prints a non-blocking migration notice when the effective driver changes); then the agent re-enters each unit worth carrying forward through the ordinary verbs under sqlite, reading it under posix (`CTX_STORAGE_DRIVER=posix ctx unit load <unit>`) and judging each legacy shape as it goes, and writes each doc of the corpus through the docs write verb:
+Uninstalling the package, on the maintainer's go, moves the record back into posix and then backs up or deletes the database as the human answers:
 
 ```sh
-.contexture/ctx store config set driver sqlite   # or set database <path> for a custom store path
-ctx unit bootstrap <unit> "<objective>"          # then task add, finding add, record, lane create, ...
-ctx docs write <repo> <slug> < .contexture/docs/<repo>/<slug>.md   # each posix corpus file
+.contexture/ctx package uninstall storage-sqlite --backup-old   # or --delete-old
 ```
+
+The uninstall freezes every write, copies every namespace from the database into posix (which must list no key), unsets `storage.driver`, checks the copy through posix, and only then runs `hooks/finish`, which moves the database and its `-wal` and `-shm` files into the run's backup or deletes them, and unsets `storage.database`; a failure before the check leaves the driver installed and configured with nothing removed.
 
 ## Verify
 
@@ -103,7 +105,7 @@ bun run test:storage-sqlite
 
 The shared set (`tests/drivers/store-contract.test.ts` and its siblings) proves the store six, the batch, the scan, the locks, the faults, and the differential fuzzer on both drivers, and the storage core's behavior test reads this driver the same as posix; `plugins/storage-sqlite/tests` adds what only this driver keeps: the schema and its version, the sqlite3 guard and the probe, the scan encoding, the process count, and the trigger rollbacks.
 
-Verify the re-entered record with the read verbs (`ctx unit board`, `load`, `task list`, `entry list`, `finding list`, `lane show`) against the same reads under posix, and each doc with `ctx docs write <repo> <slug> --replace --dry-run < .contexture/docs/<repo>/<slug>.md` (the posix corpus file), which answers `unchanged (nothing written)` exactly when the store holds the doc byte for byte.
+The install's copy and check already compared every namespace's dump byte for byte; read the moved record back with the read verbs (`ctx unit board`, `load`, `task list`, `entry list`, `finding list`, `lane show`) and the corpus with `ctx docs query --index`. The packages project proves the lifecycle on this driver (`tests/packages/driver-sqlite.test.ts`: an install over a seeded record and its uninstall reading the same dumps, and the three hooks).
 
 ## Needs
 

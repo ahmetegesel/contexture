@@ -1,0 +1,55 @@
+#!/bin/sh
+# finish: the sqlite driver's finish hook. The package installer runs it from the workspace
+# root once a move is verified: in (CTX_DRIVER_DIRECTION in) there is nothing to finish; out,
+# the record already reads from posix, so the database and its -wal and -shm side files are
+# the old copy: moved into CTX_DRIVER_BACKUP, the run's empty backup folder, when
+# CTX_DRIVER_OLD_COPY is backup, or deleted when it is delete. rc 2 when a file cannot be
+# moved or removed, or the direction or the answer is missing, its one stderr line naming no
+# path; a rerun finishes what a stopped one left.
+set -u
+
+case "${CTX_DRIVER_DIRECTION:-}" in
+  in) exit 0 ;;
+  out) ;;
+  *)
+    printf 'the finish hook takes the direction in or out\n' >&2
+    exit 2
+    ;;
+esac
+
+MODULE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." 2>/dev/null && pwd) || {
+  printf 'the sqlite driver part cannot be located\n' >&2
+  exit 2
+}
+. "$MODULE_DIR/location.sh"
+
+case "${CTX_DRIVER_OLD_COPY:-}" in
+  backup)
+    if [ -z "${CTX_DRIVER_BACKUP:-}" ] || [ ! -d "$CTX_DRIVER_BACKUP" ]; then
+      printf 'the old copy is to be backed up, but no backup folder was given\n' >&2
+      exit 2
+    fi
+    for f in "$DB_PATH" "$DB_PATH-wal" "$DB_PATH-shm"; do
+      [ -e "$f" ] || [ -h "$f" ] || continue
+      mv -f "$f" "$CTX_DRIVER_BACKUP/" 2>/dev/null || {
+        printf 'a database file cannot be moved into the backup\n' >&2
+        exit 2
+      }
+    done
+    ;;
+  delete)
+    for f in "$DB_PATH" "$DB_PATH-wal" "$DB_PATH-shm"; do
+      [ -e "$f" ] || [ -h "$f" ] || continue
+      rm -f "$f" 2>/dev/null
+      if [ -e "$f" ] || [ -h "$f" ]; then
+        printf 'a database file cannot be deleted\n' >&2
+        exit 2
+      fi
+    done
+    ;;
+  *)
+    printf 'the old copy answer is backup or delete\n' >&2
+    exit 2
+    ;;
+esac
+exit 0

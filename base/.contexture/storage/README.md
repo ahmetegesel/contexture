@@ -537,7 +537,8 @@ The package uninstaller counts and deletes a package's namespaces through it.
 ## Moving the records to another driver
 
 `scripts/store-move` is the move engine the package installer drives when the storage
-driver changes (no summary line, so never a verb). It moves every namespace
+driver changes (no summary line, so never a verb; the installer's whole run, its answers,
+hooks, unwind, and crash recovery, is docs/the-engine.md's Moving a record between backends). It moves every namespace
 `store-data --list` names, the kept ones included, from one driver to another through the
 resolver, the driver named by `--driver=<name>` on every call and the namespace as the
 store function's argument, from the workspace root with `CTX_DIR` unset, so the key and
@@ -599,11 +600,15 @@ that slipped in after the copy's scan, or a configured driver reading another st
 2 before the move is trusted. The unwind deletes, through `store-clear keys
 --driver=<target>`, the keys the run's written keys files name that the target still lists,
 so a key the run did not write stays and a rerun finds nothing to do; it refuses rc 1 a
-driver that is not the run's target. The retire, after a passed check and once the configured
+driver that is not the run's target, and any unwind once the run holds a passed check
+(`checked`), since the configured driver then holds the record. The retire, after a passed check and once the configured
 driver no longer resolves to the source, removes the run's written keys files first (no
 unwind can then empty the only copy), on `backup` saves each namespace's checked source dump
 to `.contexture/backups/move-<stamp>/<namespace>/scan` with its key count in `count` beside
-it, then deletes the keys each dump names through `store-clear keys --driver=<source>` (delete
+it (an optional third argument gives the stamp: the installer passes its run's one stamp, so
+the backup may already hold the run's other parts, such as a format change's
+`@<driver>/` folder of the driver's own storage, and a rerun in the same run folder writes
+the namespace folders again; without it the retire makes a fresh stamp), then deletes the keys each dump names through `store-clear keys --driver=<source>` (delete
 only batches, which pass the freeze toward the source with the token) and requires
 `store-clear count` to read 0. The output names the backup by its stamp alone. A saved dump
 restores by one batch of puts built from it as the copy builds its payload:
@@ -653,10 +658,9 @@ The handshake reads a driver's card; `scripts/driver-behavior` holds its behavio
 It is a private script (no summary line, so never a verb) in plain POSIX sh and awk with the
 utilities the core already uses (`cat`, `cmp`, `cp`, `dd`, `env`, `mkdir`, `mktemp`, `mv`,
 `rm`, `rmdir`, `wc`, and `od` through `store-b64`), so an adopter needs no test harness. Its
-caller is the package installer: once the driver package lifecycle wires the call, the
-installer runs it on an
+caller is the package installer, which runs it in the foreground on an
 incoming driver part after the package files land and before the driver's prepare hook, rc 0
-letting the install go on and any other answer refusing it. A driver author runs it by
+letting the install go on and any other answer unwinding it, its one line relayed. A driver author runs it by
 installing the driver package into a throwaway workspace (`ctx package install <package
 root>`); no guide names the script as a command to run. Until the installer's call lands,
 the drivers project runs it upstream (`tests/drivers/driver-behavior.test.ts`).
@@ -740,7 +744,9 @@ drivers with a fingerprint of a mock live workspace.
 ## Discovery and selection
 
 `storage.driver` in `.contexture/config` selects the driver (declared in
-`base/.contexture/storage/config` and managed via `ctx store config`); `CTX_STORAGE_DRIVER`
+`base/.contexture/storage/config`; a driver package's install writes it once the record has
+moved into its driver and its uninstall removes it once the record is back in posix, the
+move described above, so a hand switch through `ctx store config` moves no record); `CTX_STORAGE_DRIVER`
 overrides it, and the baseline is `posix`. `driver-resolver` reads configuration through the
 shared internal config library (`base/.contexture/config-lib`, unified `:` / `=` grammar, exact
 key matching, quote unwrapping, inline `#` comment stripping, first non-empty value wins). The
