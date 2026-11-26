@@ -751,23 +751,49 @@ drivers with a fingerprint of a mock live workspace.
 `storage.driver` in `.contexture/config` selects the driver (declared in
 `base/.contexture/storage/config`; a driver package's install writes it once the record has
 moved into its driver and its uninstall removes it once the record is back in posix, the
-move described above, so a hand switch through `ctx store config` moves no record); `CTX_STORAGE_DRIVER`
-overrides it, and the baseline is `posix`. `driver-resolver` reads configuration through the
-shared internal config library (`base/.contexture/config-lib`, unified `:` / `=` grammar, exact
-key matching, quote unwrapping, inline `#` comment stripping, first non-empty value wins). The
+move described above). The setting is the installer's: `ctx store config set driver` and
+`unset driver` refuse naming `ctx package install` and `ctx package uninstall` (an unset
+lands only while the configured driver resolves nothing, so nothing is reachable through it),
+and an installed driver package's own settings refuse a change while its driver holds data.
+The baseline is `posix`. `driver-resolver` reads configuration through the shared internal
+config library (`base/.contexture/config-lib`, unified `:` / `=` grammar, exact key
+matching, quote unwrapping, inline `#` comment stripping, first non-empty value wins). The
 legacy `.contexture/storage.conf` and the `session.storage.driver` key stay readable as
-transitional compatibility. The resolver searches, in order:
+transitional compatibility.
 
-1. the workspace custom drivers, `.contexture/drivers/<name>/driver` (transitional);
-2. the storage core's drivers, `.contexture/storage/drivers/<name>/driver`;
-3. the extension root's package drivers,
-   `.contexture/extensions/storage/drivers/<name>/driver` (the settled home; the sqlite
-   driver is installed there);
-4. the module-owned drivers, `.contexture/modules/*/drivers/<name>/driver` (transitional);
-5. the base mirror's core, extension, and module drivers (transitional);
-6. PATH executables named `ctx-storage-<name>` (transitional).
+The one off overrides, `--driver=<name>` or `-d <name>` on the resolver and
+`CTX_STORAGE_DRIVER`, read only: they select the driver for every read (`store.list`,
+`store.get`, `store.scan`, `store.search`, `storage.health`, `storage.leftovers`,
+`capability`, and `storage.sweep` with `--dry-run`, the freeze's read list) and for the
+resolver's own commands, while every other dispatched function is a write, and a write
+through an override whose driver differs from the configured one refuses rc 1
+`ERR_INVALID_ARGUMENT` with `<function>: error: the driver override '<name>' reads only;
+writes go through the configured driver '<configured>' (ERR_INVALID_ARGUMENT)`, nothing
+written and no driver run. The check, `move_override`, sits in both dispatch forms between
+the freeze's `move_check` and the key and value gate, reads the configuration only for a
+write that carries an override, and passes the move's own writes through the freeze's pass
+rule (`move_own`, and the holder's delete only batch to the move's source that
+`move_staged` checks), so a token outside a live freeze passes nothing.
 
-The adoption retires the transitional tiers.
+The resolver finds a driver in two places alone, after the installer's driver name rule
+(letters, digits, dot, underscore, hyphen; not empty; not opening with a dot) refuses any
+other name rc 1 `ERR_INVALID_ARGUMENT` before any path is built:
+
+1. `posix`: the storage core's `.contexture/storage/drivers/posix/driver`, then, for a
+   drawer without its storage core beside a `base/` folder (this repository's layout), the
+   base mirror's `base/.contexture/storage/drivers/posix/driver`;
+2. any other name: the extension root's package driver,
+   `.contexture/extensions/storage/drivers/<name>/driver` or the single file
+   `.contexture/extensions/storage/drivers/<name>`, read by its path with no install record
+   read (the sqlite driver is installed there; the behavior test and the test harness stage
+   candidates there).
+
+A name found in neither refuses rc 2 `ERR_DRIVER_NOT_FOUND` with the resolver's own line
+naming the core posix driver and the installed driver packages. The workspace custom drivers
+(`.contexture/drivers/`), the storage core's other names, the module owned drivers, the
+base mirror's other names and places, `ctx-storage-<name>` executables on PATH, and a driver
+named by its path are retired, and a workspace driver named `posix` no longer shadows the
+core one: a driver reaches a workspace only as a driver package.
 
 ## The library
 

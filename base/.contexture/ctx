@@ -1793,9 +1793,10 @@ EOF
 # line, and runs the private script from the workspace root with CTX_ROOT set
 # to this engine's root, so every line, exit code, and record passes through;
 # on success it writes (install) or removes (uninstall) the package's line in the
-# workspace configuration, and the bare install installs every declared package
+# workspace configuration, and the bare install installs every declared package but the
+# driver packages, which install only by name
 
-package_install_line="  ctx package install [<package>]  install or update a package (a catalog name or a package root path; --as=<module>=<alias> renames a module; a driver package moves the record into its driver, --backup-old|--delete-old answering for the old copy and --driver-config=<key>=<value> setting the driver), or bare every declared one, on the human's explicit go at the act"
+package_install_line="  ctx package install [<package>]  install or update a package (a catalog name or a package root path; --as=<module>=<alias> renames a module; a driver package moves the record into its driver, --backup-old|--delete-old answering for the old copy and --driver-config=<key>=<value> setting the driver), or bare every declared one but the driver packages, on the human's explicit go at the act"
 package_uninstall_line="  ctx package uninstall <package> [--keep-data|--delete-data] [--backup-old|--delete-old]  remove an installed package (its name or its package root path), its modules' data kept or deleted and a driver's old copy backed up or deleted as the human answers, the configured driver's record moved back into posix, on the human's explicit go at the act"
 package_list_line="  ctx package list                 the declared packages against the installed ones: versions, modules, aliases, drift, and kept data; read only"
 package_catalog_line="  ctx package catalog [--names] [--no-probe] [--json]  list available catalog packages with value, install status, and host readiness; read only"
@@ -1817,7 +1818,7 @@ a driver package moves the record: installed while posix is configured, its driv
 --backup-old, --delete-old: the answer for the old copy the move leaves (the posix records on an install, the driver's own storage on a format change's move out): backed up into the drawer's backups, named by the run's stamp alone, or deleted; with neither, a terminal is asked once when the old copy holds a record, and a run with no terminal (an agent's, or any run under ctx run) refuses naming both flags, so the agent relays the question and never picks one; either flag changes nothing where no old copy holds a record or on a feature package
 --driver-config=<key>=<value> (repeatable): a setting the driver's config schema declares, checked against its type and written as storage.<key> before the move; a required setting with no default is asked like the old copy or refused naming this flag; a feature package, a bare install, an undeclared key, or a bad value refuses before anything is written, and so does a changed setting on a reinstall at the same format
 <package>: a catalog name (letters, digits, dot, underscore, hyphen; not starting with a dot) resolves .contexture/plugins/<name> (falling back to plugins/<name>) at the workspace root; a value holding a slash is a package root path, read from the working folder; either way the package lands in the workspace this engine serves
-bare: ctx package install with no package installs every package the workspace configuration declares (one package.<name>: <source> [--as=<module>=<alias>]... line each) and the install record lacks, each with its declared flags; nothing pending prints one line rc 0; a configuration line is never a go, the bare install is itself the act
+bare: ctx package install with no package installs every package the workspace configuration declares (one package.<name>: <source> [--as=<module>=<alias>]... line each) and the install record lacks, each with its declared flags; a declared driver package is left out with one line naming it, since its install moves the record, so it installs only by name (ctx package install <name>) and ctx package list keeps it declared and not installed; nothing pending prints one line rc 0; a configuration line is never a go, the bare install is itself the act
 an install writes its package.<name> line (the source as given, a path inside the workspace relative to its root, and every alias the record holds), and an uninstall removes it
 --as=<module>=<alias> (repeatable, one per module): installs that module of the package under the alias, its folder, laws, lifecycle scripts, namespace, and storage root taking the alias (a root its data file declares applies only under its own name), recorded so a re-install without the flag keeps it; a module name, or a storage root another installed module resolves to, that collides refuses naming --as, and the installer never picks a name itself
 an install runs only on the human's explicit go at the act; this verb checks no go: the gate binds the act, never the doorway
@@ -2093,8 +2094,9 @@ package_exec() {
 }
 
 # package_declared_install: the bare install, every declared package not yet installed, each
-# with its declared flags, after every pending line passed its checks; nothing pending prints
-# one plain line rc 0, and the first failure stops naming the package
+# with its declared flags, after every pending line passed its checks; a driver package is
+# left out with one line each, since its install moves the record and so runs only by name;
+# nothing pending prints one plain line rc 0, and the first failure stops naming the package
 package_declared_install() {
   pdi_all=$(pkg_decl_lines) || { ctx_err "package install: cannot read the workspace configuration"; exit 2; }
   if [ -z "$pdi_all" ]; then
@@ -2105,6 +2107,7 @@ package_declared_install() {
   pdi_nl='
 '
   pdi_seen=" "
+  pdi_skip=0
   while read -r pdi_name pdi_src pdi_flags; do
     case "$pdi_name" in
       ""|.*|*[!A-Za-z0-9._-]*) ctx_err "package install: malformed declared package name 'package.$pdi_name' (letters, digits, dot, underscore, hyphen; not starting with a dot)"; exit 1 ;;
@@ -2137,12 +2140,25 @@ package_declared_install() {
       fi
       pdi_as="${pdi_as:+$pdi_as }${pdi_f#--as=}"
     done
+    if ! package_file_parse "$pdi_root/manifest" 2>/dev/null; then
+      ctx_err "package install: package.$pdi_name: malformed package manifest: $PF_ERROR"
+      exit 1
+    fi
+    if [ "$pf_kind" = driver ]; then
+      printf "package install: skipped the driver package '%s': a driver package installs only by name (ctx package install %s), since its install moves the record\n" "$pdi_name" "$pdi_name"
+      pdi_skip=1
+      continue
+    fi
     pdi_plan="$pdi_plan$pdi_name	$pdi_root	$pdi_as$pdi_nl"
   done <<EOF
 $pdi_all
 EOF
   if [ -z "$pdi_plan" ]; then
-    printf 'package install: nothing to install: every declared package is installed\n'
+    if [ "$pdi_skip" -eq 1 ]; then
+      printf 'package install: nothing to install: every other declared package is installed\n'
+    else
+      printf 'package install: nothing to install: every declared package is installed\n'
+    fi
     exit 0
   fi
   [ -f "$dir/package-install" ] || { ctx_err "package install: missing package installer"; exit 2; }

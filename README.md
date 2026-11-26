@@ -4,7 +4,7 @@ contexture is an AI workspace convention that lives inside your repository so co
 
 - **Never repeat yourself**: Context windows compact into lossy summaries and fresh chats start cold. contexture preserves the decisions, constraints, open work, and verification proof from earlier turns so your agent picks up right where you left off, even across different harnesses or models.
 - **Built for agents, zero friction for you**: You talk to your coding agent naturally in plain English while the agent drives `.contexture/ctx` under the hood. You never have to memorize CLI flags or maintain notes by hand, though power users can inspect, query, or script the record anytime.
-- **Pluggable by design, lightweight out of the box**: Bring your own storage drivers, workflow rhythms, command output filters, or modules under one shared convention, or start immediately with the simple zero-dependency POSIX driver shipped by default. No background servers, no API keys, no harness lock-in.
+- **Pluggable by design, lightweight out of the box**: Bring your own storage drivers (each shipped as a driver package whose install moves your record into it), workflow rhythms, command output filters, or modules under one shared convention, or start immediately with the simple zero-dependency POSIX driver shipped by default. No background servers, no API keys, no harness lock-in.
 
 **How a session feels**
 
@@ -107,7 +107,7 @@ Five modules ship inside `base/.contexture/modules/` and work out of the box wit
 - **`unit`**: Owns the unit record (state, backlog, journal, knowledge, audit, fold, search, and lifecycle operations) over the storage layer.
 - **`lane`**: Manages isolated subagent dispatch lanes (`create`, `record`, `report`, `show`).
 - **`rhythm`**: Lists workspace and installed rhythms, displays a rhythm whole, and reports the rhythm in force with its next gate.
-- **`store`**: Declares and manages schema-checked generic data containers through `ctx store`, and manages `storage.*` settings via `ctx store config`.
+- **`store`**: Declares and manages schema-checked generic data containers through `ctx store`, and manages `storage.*` settings via `ctx store config` (the storage driver itself changes only through a driver package's install and uninstall).
 - **`run`**: Provides the baseline diff, directory listing, and log compaction filters for `ctx run`.
 
 ### Optional catalog plugins

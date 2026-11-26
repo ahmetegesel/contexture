@@ -7,7 +7,7 @@ import { compose, count, layer, layerBytes, lineOf } from '../support/laws';
 import { catalogCopy, extPath, install, isExec, out, uninstall } from '../support/packages';
 import { ROOT } from '../support/root';
 import { sqliteAvailable, stage } from '../support/stage';
-import { firstByteDifference, put } from '../support/tree';
+import { firstByteDifference } from '../support/tree';
 
 const sandbox = () => stage('posix', 'pkg-catalog');
 const PLUGINS = ['docs-discipline', 'ast-doc-graph', 'storage-sqlite', 'toolchain-filters', 'starter-rhythms', 'git'] as const;
@@ -71,12 +71,11 @@ describe.concurrent('the real catalog installs by catalog name through ctx packa
     ]);
   });
 
-  it.skipIf(!sqliteAvailable())('[the-engine-r19, the-engine-r23, plugins-r6] storage-sqlite installs, moving the record in, resolves from the extension root ahead of the transitional module tier, never lists, and uninstalls, moving it back, while the retired driver name fts5 resolves nothing', { timeout: 900_000 }, async () => {
+  it.skipIf(!sqliteAvailable())('[the-engine-r19, the-engine-r23, plugins-r6] storage-sqlite installs, moving the record in, resolves from the extension root, never lists, and uninstalls, moving it back, while the retired driver name fts5 resolves nothing', { timeout: 900_000 }, async () => {
     const sb = sandbox();
     const sqlitePkg = catalogCopy(sb, 'storage-sqlite');
     expect((await install(sb, sqlitePkg)).code).toBe(0);
     expect(isExec(extPath(sb, 'storage/drivers/sqlite/driver'))).toBe(true);
-    put(join(sb, '.contexture/modules/storage-sqlite/drivers/sqlite'), '#!/bin/sh\nexit 0\n', 0o755);
     const got = await exec('./.contexture/storage/scripts/driver-resolver', ['resolve'], { cwd: sb, env: { CTX_STORAGE_DRIVER: 'sqlite' } });
     expect(out(got)).toBe(join(realpathSync(sb), '.contexture/extensions/storage/drivers/sqlite/driver'));
     const retired = await exec('./.contexture/storage/scripts/driver-resolver', ['resolve'], { cwd: sb, env: { CTX_STORAGE_DRIVER: 'fts5' } });

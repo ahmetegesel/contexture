@@ -13,7 +13,7 @@ import { fresh, seed } from '../support/snapshot';
 import { DRIVERS, type Driver, sqliteAvailable, stage } from '../support/stage';
 import { batchPayload, listAnswer } from '../support/store';
 import { waitFor } from '../support/unit';
-import { answer, refused } from '../support/wire';
+import { answer, overridden, refused } from '../support/wire';
 
 const FROZEN = 'storage is being moved to another driver; retry after the move ends';
 const LOCKED = 'ERR_STORAGE_LOCKED';
@@ -235,18 +235,19 @@ for (const driver of DRIVERS) {
         launch(resolver(sb), args, { cwd: sb, input: null, env: { CTX_ROOT: sb, ...env }, timeout: DRAIN_CEILING - 10_000 });
       const put = hold(['store.put', 'mv', 'a/late']);
       const batch = hold(['store.batch', 'mv']);
-      const mine = hold(['--driver=posix', 'store.put', 'mv', 'a/own'], moveToken());
-      expect(await waitFor(() => staged(sb).length === 3, 30_000), 'all three are past the check, staging their stdin').toBe(true);
+      const mine = driver === 'posix' ? hold(['--driver=posix', 'store.put', 'mv', 'a/own'], moveToken()) : undefined;
+      if (!mine) overridden(await rsv(sb, ['--driver=posix', 'store.put', 'mv', 'a/own'], 'own\n', moveToken()), 'store.put', 'posix', driver);
+      expect(await waitFor(() => staged(sb).length === (mine ? 3 : 2), 30_000), 'every write past the check is staging its stdin').toBe(true);
       const take = await rsv(sb, ['move-freeze', PID, 'posix'], '', sleepShim(), DRAIN_CEILING - 10_000);
       expect([take.code, take.stdout, take.stderr]).toEqual([0, '', '']);
       put.child.stdin.end('late\n');
       batch.child.stdin.end(batchPayload([{ action: 'put', key: 'a/late2', value: 'late\n' }]));
-      mine.child.stdin.end('own\n');
+      mine?.child.stdin.end('own\n');
       frozen(await put.result, 'store.put');
       frozen(await batch.result, 'store.batch');
-      answer(await mine.result, 'store.put');
+      if (mine) answer(await mine.result, 'store.put');
       expect(staged(sb)).toEqual([]);
-      expect((await rsv(sb, ['--driver=posix', 'store.list', 'mv'])).stdout).toBe(listAnswer('mv', driver === 'posix' ? ['a/one', 'a/own'] : ['a/own']));
+      expect((await rsv(sb, ['--driver=posix', 'store.list', 'mv'])).stdout).toBe(listAnswer('mv', driver === 'posix' ? ['a/one', 'a/own'] : []));
       expect((await rsv(sb, ['store.list', 'mv'])).stdout).toBe(listAnswer('mv', driver === 'posix' ? ['a/one', 'a/own'] : ['a/one']));
     });
 
@@ -273,7 +274,8 @@ for (const driver of DRIVERS) {
         [['move-freeze', '0', 'posix'], 1, own("malformed holder pid '0'", 'ERR_INVALID_ARGUMENT')],
         [['move-freeze', '', 'posix'], 1, own("malformed holder pid ''", 'ERR_INVALID_ARGUMENT')],
         [['move-freeze', dead, 'posix'], 1, own(`the holder pid '${dead}' names no live process`, 'ERR_INVALID_ARGUMENT')],
-        [['move-freeze', PID, 'nosuch'], 2, own("storage driver 'nosuch' not found in the core drivers, the extension drivers, workspace drivers, module drivers, or PATH", 'ERR_DRIVER_NOT_FOUND')],
+        [['move-freeze', PID, 'nosuch'], 2, own("storage driver 'nosuch' is neither the core posix driver nor an installed driver package", 'ERR_DRIVER_NOT_FOUND')],
+        [['move-freeze', PID, '../nosuch'], 1, own("malformed storage driver name '../nosuch' (letters, digits, dot, underscore, hyphen; not opening with a dot)", 'ERR_INVALID_ARGUMENT')],
       ];
       for (const [args, rc, line] of cases) {
         const r = await rsv(sb, args);
@@ -425,8 +427,10 @@ describe.skipIf(!sqliteAvailable())('the move\'s own writes between two drivers'
           dataFile(sb, 'modules', 'mv', MV);
           writeFileSync(join(sb, '.contexture/config'), `storage.driver: ${source}\n`);
           answer(await rsv(sb, ['store.put', 'mv', 'a/one'], 'one\n'), 'store.put');
-          answer(await rsv(sb, [`--driver=${target}`, 'store.put', 'mv', 'a/old'], 'old\n'), 'store.put');
-          answer(await rsv(sb, [`--driver=${target}`, 'store.delete', 'mv', 'a/old']), 'store.delete');
+          writeFileSync(join(sb, '.contexture/config'), `storage.driver: ${target}\n`);
+          answer(await rsv(sb, ['store.put', 'mv', 'a/old'], 'old\n'), 'store.put');
+          answer(await rsv(sb, ['store.delete', 'mv', 'a/old']), 'store.delete');
+          writeFileSync(join(sb, '.contexture/config'), `storage.driver: ${source}\n`);
         }, 'sqlite', `freeze-${source}-${target}`);
       });
       const at = (sb: string, driver: string, ...args: string[]) => rsv(sb, [`--driver=${driver}`, ...args]);

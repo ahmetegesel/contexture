@@ -118,45 +118,33 @@ read_conf_driver() {
   return 1
 }
 
-# Locate driver executable: the storage core's drivers first, then the extension root's
-# package drivers, then the transitional locations (workspace drivers, module-owned
-# drivers, the base mirror, PATH). The core drivers and the extension root are the
-# settled end shape; no shipped driver lives in a transitional tier.
+# driver_name_ok <name>: the installer's driver name rule (letters, digits, dot, underscore,
+# hyphen; not empty, not opening with a dot), so no name is a path
+driver_name_ok() {
+  case "$1" in
+    ""|.*|*[!A-Za-z0-9._-]*) return 1 ;;
+  esac
+  return 0
+}
+
+# Locate driver executable, from two places alone: posix is the storage core's posix driver,
+# then its base mirror copy for a drawer without its storage core beside a base folder; any
+# other name is an installed driver package's driver at the extension root, by its path, no
+# install record read. The caller checks the name rule first.
 find_driver_executable() {
   ctx_dir="$1"
   driver="$2"
 
-  case "$driver" in
-    */*)
-      if [ -x "$driver" ]; then
-        printf '%s\n' "$driver"
+  if [ "$driver" = posix ]; then
+    for fde_p in "$ctx_dir/storage/drivers/posix/driver" "$ctx_dir/../base/.contexture/storage/drivers/posix/driver"; do
+      if [ -f "$fde_p" ] && [ -x "$fde_p" ]; then
+        printf '%s\n' "$fde_p"
         return 0
       fi
-      ;;
-  esac
-
-  # Tier 1: Workspace custom drivers (transitional)
-  if [ -x "$ctx_dir/drivers/$driver/driver" ]; then
-    printf '%s/drivers/%s/driver\n' "$ctx_dir" "$driver"
-    return 0
-  fi
-  if [ -f "$ctx_dir/drivers/$driver" ] && [ -x "$ctx_dir/drivers/$driver" ]; then
-    printf '%s/drivers/%s\n' "$ctx_dir" "$driver"
-    return 0
+    done
+    return 1
   fi
 
-  # Tier 2: The storage core's drivers
-  if [ -x "$ctx_dir/storage/drivers/$driver/driver" ]; then
-    printf '%s/storage/drivers/%s/driver\n' "$ctx_dir" "$driver"
-    return 0
-  fi
-  if [ -f "$ctx_dir/storage/drivers/$driver" ] && [ -x "$ctx_dir/storage/drivers/$driver" ]; then
-    printf '%s/storage/drivers/%s\n' "$ctx_dir" "$driver"
-    return 0
-  fi
-
-  # Tier 3: The extension root's package drivers (the settled home of a package's
-  # driver; the core's drivers above stay beside it, the transitional tiers below)
   if [ -x "$ctx_dir/extensions/storage/drivers/$driver/driver" ]; then
     printf '%s/extensions/storage/drivers/%s/driver\n' "$ctx_dir" "$driver"
     return 0
@@ -165,50 +153,6 @@ find_driver_executable() {
     printf '%s/extensions/storage/drivers/%s\n' "$ctx_dir" "$driver"
     return 0
   fi
-
-  # Tier 4: Module-owned drivers (transitional; no shipped driver lives here)
-  for mod_dir in "$ctx_dir"/modules/*; do
-    [ -d "$mod_dir" ] || continue
-    if [ -x "$mod_dir/drivers/$driver/driver" ]; then
-      printf '%s/drivers/%s/driver\n' "$mod_dir" "$driver"
-      return 0
-    fi
-    if [ -f "$mod_dir/drivers/$driver" ] && [ -x "$mod_dir/drivers/$driver" ]; then
-      printf '%s/drivers/%s\n' "$mod_dir" "$driver"
-      return 0
-    fi
-  done
-
-  # Tier 5: Base mirror fallback (transitional)
-  base_ctx="$ctx_dir/../base/.contexture"
-  if [ -d "$base_ctx" ]; then
-    if [ -x "$base_ctx/storage/drivers/$driver/driver" ]; then
-      printf '%s/storage/drivers/%s/driver\n' "$base_ctx" "$driver"
-      return 0
-    fi
-    if [ -x "$base_ctx/extensions/storage/drivers/$driver/driver" ]; then
-      printf '%s/extensions/storage/drivers/%s/driver\n' "$base_ctx" "$driver"
-      return 0
-    fi
-    for mod_dir in "$base_ctx"/modules/*; do
-      [ -d "$mod_dir" ] || continue
-      if [ -x "$mod_dir/drivers/$driver/driver" ]; then
-        printf '%s/drivers/%s/driver\n' "$mod_dir" "$driver"
-        return 0
-      fi
-      if [ -f "$mod_dir/drivers/$driver" ] && [ -x "$mod_dir/drivers/$driver" ]; then
-        printf '%s/drivers/%s\n' "$mod_dir" "$driver"
-        return 0
-      fi
-    done
-  fi
-
-  # Tier 6: External binary on PATH (transitional)
-  if command -v "ctx-storage-$driver" >/dev/null 2>&1; then
-    command -v "ctx-storage-$driver"
-    return 0
-  fi
-
   return 1
 }
 
@@ -242,6 +186,10 @@ resolve_target_driver() {
   ctx_dir="$1"
   target_name="$2"
 
+  if ! driver_name_ok "$target_name"; then
+    printf 'driver-resolver: ERROR: malformed storage driver name '\''%s'\'' (letters, digits, dot, underscore, hyphen; not opening with a dot) (ERR_INVALID_ARGUMENT)\n' "$target_name" >&2
+    return 1
+  fi
   resolved_path=$(find_driver_executable "$ctx_dir" "$target_name") || resolved_path=""
 
   if [ -n "$resolved_path" ] && [ -x "$resolved_path" ]; then
@@ -255,7 +203,7 @@ resolve_target_driver() {
     return 0
   fi
 
-  printf 'driver-resolver: ERROR: storage driver '\''%s'\'' not found in the core drivers, the extension drivers, workspace drivers, module drivers, or PATH (ERR_DRIVER_NOT_FOUND)\n' "$target_name" >&2
+  printf 'driver-resolver: ERROR: storage driver '\''%s'\'' is neither the core posix driver nor an installed driver package (ERR_DRIVER_NOT_FOUND)\n' "$target_name" >&2
   return 2
 }
 
@@ -941,6 +889,24 @@ move_check() {
   move_pass
 }
 
+# move_override <the dispatched function's arguments>: a one off override (--driver, -d, or
+# CTX_STORAGE_DRIVER) reads only: a write whose driver differs from the configured one (the
+# configuration as determine_driver_name reads it without the overrides, else posix) refuses
+# rc 1 before the gate reads any stdin, unless it is the move's own (move_own, or the
+# holder's batch to the move's source, which move_staged checks once its payload is staged);
+# a write without an override reads nothing here
+move_override() {
+  [ -n "$CLI_DRIVER" ] || [ -n "${CTX_STORAGE_DRIVER:-}" ] || return 0
+  move_read "$@" && return 0
+  [ -z "$MV_SOURCE_PASS" ] || return 0
+  move_own && return 0
+  mo_conf=$(read_conf_driver "$CTX_DIR" 2>/dev/null) || mo_conf=""
+  [ -n "$mo_conf" ] || mo_conf=posix
+  [ "$TARGET_DRIVER" = "$mo_conf" ] && return 0
+  printf "%s: error: the driver override '%s' reads only; writes go through the configured driver '%s' (ERR_INVALID_ARGUMENT)\n" "$METHOD" "$TARGET_DRIVER" "$mo_conf" >&2
+  exit 1
+}
+
 # move_staged: once the gate has staged a put's or a batch's stdin, the marker is tested
 # again, so a call that passed move_check before a take and was still reading its stdin when
 # the take answered meets the freeze; the holder's batch to the move's source passes only
@@ -1010,8 +976,8 @@ move_take() {
     ""|0*|*[!0-9]*) move_fail 1 ERR_INVALID_ARGUMENT "malformed holder pid '$mt_pid'" ;;
   esac
   kill -0 "$mt_pid" 2>/dev/null || move_fail 1 ERR_INVALID_ARGUMENT "the holder pid '$mt_pid' names no live process"
-  resolve_target_driver "$CTX_DIR" "$mt_target" > /dev/null || exit 2
-  mt_src=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+  resolve_target_driver "$CTX_DIR" "$mt_target" > /dev/null || exit $?
+  mt_src=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit $?
   case "$CTX_DIR" in */*) mt_ws=${CTX_DIR%/*} ;; *) mt_ws=. ;; esac
   [ -n "$mt_ws" ] || mt_ws=/
   move_abs "$mt_ws"; mt_ws=$MA_OUT
@@ -1157,7 +1123,7 @@ while [ $# -gt 0 ]; do
       printf '  move-release <pid>                end the freeze the named holder took\n'
       printf '  move-state                        free, held <target>, or stale <target>\n'
       printf 'options:\n'
-      printf '  --driver=<name>, -d <name>        explicit driver override\n'
+      printf '  --driver=<name>, -d <name>        read through another driver; writes go through the configured one\n'
       exit 0
       ;;
     *)
@@ -1191,7 +1157,7 @@ case "$COMMAND" in
     if [ $# -gt 0 ]; then
       TARGET_DRIVER="$1"
     fi
-    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit $?
     verify_capabilities "$DRIVER_PATH" "$TARGET_DRIVER"
     exit $?
     ;;
@@ -1204,7 +1170,7 @@ case "$COMMAND" in
     if [ $# -gt 0 ]; then
       TARGET_DRIVER="$1"
     fi
-    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit $?
     md_card=$(verify_capabilities "$DRIVER_PATH" "$TARGET_DRIVER" </dev/null) || exit 2
     printf '%s\n' "$md_card" | desc_modes
     exit 0
@@ -1214,7 +1180,7 @@ case "$COMMAND" in
     if [ $# -gt 0 ]; then
       TARGET_DRIVER="$1"
     fi
-    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit $?
     verify_capabilities "$DRIVER_PATH" "$TARGET_DRIVER" >/dev/null || exit 2
     printf 'OK: storage driver '\''%s'\'' verified at %s\n' "$TARGET_DRIVER" "$DRIVER_PATH"
     exit 0
@@ -1235,7 +1201,7 @@ case "$COMMAND" in
         exit 1
       }
     done
-    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit $?
     rq_q=0
     [ "$COMMAND" = has ] && rq_q=1
     require_caps "$rq_q" "$DRIVER_PATH" "$TARGET_DRIVER" "$@"
@@ -1259,9 +1225,10 @@ case "$COMMAND" in
     METHOD="$1"
     shift
     move_check "$@"
+    move_override "$@"
     kv_gate "$@"
     move_staged
-    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit $?
     if [ ! -x "$DRIVER_PATH" ]; then
       printf 'driver-resolver: ERROR: driver '\''%s'\'' executable not found at %s (ERR_DRIVER_NOT_FOUND)\n' "$TARGET_DRIVER" "$DRIVER_PATH" >&2
       exit 2
@@ -1274,9 +1241,10 @@ case "$COMMAND" in
   *.*)
     METHOD="$COMMAND"
     move_check "$@"
+    move_override "$@"
     kv_gate "$@"
     move_staged
-    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit $?
     if [ ! -x "$DRIVER_PATH" ]; then
       printf 'driver-resolver: ERROR: driver '\''%s'\'' executable not found at %s (ERR_DRIVER_NOT_FOUND)\n' "$TARGET_DRIVER" "$DRIVER_PATH" >&2
       exit 2

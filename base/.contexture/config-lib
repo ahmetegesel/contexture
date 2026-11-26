@@ -1084,9 +1084,9 @@ cfg_discover_module_configs() {
   [ -z "$cdmc_out" ] || printf '%s' "$cdmc_out" | LC_ALL=C sort -t '	' -k1,1
 }
 
-# cfg_storage_schema_rows <ctx_dir> <label>: parse core storage/config plus installed
-# driver configs under storage/drivers/*/config, extensions/storage/drivers/*/config,
-# and drivers/*/config. Refuses collisions with core driver or other drivers.
+# cfg_storage_schema_rows <ctx_dir> <label>: parse core storage/config plus the posix
+# driver's config and the installed driver packages' configs at the extension root, the two
+# places the resolver finds a driver. Refuses collisions with core driver or other drivers.
 cfg_storage_schema_rows() {
   cssr_ctx=$1
   cssr_lbl=$2
@@ -1117,9 +1117,8 @@ EOF
 
   cssr_drivers=" "
   for cssr_glob in \
-    "$cssr_ctx"/storage/drivers/*/config \
-    "$cssr_ctx"/extensions/storage/drivers/*/config \
-    "$cssr_ctx"/drivers/*/config; do
+    "$cssr_ctx"/storage/drivers/posix/config \
+    "$cssr_ctx"/extensions/storage/drivers/*/config; do
     [ -f "$cssr_glob" ] || continue
     cssr_drv_dir=${cssr_glob%/config}
     cssr_drv=${cssr_drv_dir##*/}
@@ -1275,52 +1274,125 @@ cfg_find_resolver() {
   return 1
 }
 
-# cfg_storage_driver_post: emit non-blocking stderr migration notice when effective
-# driver changed across set or unset.
-cfg_storage_driver_post() {
-  csdp_new=$(cfg_effective_driver "$CFG_DRV_CTX")
-  if [ "$CFG_DRV_OLD" != "$csdp_new" ]; then
-    printf "notice: active storage driver changed from '%s' to '%s'; existing data is not migrated automatically between storage drivers\n" "$CFG_DRV_OLD" "$csdp_new" >&2
-  fi
+# cfg_storage_core <ctx_dir> <script> [<argument>...]: a storage core script run from the
+# workspace root, the drawer found there
+cfg_storage_core() {
+  csc_rsv=$(cfg_find_resolver "$1") || return 2
+  csc_root=$(cfg_root_dir "$1")
+  csc_s=${csc_rsv%/*}/$2
+  shift 2
+  (
+    unset CTX_DIR
+    CTX_ROOT=$csc_root
+    CTX_STORE_WORKSPACE=$csc_root
+    export CTX_ROOT CTX_STORE_WORKSPACE
+    cd "$csc_root" || exit 2
+    exec "$csc_s" "$@"
+  )
+}
+
+# cfg_storage_key_driver <ctx_dir> <key>: the driver whose config, at the extension root
+# where an installed driver package's driver lives, declares the storage key; nothing for the
+# storage core's and the posix driver's own keys
+cfg_storage_key_driver() {
+  for cskd_f in "$1"/extensions/storage/drivers/*/config; do
+    [ -f "$cskd_f" ] || continue
+    cfg_schema_parse "$cskd_f" config 2>/dev/null | LC_ALL=C awk -F '\t' -v k="$2" '$1 == k { f = 1 } END { exit !f }' || continue
+    cskd_d=${cskd_f%/config}
+    printf '%s\n' "${cskd_d##*/}"
+    return 0
+  done
+}
+
+# cfg_storage_driver_pkg <ctx_dir> <driver>: the installed package whose record names the
+# driver, else the placeholder <package>
+cfg_storage_driver_pkg() {
+  cdp_p=""
+  for cdp_f in "$1"/extensions/.state/*.files; do
+    [ -f "$cdp_f" ] || continue
+    cdp_p=$(LC_ALL=C awk -v d="$2" '
+      $1 == "package" && NF == 2 && p == "" { p = $2 }
+      $1 == "kind" && NF == 2 && k == "" { k = $2 }
+      $1 == "driver" && NF == 2 && v == "" { v = $2 }
+      END { if (k == "driver" && v == d) print p }' "$cdp_f" 2>/dev/null)
+    [ -z "$cdp_p" ] || break
+  done
+  printf '%s\n' "${cdp_p:-<package>}"
+}
+
+# cfg_storage_dangling: the unset of a storage.driver line that named a driver resolving
+# nothing landed
+cfg_storage_dangling() {
+  printf "notice: storage.driver named '%s', which resolves nothing, so it is unset and the record reads from %s again\n" "$CFG_DRV_OLD" "$(cfg_effective_driver "$CFG_DRV_CTX")" >&2
   return 0
 }
 
-# cfg_validate_storage_driver <op> <key> <value> <ctx_dir>:
-# Pre-write validator hook for storage config writes. When <key> is 'driver':
-# on set, verifies driver via driver-resolver check >/dev/null before writing;
-# on both set and unset, arms CFG_POST_HOOK=cfg_storage_driver_post so a non-blocking
-# migration notice prints if the effective driver changes.
+# cfg_validate_storage_driver <op> <key> <value> <ctx_dir>: the store config hook. The
+# driver setting belongs to the driver package lifecycle, so a set or an unset of driver
+# refuses, but an unset while the configured driver resolves nothing lands (nothing is
+# reachable through it, so nothing strands). A setting an installed driver package's config
+# declares refuses a change while the move state reads held (rc 2) or while that driver
+# holds data in any namespace the declaration listing names (rc 1), a listing that fails
+# refusing rc 2; a set to the value in force and an unset of an absent key change nothing.
 cfg_validate_storage_driver() {
   cvsd_op=$1
   cvsd_key=$2
   cvsd_val=$3
   cvsd_ctx=$4
-  [ "$cvsd_key" = "driver" ] || return 0
-
-  if [ "$cvsd_op" = "set" ]; then
-    case "$cvsd_val" in
-      ""|-*|*[[:space:]]*)
-        printf "store config: error: malformed storage driver '%s' (ERR_INVALID_ARGUMENT)\n" "$cvsd_val" >&2
-        return 1
-        ;;
-    esac
-    cvsd_rsv=$(cfg_find_resolver "$cvsd_ctx") || {
-      printf 'store config: error: the storage core resolver is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
-      return 2
-    }
-    cvsd_root=$(cfg_root_dir "$cvsd_ctx")
-    (
-      unset CTX_DIR
-      CTX_ROOT=$cvsd_root
-      export CTX_ROOT
-      cd "$cvsd_root" || exit 2
-      exec "$cvsd_rsv" check "$cvsd_val" >/dev/null
-    ) || return $?
+  cvsd_lbl='ctx store config'
+  if [ "$cvsd_key" = driver ]; then
+    if [ "$cvsd_op" = unset ]; then
+      CFG_DRV_OLD=$(cfg_effective_driver "$cvsd_ctx")
+      if ! cfg_storage_core "$cvsd_ctx" driver-resolver resolve "$CFG_DRV_OLD" > /dev/null 2>&1; then
+        CFG_DRV_CTX=$cvsd_ctx
+        CFG_POST_HOOK=cfg_storage_dangling
+        return 0
+      fi
+    fi
+    printf '%s: error: storage.driver belongs to the driver package lifecycle: install a driver package (ctx package install <package>) or uninstall it (ctx package uninstall <package>) to change it (ERR_INVALID_ARGUMENT)\n' "$cvsd_lbl" >&2
+    return 1
   fi
 
-  CFG_DRV_OLD=$(cfg_effective_driver "$cvsd_ctx")
-  CFG_DRV_CTX=$cvsd_ctx
-  CFG_POST_HOOK=cfg_storage_driver_post
+  cvsd_drv=$(cfg_storage_key_driver "$cvsd_ctx" "$cvsd_key")
+  [ -n "$cvsd_drv" ] || return 0
+  if [ "$cvsd_op" = set ]; then
+    cvsd_now=$(cfg_assembly_get "$cvsd_lbl" "$cvsd_ctx" "storage.$cvsd_key" 2>/dev/null) && [ "$cvsd_now" = "$cvsd_val" ] && return 0
+  else
+    cfg_get_file "$cvsd_ctx/config" "storage.$cvsd_key" > /dev/null 2>&1 || return 0
+  fi
+
+  case $(cfg_storage_core "$cvsd_ctx" driver-resolver move-state 2>/dev/null) in
+    held*)
+      printf '%s: error: storage is being moved to another driver; retry after the move ends (ERR_STORAGE_LOCKED)\n' "$cvsd_lbl" >&2
+      return 2
+      ;;
+  esac
+
+  cvsd_ns=$(cfg_storage_core "$cvsd_ctx" store-data --list 2>/dev/null) || {
+    printf '%s: error: the declaration listing failed, so whether the driver '\''%s'\'' holds data cannot be read (ERR_STORAGE_READ)\n' "$cvsd_lbl" "$cvsd_drv" >&2
+    return 2
+  }
+  while IFS='	' read -r cvsd_n cvsd_rest; do
+    [ -n "$cvsd_n" ] || continue
+    cvsd_l=$(cfg_storage_core "$cvsd_ctx" driver-resolver --driver="$cvsd_drv" store.list "$cvsd_n" 2>/dev/null < /dev/null) || {
+      printf '%s: error: listing the namespace '\''%s'\'' through the driver '\''%s'\'' failed, so whether it holds data cannot be read (ERR_STORAGE_READ)\n' "$cvsd_lbl" "$cvsd_n" "$cvsd_drv" >&2
+      return 2
+    }
+    case "$cvsd_l" in
+      *'"keys":[]'*) ;;
+      *'"keys":["'*)
+        cvsd_pkg=$(cfg_storage_driver_pkg "$cvsd_ctx" "$cvsd_drv")
+        printf '%s: error: storage.%s belongs to the driver '\''%s'\'', which holds data; to change it, uninstall its package (ctx package uninstall %s), then install it again with the new setting (ctx package install %s --driver-config=%s=<value>) (ERR_INVALID_ARGUMENT)\n' "$cvsd_lbl" "$cvsd_key" "$cvsd_drv" "$cvsd_pkg" "$cvsd_pkg" "$cvsd_key" >&2
+        return 1
+        ;;
+      *)
+        printf '%s: error: listing the namespace '\''%s'\'' through the driver '\''%s'\'' answered no key list, so whether it holds data cannot be read (ERR_STORAGE_READ)\n' "$cvsd_lbl" "$cvsd_n" "$cvsd_drv" >&2
+        return 2
+        ;;
+    esac
+  done <<EOF
+$cvsd_ns
+EOF
   return 0
 }
 

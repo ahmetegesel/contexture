@@ -47,8 +47,8 @@
 # a module returning over this package's kept data without a data file, or under other
 # storage roots than the kept declaration's;
 # a driver name against the
-# core posix driver or a driver that already resolves ahead of the extension
-# root; a malformed module manifest; a driver part
+# core posix driver (the only driver the resolver finds outside the extension
+# root); a malformed module manifest; a driver part
 # without an executable.
 # A re-install of this package's recorded files is an update: changed files
 # update, files the new source drops are removed when unchanged and preserved
@@ -536,16 +536,6 @@ while IFS= read -r dname; do
     *[!A-Za-z0-9._-]*) die 1 "malformed driver name '$dname' (letters, digits, dot, underscore, hyphen)" ;;
   esac
   [ "$dname" = posix ] && die 1 "driver name 'posix' collides with the core posix driver"
-  if [ -e "$ws_root/.contexture/storage/drivers/$dname" ]; then
-    die 1 "driver name '$dname' already resolves in the core"
-  fi
-  if [ -e "$ws_root/.contexture/drivers/$dname" ]; then
-    die 1 "driver name '$dname' already resolves in the workspace"
-  fi
-  for _md in "$ws_root"/.contexture/modules/*/drivers/"$dname"; do
-    [ -e "$_md" ] || continue
-    die 1 "driver name '$dname' already resolves in a module"
-  done
   if [ -e "$ext_root/storage/drivers/$dname" ]; then
     if record_has_prefix ".contexture/extensions/storage/drivers/$dname/"; then
       :

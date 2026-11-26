@@ -3,9 +3,10 @@ import { join } from 'node:path';
 import { driverPath } from './driver';
 import type { Driver } from './stage';
 
-// the planted drivers the move engine's verify meets: each a workspace custom driver (the
-// resolver's first tier) wrapping a real driver of the sandbox, sabotaging one namespace's
-// calls and passing every other call through, the handshake included
+// the planted drivers the move engine's verify meets: each a driver at the extension root (where
+// the resolver finds an installed driver package's driver, no install record read) wrapping a
+// real driver of the sandbox, sabotaging one namespace's calls and passing every other call
+// through, the handshake included
 export type Plant =
   | 'blind'
   | 'dropping'
@@ -120,7 +121,7 @@ const BODIES: Record<Plant, string> = {
 // plantDriver <sandbox> <name> <plant> <base driver> <namespace>: the planted driver named
 // <name>, its folder (where its log, pid, and staging files lie) returned
 export function plantDriver(sb: string, name: string, plant: Plant, base: Driver, ns: string): string {
-  const dir = join(sb, '.contexture/drivers', name);
+  const dir = join(sb, '.contexture/extensions/storage/drivers', name);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'driver'), [
     '#!/bin/sh',

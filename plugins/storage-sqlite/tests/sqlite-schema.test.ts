@@ -242,7 +242,7 @@ describe.skipIf(!sqliteAvailable())('the sqlite store location', { concurrent: t
     expect(existsSync(join(sb3, SQLITE_DB))).toBe(false);
   });
 
-  it('[plugins-r12] ctx store config declares database without default path leak and drives storage.database set/get/unset', async () => {
+  it('[plugins-r12] ctx store config declares database without default path leak, sets it while the driver holds nothing, and refuses a change once it holds data, the value in force landing', async () => {
     const sb = stage('sqlite');
     dataFile(sb, 'extensions', 'docs', DOCS_SHAPED);
     const dbFileName = SQLITE_DB.split('/').pop()!;
@@ -272,10 +272,15 @@ describe.skipIf(!sqliteAvailable())('the sqlite store location', { concurrent: t
     expect(sqlite(join(sb, '.contexture/configured.db'), "SELECT key FROM store WHERE namespace = 'docs';").trim()).toBe('workspace/cfg');
     expect(existsSync(join(sb, SQLITE_DB))).toBe(false);
 
-    const unsetRes = await ctx(sb, 'store', 'config', 'unset', 'database');
-    expect([unsetRes.code, unsetRes.stderr]).toEqual([0, '']);
+    const holds = "ctx store config: error: storage.database belongs to the driver 'sqlite', which holds data; to change it, uninstall its package (ctx package uninstall <package>), then install it again with the new setting (ctx package install <package> --driver-config=database=<value>) (ERR_INVALID_ARGUMENT)\n";
+    for (const args of [['unset', 'database'], ['set', 'database', '.contexture/moved.db']]) {
+      const r = await ctx(sb, 'store', 'config', ...args);
+      expect([r.code, r.stdout, r.stderr], args.join(' ')).toEqual([1, '', holds]);
+    }
+    const same = await ctx(sb, 'store', 'config', 'set', 'database', '.contexture/configured.db');
+    expect([same.code, same.stdout, same.stderr]).toEqual([0, '', '']);
     const getAfter = await ctx(sb, 'store', 'config', 'get', 'database');
-    expect(getAfter.code).toBe(1);
+    expect([getAfter.code, getAfter.stdout]).toEqual([0, '.contexture/configured.db\n']);
   });
 
   it('[plugins-r12] resolves relative MODULE_DIR/../../../../config-lib when workspace lacks config-lib, and falls back inline when config-lib is absent', async () => {

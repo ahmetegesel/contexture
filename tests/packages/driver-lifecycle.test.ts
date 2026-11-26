@@ -26,6 +26,21 @@ const moveState = async (sb: string): Promise<string> => (await resolver(sb, ['m
 const conf = (sb: string): string => (existsSync(join(sb, '.contexture/config')) ? readFileSync(join(sb, '.contexture/config'), 'utf8') : '');
 // tree: the workspace's fingerprint, the drawer's scratch and the fixture catalog aside
 const tree = (sb: string): string => treeState(sb).split('\n').filter((l) => !l.startsWith('.contexture/tmp') && !l.startsWith('catalog/')).join('\n');
+// unconfigure: storage.driver removed as a crash between a move's switch and its record leaves
+// it, written to the configuration directly, since ctx store config refuses a hand switch
+const unconfigure = (sb: string): void =>
+  writeFileSync(join(sb, '.contexture/config'), conf(sb).split('\n').filter((l) => !l.startsWith('storage.driver:')).join('\n'));
+// putInto: a put into a driver other than the configured one, the configuration naming it for
+// the call alone, since a one off override reads only
+async function putInto(sb: string, driver: string, ns: string, key: string, value: string): Promise<Run> {
+  const saved = conf(sb);
+  writeFileSync(join(sb, '.contexture/config'), `${saved.split('\n').filter((l) => l !== '' && !l.startsWith('storage.driver:')).map((l) => `${l}\n`).join('')}storage.driver: ${driver}\n`);
+  try {
+    return await resolver(sb, ['store.put', ns, key], value);
+  } finally {
+    writeFileSync(join(sb, '.contexture/config'), saved);
+  }
+}
 const runs = (sb: string): string[] => readdirSync(join(sb, '.contexture/tmp')).filter((n) => n.startsWith('driver-run.'));
 const ANSWER = "this needs the human's answer, backup (--backup-old) or delete (--delete-old): relay the question and run it again with the flag the human chooses (the answer is the human's, never a default)";
 
@@ -273,7 +288,7 @@ describe.concurrent('a driver package uninstall moves the record back into posix
     const sb = sandbox();
     await seed(sb);
     expect((await install(sb, twinPkg(sb), '--delete-old')).code).toBe(0);
-    expect((await resolver(sb, ['--driver=posix', 'store.put', 'unit', 'stray/state'], 'a stray\n')).code).toBe(0);
+    expect((await putInto(sb, 'posix', 'unit', 'stray/state', 'a stray\n')).code).toBe(0);
     const before = tree(sb);
     const r = await uninstall(sb, 'twin-pkg', '--delete-old');
     expect([r.code, r.stdout]).toEqual([2, '']);
@@ -286,7 +301,7 @@ describe.concurrent('a driver package uninstall moves the record back into posix
     const sb = sandbox();
     await seed(sb);
     expect((await install(sb, twinPkg(sb), '--delete-old')).code).toBe(0);
-    expect((await ctx(sb, ['store', 'config', 'unset', 'driver'])).code).toBe(0);
+    unconfigure(sb);
     const r = await uninstall(sb, 'twin-pkg', '--delete-old');
     expect(r.code, r.stderr).toBe(0);
     expect(r.stdout).not.toContain('copied');
@@ -355,7 +370,7 @@ describe.concurrent('crash recovery from the move state', () => {
   it('[the-engine-r17, the-engine-r-mvf01] a move into a driver stopped before its switch: the driver\'s cleanup removes what the move made and it stays installed, not configured', SLOW, async () => {
     const sb = sandbox();
     expect((await install(sb, twinPkg(sb))).code).toBe(0);
-    expect((await ctx(sb, ['store', 'config', 'unset', 'driver'])).code).toBe(0);
+    unconfigure(sb);
     put(join(sb, '.contexture/twin', RECORD_ROOT, 'half/state.md'), 'half a copy\n');
     holdMove(sb, 'twin', 'dead');
     const r = await uninstall(sb, 'twin-pkg');
@@ -369,7 +384,7 @@ describe.concurrent('crash recovery from the move state', () => {
     const sb = sandbox();
     await seed(sb);
     expect((await install(sb, twinPkg(sb), '--delete-old')).code).toBe(0);
-    expect((await resolver(sb, ['--driver=posix', 'store.put', 'unit', 'half/state'], 'half a copy\n')).code).toBe(0);
+    expect((await putInto(sb, 'posix', 'unit', 'half/state', 'half a copy\n')).code).toBe(0);
     holdMove(sb, 'posix', 'dead', 'twin');
     const r = await uninstall(sb, 'twin-pkg', '--delete-old');
     expect(r.code, r.stderr).toBe(0);
@@ -381,7 +396,7 @@ describe.concurrent('crash recovery from the move state', () => {
     const sb = sandbox();
     await seed(sb);
     expect((await install(sb, twinPkg(sb), '--delete-old')).code).toBe(0);
-    expect((await ctx(sb, ['store', 'config', 'unset', 'driver'])).code).toBe(0);
+    unconfigure(sb);
     holdMove(sb, 'posix', 'dead', 'twin');
     const r = await uninstall(sb, 'twin-pkg', '--backup-old');
     expect(r.code, r.stderr).toBe(0);
@@ -469,7 +484,7 @@ describe.concurrent('crash recovery from the move state', () => {
     const sb = sandbox();
     const p = twinPkg(sb);
     expect((await install(sb, p)).code).toBe(0);
-    expect((await ctx(sb, ['store', 'config', 'unset', 'driver'])).code).toBe(0);
+    unconfigure(sb);
     holdMove(sb, 'twin', 'dead');
     seam(sb, 'slow-cleanup');
     const script = verb === 'install' ? ['.contexture/package-install', p] : ['.contexture/package-uninstall', 'twin-pkg'];

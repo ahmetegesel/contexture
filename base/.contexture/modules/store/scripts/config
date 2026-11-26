@@ -8,7 +8,7 @@
 # help:   unset <key>           remove one storage setting from the workspace configuration
 # help:   schema [--json]       show declared storage schema keys, types, defaults, and descriptions
 # help:   help [<subcommand>]   show help for a storage configuration subcommand
-# help: validates storage driver selection against the storage core before writing; emits a non-blocking notice on stderr when the active storage driver changes (existing data is not migrated automatically)
+# help: the driver belongs to the driver package lifecycle: set and unset of driver refuse, naming ctx package install and ctx package uninstall (an unset lands only while the configured driver resolves nothing); an installed driver package's setting refuses a change while its driver holds data or while the storage is being moved
 # help: example: ctx store config get driver
 
 if [ -z "${CTX_ROOT:-}" ]; then

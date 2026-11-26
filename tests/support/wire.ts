@@ -79,6 +79,11 @@ export function refused(r: Run, fn: string, rc: number, code: string, message: s
   expect(r.stderr).toBe(`${fn}: error: ${message} (${code})\n`);
 }
 
+// overridden: the resolver's refusal of a write through a one off driver override
+export function overridden(r: Run, fn: string, name: string, configured: string): void {
+  refused(r, fn, 1, 'ERR_INVALID_ARGUMENT', `the driver override '${name}' reads only; writes go through the configured driver '${configured}'`);
+}
+
 export function refusedLike(r: Run, fn: string, rc: number, code: string, prefix = ''): void {
   expect(r.code, `${fn} rc`).toBe(rc);
   expect(r.stdout, `${fn} stdout on a refusal`).toBe('');

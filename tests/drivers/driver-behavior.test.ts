@@ -155,12 +155,13 @@ describe('the driver behavior test: what it catches, what it refuses, and what i
     expect(r.code).toBe(2);
   });
 
-  it('[the-engine-r-bhv01] a candidate a core driver of its name shadows answers cannot run, never posix against posix', async () => {
+  it('[the-engine-r-bhv01, the-engine-r19] a storage core driver of the candidate\'s name never shadows it: the core answers posix alone, so the candidate is tested as itself', async () => {
     const sb = stage('posix', 'behavior-shadow');
-    cpSync(POSIX_PART, join(sb, '.contexture/storage/drivers/shadow'), { recursive: true });
+    mkdirSync(join(sb, '.contexture/storage/drivers/shadow'), { recursive: true });
+    writeFileSync(join(sb, '.contexture/storage/drivers/shadow/driver'), REFUSER, { mode: 0o755 });
     const r = await behavior(sb, [part('shadow')]);
-    expect(r.stdout).toBe('driver behavior: cannot run: the candidate does not resolve as its scratch workspace\'s configured driver\n');
-    expect(r.code).toBe(2);
+    expect(r.stdout).toBe(same('shadow'));
+    expect(r.code).toBe(0);
   });
 
   it.skipIf(!sqliteAvailable())('[the-engine-r-bhv01] from a live workspace whose storage variables all name it, a run leaves that workspace byte identical and its scratch folder as found, while a naive call lands in it', async () => {

@@ -1,4 +1,4 @@
-import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, renameSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { FALLBACK_ROOT, leaks, namespaceLock, RECORD_ROOT, unitLock } from '../support/drawer';
@@ -121,6 +121,8 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
         R('a write to a missing container', ['store', 'put', 'nope/x', '--what=w']),
         R('a missing record', ['store', 'set', 'nope/x', '--what=w']),
         R('an unknown store config key', ['store', 'config', 'get', 'nope']),
+        R('a hand switch of the driver', ['store', 'config', 'set', 'driver', 'posix']),
+        R('a hand unset of the driver', ['store', 'config', 'unset', 'driver']),
       ]);
       const shim = sleepShim();
       for (const [why, lock] of [['a held unit lock', unitLock('ru')], ['a held namespace lock', namespaceLock('unit')]] as const) {
@@ -185,8 +187,10 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
       await take(['store', 'delete', 'containers/cd']);
       await take(['store', 'list', 'containers', '--dropped']);
       await together([['store', 'config', 'load'], ['store', 'config', 'get', 'driver'], ['store', 'config', 'schema']]);
-      await take(['store', 'config', 'set', 'driver', 'posix']);
-      await take(['store', 'config', 'unset', 'driver']);
+      mkdirSync(join(sb, '.contexture/extensions/storage/drivers/census'), { recursive: true });
+      writeFileSync(join(sb, '.contexture/extensions/storage/drivers/census/config'), 'note: optional string default calm\n  A census driver setting.\n');
+      await take(['store', 'config', 'unset', 'note']);
+      await take(['store', 'config', 'set', 'note', 'calm']);
 
       const [first, listing] = await together([U('load', 'cu'), ['rhythm', 'list']]);
       const pages = Number(/(\d+) pages?/.exec(first!.stdout)?.[1] ?? '1');
@@ -255,8 +259,8 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
     expect(hitsOf(rows)).toEqual([]);
   });
 
-  it('[the-record-r14] every refusal row, a missing entity per verb family, a write under a held unit lock and under a held namespace lock, a write into a read only unit folder, and a write to a unit in both roots, answers rc not 0 with a line and prints no record storage', () => {
-    expect(refusals.length).toBeGreaterThanOrEqual(ROOT_USER ? 15 : 16);
+  it('[the-record-r14] every refusal row, a missing entity per verb family, a write under a held unit lock and under a held namespace lock, a write into a read only unit folder, a write to a unit in both roots, and a hand switch of the storage driver by set and by unset, answers rc not 0 with a line and prints no record storage', () => {
+    expect(refusals.length).toBeGreaterThanOrEqual(ROOT_USER ? 17 : 18);
     expect(refusals.filter((r) => r.code === 0 || r.out.trim() === '').map((r) => `${r.key}: rc ${r.code}: ${r.out.split('\n')[0]}`)).toEqual([]);
     expect(hitsOf(refusals)).toEqual([]);
   });

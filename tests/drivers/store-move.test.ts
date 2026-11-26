@@ -1,9 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { describe, expect, it } from 'vitest';
 import { dataFile } from '../support/data-file';
-import { RECORD_ROOT, SQLITE_DB, declaredRoot, leaks } from '../support/drawer';
+import { RECORD_ROOT, SQLITE_DB, declaredRoot, leaks, lockPath, moveMarker } from '../support/drawer';
 import { exec, launch, type Run } from '../support/exec';
 import { holdMove, moveToken } from '../support/locks';
 import { plantDriver } from '../support/planted';
@@ -57,12 +57,39 @@ const resolver = (sb: string) => join(sb, '.contexture/storage/scripts/driver-re
 const rsv = (sb: string, args: readonly string[], input: string | Buffer = '', env: Record<string, string> = {}): Promise<Run> =>
   exec(resolver(sb), args, { cwd: sb, input, env: { CTX_ROOT: sb, ...env } });
 const engine = (sb: string) => join(sb, '.contexture/storage/scripts/store-move');
-const move = (sb: string, args: readonly string[], env: Record<string, string> = {}): Promise<Run> =>
-  exec(engine(sb), args, { cwd: sb, env: { CTX_ROOT: sb, ...env }, timeout: 300_000 });
 
 function configure(sb: string, driver?: string, database?: string): void {
   const lines = [driver && `storage.driver: ${driver}`, database && `storage.database: ${database}`].filter(Boolean);
   writeFileSync(join(sb, '.contexture/config'), lines.map((l) => `${l}\n`).join(''));
+}
+
+function configured(sb: string): string {
+  const conf = join(sb, '.contexture/config');
+  return (existsSync(conf) ? /^storage\.driver: *(\S+)/m.exec(readFileSync(conf, 'utf8'))?.[1] : undefined) ?? 'posix';
+}
+
+// freeze: the storage moving freeze the installer holds around a move command, taken by the test
+// process for the command's target and source (a check's and a retire's target the configured
+// driver), so the command's writes through a driver other than the configured one are the
+// move's own; nothing when the command names no driver or a marker already stands
+function freeze(sb: string, args: readonly string[]): () => void {
+  const [cmd, a, b] = args;
+  if (existsSync(lockPath(sb, moveMarker())) || a === undefined) return () => undefined;
+  if (cmd === 'preflight' || cmd === 'copy') return b === undefined ? () => undefined : holdMove(sb, b, 'live', a);
+  if (cmd === 'unwind') return holdMove(sb, a, 'live', configured(sb));
+  if (cmd === 'check' || cmd === 'retire') return holdMove(sb, configured(sb), 'live', a);
+  return () => undefined;
+}
+
+// move: one engine command run as the installer runs it, under its freeze with the holder's token
+async function move(sb: string, args: readonly string[], env: Record<string, string> = {}): Promise<Run> {
+  const held = existsSync(lockPath(sb, moveMarker()));
+  const release = freeze(sb, args);
+  try {
+    return await exec(engine(sb), args, { cwd: sb, env: { CTX_ROOT: sb, ...(held ? {} : moveToken()), ...env }, timeout: 300_000 });
+  } finally {
+    release();
+  }
 }
 
 // kept: the kept data declaration a package uninstall answered keep leaves
@@ -73,8 +100,18 @@ function kept(sb: string, ns: string, data: string): void {
   writeFileSync(join(dir, 'origin'), `package pkg-a\nversion 1.0.0\nmodule ${ns} memos\n`);
 }
 
+// load: a batch written through the driver, the configuration naming it for the call alone,
+// since a one off override reads only
 async function load(sb: string, ns: string, actions: readonly Action[], driver = 'posix'): Promise<void> {
-  answer(await rsv(sb, [`--driver=${driver}`, 'store.batch', ns], batchPayload(actions)), 'store.batch');
+  const conf = join(sb, '.contexture/config');
+  const saved = existsSync(conf) ? readFileSync(conf, 'utf8') : undefined;
+  writeFileSync(conf, `${(saved ?? '').split('\n').filter((l) => l !== '' && !l.startsWith('storage.driver:')).map((l) => `${l}\n`).join('')}storage.driver: ${driver}\n`);
+  try {
+    answer(await rsv(sb, ['store.batch', ns], batchPayload(actions)), 'store.batch');
+  } finally {
+    if (saved === undefined) rmSync(conf);
+    else writeFileSync(conf, saved);
+  }
 }
 
 const snap = seedSteps('store-move', [
@@ -451,7 +488,8 @@ describe.skipIf(!sqliteAvailable())('store-move between posix and sqlite', { con
   it.each([['SIGHUP', 129], ['SIGINT', 130], ['SIGTERM', 143]] as const)('[the-engine-r-mov01] a %s stops the batch in flight at once, removes the work folder, and keeps the written keys for the unwind, its caller holding stdin open', async (sig, code) => {
     const sb = fresh(await snap('base'));
     const dir = plantDriver(sb, 'hanging', 'hanging', 'sqlite', 'docs');
-    const run = launch(engine(sb), ['copy', 'posix', 'hanging'], { cwd: sb, input: null, env: { CTX_ROOT: sb }, timeout: 60_000 });
+    holdMove(sb, 'hanging', 'live', 'posix');
+    const run = launch(engine(sb), ['copy', 'posix', 'hanging'], { cwd: sb, input: null, env: { CTX_ROOT: sb, ...moveToken() }, timeout: 60_000 });
     expect(await waitFor(() => existsSync(join(dir, 'pid')), 30_000)).toBe(true);
     const pid = Number(readFileSync(join(dir, 'pid'), 'utf8'));
     run.signal(sig);
