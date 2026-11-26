@@ -854,11 +854,259 @@ kv_handoff() {
   trap - EXIT HUP INT TERM
 }
 
+# The storage moving freeze. A move holds its marker, a folder of the drawer's lock folder
+# holding the move's target driver, its source driver, then its holder pid; while the holder
+# lives, every dispatched function but the reads refuses at once rc 2 ERR_STORAGE_LOCKED with
+# its own one line, nothing on stdout and no driver run, whichever driver it addresses. The
+# move's own calls pass: one carrying the holder's token (CTX_STORAGE_MOVE, the holder pid)
+# to the move's target, and a delete only batch carrying it to the move's source, decided on
+# the payload the gate staged. A marker whose holder pid is gone freezes nothing and stays
+# for the next take to remove; one without a numeric pid counts as held. With no marker a
+# write gains one existence test and a read none, and a marker is read with the read and
+# kill builtins alone.
+MV_PID=""
+MV_TARGET=""
+MV_SOURCE=""
+MV_SOURCE_PASS=""
+MV_BG=""
+MV_OWN=""
+
+# move_read [<arguments>]: rc 0 when the dispatched function only reads (the reads listed, a
+# sweep's dry run); a function a later contract adds is a write until it is listed here
+move_read() {
+  case "$METHOD" in
+    store.list|store.get|store.scan|store.search|storage.health|storage.leftovers|capability) return 0 ;;
+    storage.sweep)
+      case $# in 0) return 1 ;; esac
+      shift
+      for mr_a in "$@"; do
+        case "$mr_a" in --dry-run) return 0 ;; esac
+      done
+      ;;
+  esac
+  return 1
+}
+
+# move_marker: MV_PID, MV_TARGET, and MV_SOURCE read from the marker, the pid first, since
+# the take writes it last; rc 1 when no marker stands
+move_marker() {
+  MV_PID=""; MV_TARGET=""; MV_SOURCE=""
+  [ -d "$MV_MARK" ] || return 1
+  { IFS= read -r MV_PID < "$MV_MARK/pid"; } 2>/dev/null
+  { IFS= read -r MV_TARGET < "$MV_MARK/target"; } 2>/dev/null
+  { IFS= read -r MV_SOURCE < "$MV_MARK/source"; } 2>/dev/null
+  return 0
+}
+
+# move_live: rc 0 while the marker read counts as held: no numeric holder pid, or a live one
+move_live() {
+  case "$MV_PID" in ""|*[!0-9]*) return 0 ;; esac
+  kill -0 "$MV_PID" 2>/dev/null
+}
+
+# move_holder: rc 0 when the call carries the token of the marker read
+move_holder() {
+  case "$MV_PID" in ""|*[!0-9]*) return 1 ;; esac
+  [ "${CTX_STORAGE_MOVE:-}" = "$MV_PID" ]
+}
+
+# move_own: the pass rule, rc 0 when the call is the move's own: a held marker stands, the
+# call carries its holder's token, and the driver the call resolves to is the move's target
+move_own() {
+  move_marker && move_live && move_holder && [ "$TARGET_DRIVER" = "$MV_TARGET" ]
+}
+
+move_refuse() {
+  printf '%s: error: storage is being moved to another driver; retry after the move ends (ERR_STORAGE_LOCKED)\n' "$METHOD" >&2
+  kv_drop
+  exit 2
+}
+
+# move_check <the dispatched function's arguments>: the freeze at dispatch, before the gate
+# reads any stdin; a batch the holder sends to the move's source waits for move_source
+move_check() {
+  move_read "$@" && return 0
+  [ -d "$MV_MARK" ] || return 0
+  move_own && return 0
+  move_live || return 0
+  move_holder && [ "$METHOD" = store.batch ] && [ "$TARGET_DRIVER" = "$MV_SOURCE" ] || move_refuse
+  MV_SOURCE_PASS=1
+}
+
+# move_source: the holder's batch to the move's source passes only when the staged payload
+# holds actions and every one is a delete
+move_source() {
+  case "$MV_SOURCE_PASS" in "") return 0 ;; esac
+  [ -n "$KV_STAGE" ] && LC_ALL=C awk '
+    { sub(/\r$/, "") }
+    /^action=/ { if ($0 != "action=delete") bad = 1; n++ }
+    END { exit (bad || !n) }' "$KV_STAGE" 2>/dev/null || move_refuse
+}
+
+move_fail() {
+  printf 'driver-resolver: ERROR: %s (%s)\n' "$3" "$2" >&2
+  move_abort "$1"
+}
+
+# move_abort <rc>: the take's own marker removed and its waited child stopped, then exit
+move_abort() {
+  if [ -n "$MV_BG" ]; then
+    MV_BG=""
+    set +u
+    [ -z "$!" ] || { kill "$!"; wait "$!"; } 2>/dev/null
+    set -u
+  fi
+  [ -z "$MV_OWN" ] || rm -rf "$MV_MARK" 2>/dev/null
+  MV_OWN=""
+  exit "$1"
+}
+
+# move_wait <command>...: the command run in the background under the wait builtin, which a
+# trapped signal interrupts at once (MV_BG marks it from before its fork, so $! names it)
+move_wait() {
+  MV_BG=1
+  "$@" &
+  wait "$!"
+  mw_rc=$?
+  MV_BG=""
+  return "$mw_rc"
+}
+
+move_abs() {
+  case "$1" in /*) MA_OUT=$1 ;; *) MA_OUT=$PWD/$1 ;; esac
+}
+
+# move_pause: one poll's pause, 0.1 s, or 1 s counted as ten where sleep refuses a fraction
+move_pause() {
+  MP_N=1
+  move_wait sleep 0.1 2>/dev/null && return 0
+  move_wait sleep 1 2>/dev/null
+  MP_N=10
+}
+
+# move_take <pid> <target>: the freeze taken for the holder, then the writes in flight drained
+move_take() {
+  [ $# -eq 2 ] || move_fail 1 ERR_INVALID_ARGUMENT "move-freeze takes the holder pid and the target driver"
+  mt_pid=$1
+  mt_target=$2
+  case "$mt_pid" in
+    ""|0*|*[!0-9]*) move_fail 1 ERR_INVALID_ARGUMENT "malformed holder pid '$mt_pid'" ;;
+  esac
+  kill -0 "$mt_pid" 2>/dev/null || move_fail 1 ERR_INVALID_ARGUMENT "the holder pid '$mt_pid' names no live process"
+  resolve_target_driver "$CTX_DIR" "$mt_target" > /dev/null || exit 2
+  mt_src=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+  case "$CTX_DIR" in */*) mt_ws=${CTX_DIR%/*} ;; *) mt_ws=. ;; esac
+  [ -n "$mt_ws" ] || mt_ws=/
+  move_abs "$mt_ws"; mt_ws=$MA_OUT
+  move_abs "$mt_src"; mt_src=$MA_OUT
+  move_abs "$KV_HOME"; KV_HOME=$MA_OUT
+  move_abs "$MV_MARK"; MV_MARK=$MA_OUT
+  mt_dir=${MV_MARK%/*}
+  { [ -d "$mt_dir" ] || mkdir -p "$mt_dir"; } 2>/dev/null && [ -w "$mt_dir" ] \
+    || move_fail 2 ERR_STORAGE_WRITE "the drawer's lock folder cannot hold the storage moving marker"
+  cd "$mt_ws" 2>/dev/null || move_fail 2 ERR_STORAGE_READ "the workspace root cannot be entered"
+  trap 'move_abort 129' HUP
+  trap 'move_abort 130' INT
+  trap 'move_abort 143' TERM
+  mt_miss=0
+  until mkdir "$MV_MARK" 2>/dev/null; do
+    [ -d "$MV_MARK" ] || move_fail 2 ERR_STORAGE_WRITE "the drawer's lock folder cannot hold the storage moving marker"
+    move_marker
+    case "$MV_PID" in
+      ""|*[!0-9]*)
+        mt_miss=$((mt_miss + 1))
+        if [ "$mt_miss" -lt 10 ]; then move_pause; continue; fi
+        mt_miss=0
+        ;;
+      *) kill -0 "$MV_PID" 2>/dev/null && move_fail 2 ERR_STORAGE_LOCKED "storage is already being moved to driver '$MV_TARGET'; one move at a time" ;;
+    esac
+    if [ -n "$MV_TARGET" ]; then
+      printf 'driver-resolver: notice: a crashed move to driver '\''%s'\'' left its freeze, removed now; that move needs its recovery\n' "$MV_TARGET" >&2
+    else
+      printf 'driver-resolver: notice: a crashed take left its freeze before naming its target, removed now\n' >&2
+    fi
+    rm -rf "$MV_MARK" 2>/dev/null || move_fail 2 ERR_STORAGE_WRITE "the freeze of a crashed move cannot be removed"
+  done
+  MV_OWN=1
+  { printf '%s\n' "$mt_target" > "$MV_MARK/target" && printf '%s\n' "$TARGET_DRIVER" > "$MV_MARK/source" \
+    && printf '%s\n' "$mt_pid" > "$MV_MARK/pid"; } 2>/dev/null \
+    || move_fail 2 ERR_STORAGE_WRITE "the storage moving marker cannot be written"
+  move_drain "$mt_src"
+  rm -f "$MV_MARK/probe" 2>/dev/null
+  trap - HUP INT TERM
+  exit 0
+}
+
+# move_drain <source driver path>: every namespace the declaration listing names probed
+# through the source driver's storage.health until none reads locked for 20 polls in a row,
+# 0.1 s apart; one still locked past the 600 polls every lock wait shares refuses the take.
+# A namespace found locked is probed first from then on, so a held poll costs one probe
+move_drain() {
+  md_probe=$MV_MARK/probe
+  move_wait "$KV_HOME/store-data" --list > "$md_probe" 2>/dev/null < /dev/null \
+    || move_fail 2 ERR_STORAGE_READ "the module declarations cannot be listed whole, so the writes in flight cannot be drained"
+  md_list=""
+  while IFS= read -r md_l || [ -n "$md_l" ]; do
+    md_list="$md_list ${md_l%%	*}"
+  done < "$md_probe"
+  md_n=0
+  md_free=0
+  while [ "$md_free" -lt 20 ]; do
+    md_held=""
+    for md_ns in $md_list; do
+      move_wait "$1" storage.health "$md_ns" > "$md_probe" 2>/dev/null < /dev/null \
+        || move_fail 2 ERR_STORAGE_READ "the health of namespace '$md_ns' cannot be read through driver '$TARGET_DRIVER'"
+      md_line=""
+      { IFS= read -r md_line < "$md_probe"; } 2>/dev/null
+      case "$md_line" in *'"health":"locked"'*) md_held=$md_ns; break ;; esac
+    done
+    md_n=$((md_n + 1))
+    if [ -n "$md_held" ]; then
+      [ "$md_n" -lt 600 ] || move_fail 2 ERR_STORAGE_LOCKED "the storage layer's namespace '$md_held' is still locked by a writer (60 s timeout)"
+      md_free=0
+      md_l=" $md_list "
+      md_list="$md_held ${md_l%%" $md_held "*} ${md_l#*" $md_held "}"
+    else
+      md_free=$((md_free + 1))
+      [ "$md_free" -lt 20 ] || break
+    fi
+    move_pause
+    md_n=$((md_n + MP_N - 1))
+    [ -n "$md_held" ] || md_free=$((md_free + MP_N - 1))
+  done
+}
+
+# move_release <pid>: the marker removed when the named holder holds it
+move_release() {
+  [ $# -eq 1 ] || move_fail 1 ERR_INVALID_ARGUMENT "move-release takes the holder pid"
+  case "$1" in
+    ""|0*|*[!0-9]*) move_fail 1 ERR_INVALID_ARGUMENT "malformed holder pid '$1'" ;;
+  esac
+  move_marker || exit 0
+  [ "$MV_PID" = "$1" ] || move_fail 1 ERR_INVALID_ARGUMENT "the storage moving freeze is not held by pid '$1'"
+  rm -rf "$MV_MARK" 2>/dev/null || move_fail 2 ERR_STORAGE_WRITE "the storage moving marker cannot be removed"
+  exit 0
+}
+
+# move_state: free, held <target>, or stale <target> (a holder pid that is gone), read only
+move_state() {
+  [ $# -eq 0 ] || move_fail 1 ERR_INVALID_ARGUMENT "move-state takes no argument"
+  if ! move_marker; then
+    printf 'free\n'
+  elif move_live; then
+    printf 'held%s\n' "${MV_TARGET:+ $MV_TARGET}"
+  else
+    printf 'stale %s\n' "$MV_TARGET"
+  fi
+  exit 0
+}
+
 # Main entry point
 CTX_DIR=$(find_ctx_dir) || {
   printf 'driver-resolver: ERROR: could not locate .contexture root directory\n' >&2
   exit 2
 }
+MV_MARK="$CTX_DIR/tmp/locks/storage-moving"
 
 CLI_DRIVER=""
 COMMAND=""
@@ -886,6 +1134,9 @@ while [ $# -gt 0 ]; do
       printf '  modes [name]                      the search mode registry: one name TAB description line per mode\n'
       printf '  exec <subsystem>.<method> [args]  dispatch call to active driver (stdin passes through)\n'
       printf '  <subsystem>.<method> [args]       direct dispatch form\n'
+      printf '  move-freeze <pid> <target>        freeze every write but the move'\''s own, once the writes in flight drain\n'
+      printf '  move-release <pid>                end the freeze the named holder took\n'
+      printf '  move-state                        free, held <target>, or stale <target>\n'
       printf 'options:\n'
       printf '  --driver=<name>, -d <name>        explicit driver override\n'
       exit 0
@@ -977,6 +1228,10 @@ case "$COMMAND" in
     esac
     ;;
 
+  move-freeze) move_take "$@" ;;
+  move-release) move_release "$@" ;;
+  move-state) move_state "$@" ;;
+
   exec|dispatch)
     [ $# -gt 0 ] || {
       printf 'driver-resolver: ERROR: exec requires <subsystem>.<method> argument (ERR_INVALID_ARGUMENT)\n' >&2
@@ -984,7 +1239,9 @@ case "$COMMAND" in
     }
     METHOD="$1"
     shift
+    move_check "$@"
     kv_gate "$@"
+    move_source
     DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
     if [ ! -x "$DRIVER_PATH" ]; then
       printf 'driver-resolver: ERROR: driver '\''%s'\'' executable not found at %s (ERR_DRIVER_NOT_FOUND)\n' "$TARGET_DRIVER" "$DRIVER_PATH" >&2
@@ -997,7 +1254,9 @@ case "$COMMAND" in
 
   *.*)
     METHOD="$COMMAND"
+    move_check "$@"
     kv_gate "$@"
+    move_source
     DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
     if [ ! -x "$DRIVER_PATH" ]; then
       printf 'driver-resolver: ERROR: driver '\''%s'\'' executable not found at %s (ERR_DRIVER_NOT_FOUND)\n' "$TARGET_DRIVER" "$DRIVER_PATH" >&2

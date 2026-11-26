@@ -1,11 +1,11 @@
-import { accessSync, constants, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { dataFile } from '../support/data-file';
 import { driverOp } from '../support/driver';
 import { exec, launch } from '../support/exec';
+import { shimPath } from '../support/plants';
 import { alive } from '../support/procs';
-import { sandbox } from '../support/sandbox';
 import { moduleCall } from '../support/sh';
 import { DRIVERS, sqliteAvailable, stage } from '../support/stage';
 import { batchPayload, listAnswer, store } from '../support/store';
@@ -203,30 +203,6 @@ for (const driver of DRIVERS) {
       expect((await rsv(sb, ['store.list', 'deep'])).stdout).toBe(listAnswer('deep', ['v/big', 'v/empty']));
     });
   });
-}
-
-// a PATH of one shim per command the real PATH resolves, each logging its name to SHIM_LOG
-// before it runs the real command, so a run's external commands are counted by name
-function shimPath(): string {
-  const bin = join(sandbox('shim-path'), 'bin');
-  mkdirSync(bin);
-  const seen = new Set<string>();
-  for (const dir of (process.env.PATH ?? '').split(':')) {
-    if (!dir || !existsSync(dir)) continue;
-    for (const name of readdirSync(dir)) {
-      if (seen.has(name) || !/^[A-Za-z0-9._+-]+$/.test(name)) continue;
-      const real = join(dir, name);
-      try {
-        accessSync(real, constants.X_OK);
-        if (!statSync(real).isFile()) continue;
-      } catch {
-        continue;
-      }
-      seen.add(name);
-      writeFileSync(join(bin, name), `#!/bin/sh\nprintf '%s\\n' '${name}' >> "$SHIM_LOG"\nexec '${real}' "$@"\n`, { mode: 0o755 });
-    }
-  }
-  return bin;
 }
 
 for (const driver of DRIVERS) {

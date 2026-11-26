@@ -345,7 +345,11 @@ it walk below runs every one of these.
   edit or the second create overwrote the first. A concurrent writer waits up to
   60 s for the lock, then refuses rc 2 `ERR_STORAGE_LOCKED` under its verb's name;
   the exit cleanup releases the lock, so a signal frees it; a storage core whose
-  library has no lock refuses rc 2 before any read.
+  library has no lock refuses rc 2 before any read. A store call that refuses
+  (the storage moving freeze while a move runs among them) refuses the verb under
+  its own name with the storage layer's message and code, `ctx docs header:
+  storage is being moved to another driver; retry after the move ends
+  (ERR_STORAGE_LOCKED)`, the multi-doc verbs then naming where they stopped.
   A refusal writes nothing: an unknown field, an enum value outside its set, a
   missing required field on a new entry, a duplicate key or id, a missing
   address, a stale replace count, an audit failure, a newline in a one-line

@@ -13,6 +13,7 @@ const POSIX = 'base/.contexture/storage/drivers/posix/driver';
 const SQLITE = 'plugins/storage-sqlite/.contexture/extensions/storage/drivers/sqlite/driver';
 const LIBRARY = 'base/.contexture/storage/scripts/library';
 const BEHAVIOR = 'base/.contexture/storage/scripts/driver-behavior';
+const RESOLVER = 'base/.contexture/storage/scripts/driver-resolver';
 
 const OWNERS: readonly [file: string, line: string, why: string][] = [
   [`${UNIT}/data`, 'root: .contexture/units', 'the record root, declared once by the unit module'],
@@ -27,6 +28,7 @@ const OWNERS: readonly [file: string, line: string, why: string][] = [
   [LIBRARY, '  ll_dir="$(store_lib_root)/.contexture/tmp/locks/lib"', 'the library lock folder, its own family (lib_lock)'],
   [BEHAVIOR, '  BL_DIR="$1/.contexture/tmp/locks/store-$2.lock"', 'the namespace lock the behavior test plants in a scratch workspace for its locked health step (bh_lock)'],
   ['base/.contexture/config-lib', '    cwl_lock_dir="$cwl_ctx/tmp/locks"', 'the config lock folder (cfg_write_locked)'],
+  [RESOLVER, 'MV_MARK="$CTX_DIR/tmp/locks/storage-moving"', 'the storage moving marker, the freeze the resolver takes, checks, and releases'],
 ];
 
 const owned = new Set(OWNERS.map(([file, line]) => `${file}\n${line}`));

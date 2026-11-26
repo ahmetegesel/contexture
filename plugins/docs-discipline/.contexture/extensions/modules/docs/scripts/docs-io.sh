@@ -1034,15 +1034,24 @@ docs_grammar_check() {
 }
 
 # docs_store <repo> <slug> <op> <file>: store.put of the file (the op names the verb, which
-# the store keeps no record of); the driver's message passes on a failure
+# the store keeps no record of); a refusal carries the storage layer's message and code
+# under the verb's name
 docs_store() {
   if store_put "$1/$2" < "$4" > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
     return 0
   else
     dst_rc=$?
   fi
-  cat "$DOCS_SCRATCH/store.err" >&2
+  docs_store_refuse store.put
   return "$dst_rc"
+}
+
+# docs_store_refuse <store function>: the store's refusal line as the verb's own, the
+# function's prefix stripped (the resolver's own line rides whole as the message)
+docs_store_refuse() {
+  dsr_line=$(head -n 1 "$DOCS_SCRATCH/store.err")
+  [ -n "$dsr_line" ] || return 0
+  printf '%s: %s\n' "$DOCS_VERB" "${dsr_line#"$1: error: "}" >&2
 }
 
 # docs_say <repo> <slug> <note file>: the verb's line (docs <verb>: <repo>/<slug> <note>)
@@ -1294,7 +1303,7 @@ docs_remove_locked() {
   else
     dx_rc=$?
   fi
-  cat "$DOCS_SCRATCH/store.err" >&2
+  docs_store_refuse store.delete
   return "$dx_rc"
 }
 

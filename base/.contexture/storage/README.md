@@ -7,7 +7,8 @@ library, and the posix driver.
 
 ```text
 storage/
-  scripts/driver-resolver   the resolver: selection, the capability handshake, dispatch
+  scripts/driver-resolver   the resolver: selection, the capability handshake, dispatch, and
+                            the storage moving freeze (move-freeze, move-release, move-state)
   scripts/driver-behavior   the private differential behavior test a driver meets: posix and the
                             candidate in two scratch workspaces, one step set compared
   scripts/store-data        the private reader and validator of a module's data file, and its listing
@@ -290,7 +291,43 @@ so the live holder keeps its lock and no third writer enters beside it. While a 
 holds the named namespace's lock (`store-<namespace>.lock`), `storage.health <namespace>`
 reports `locked` in place of `ok` on either driver, and another namespace's lock leaves it
 unlocked; a pid-less lock counts as held, a lock whose holder pid
-is gone does not, since the next writer removes it. The scan answers the namespace's admitted keys with the raw value in
+is gone does not, since the next writer removes it.
+
+A storage move stops every writer at once through the resolver's own marker,
+`.contexture/tmp/locks/storage-moving`, a folder beside the lock families named to meet
+none of them, and never in the system temp. `driver-resolver move-freeze <pid> <target>`
+takes it for the holder pid (mkdir, exclusive), writing the target, the source (the driver
+the take's own call resolves), then the pid, and answers rc 0 only once the writes already
+past the check have drained: it polls `storage.health` through the source driver for every
+namespace `store-data --list` names until none reads `locked` for 20 polls in a row 0.1 s
+apart (a namespace found locked is probed first from then on); one still locked past the
+shared 600 polls removes the marker and refuses rc 2 `ERR_STORAGE_LOCKED` naming the
+namespace, and a listing or a probe that fails removes it and refuses rc 2
+`ERR_STORAGE_READ`. A malformed holder pid (not a positive number) or a dead one refuses
+rc 1 `ERR_INVALID_ARGUMENT`, a target the resolver cannot resolve rc 2
+`ERR_DRIVER_NOT_FOUND`, a live holder's marker rc 2 `ERR_STORAGE_LOCKED` at once (one move
+at a time), and a lock folder that cannot be written rc 2 `ERR_STORAGE_WRITE`, nothing
+frozen. A dead holder's marker is reported on stderr naming its target,
+`driver-resolver: notice: a crashed move to driver '<target>' left its freeze, removed now;
+that move needs its recovery`, then removed, and a pid-less one after ten polls of grace.
+`move-release <pid>` removes the marker only when its pid is the named one (an absent
+marker answers rc 0; another holder's stays, rc 1 `ERR_INVALID_ARGUMENT`), and the read
+only `move-state` answers one line: `free`, `held <target>`, or `stale <target>` (a holder
+pid that is gone; a pid-less marker reads held). While a live holder's marker stands, every
+dispatched function but the reads (`store.list`, `store.get`, `store.scan`,
+`store.search`, `storage.health`, `storage.leftovers`, `capability`, and `storage.sweep`
+with `--dry-run`) refuses at once, before the key gate reads any stdin and before any
+driver runs, whichever driver it addresses; a function a later contract adds is a write
+until it is listed. The move's own calls pass: the holder pid in `CTX_STORAGE_MOVE` (the
+token the holder exports into the move's own runs alone) with the resolved driver its
+target, or with the resolved driver its source for a `store.batch` whose staged actions
+are deletes alone. A marker whose holder pid is gone freezes nothing (a writer passes it
+and leaves it for the next take, which could otherwise remove a new move's marker); a
+pid-less one counts as held. With no marker a write pays one `[ -d ]` test and a read
+nothing; a marker is read with the `read` and `kill` builtins alone. A HUP, INT, or TERM
+to a draining take stops its probe, removes its marker, and exits 129, 130, or 143.
+
+The scan answers the namespace's admitted keys with the raw value in
 base64, no limit; the module decodes and stops after the keys it needs. No driver keeps a
 change log: a module's delta is its own (the docs module's is git), and `store.changes` is
 an unknown function rc 2.
@@ -326,7 +363,10 @@ stdout, and exactly one stderr line `<function>: error: <message> (<CODE>)` over
 existing core codes. The batch names its 1-based failing action:
 `store.batch: error: action <n> (<op> '<key>'): <message> (<CODE>)`; only the first failure
 prints, and nothing is written. The resolver's key and value gate refuses in that same
-shape, under the dispatched function's own name, before any driver runs. The scan uses the storage layer's codes (a malformed namespace or
+shape, under the dispatched function's own name, before any driver runs, and so does the
+storage moving freeze, rc 2 at once: `<function>: error: storage is being moved to another
+driver; retry after the move ends (ERR_STORAGE_LOCKED)`; each module re-frames it under its
+own label (`entry.record: error: ...`, `store put: error: ...`, `ctx docs header: ...`). The scan uses the storage layer's codes (a malformed namespace or
 data declaration is `ERR_INVALID_ARGUMENT`, an undeclared namespace
 `ERR_ENTITY_NOT_FOUND`, an unreadable key or store `ERR_STORAGE_READ`) and stages its
 answer, so a read failure midway prints no partial line. The library's caller lookup
@@ -338,7 +378,8 @@ breaks a container's declaration, and the docs module for a write its grammar re
 field its edit engine checks, or a result that fails its grammar audit), rc 1 and nothing
 written. A module may still mint its own tier 1 code; core codes are
 never redefined. The resolver's `driver-resolver: ERROR: ...` line is the one shape exception,
-and the library passes it through unchanged.
+its own commands' refusals among them (`move-freeze`, `move-release`, `move-state`), and the
+library passes it through unchanged.
 
 The interrupt rule: rc 0 means the write landed; after an interrupt any other exit means
 check with a read before writing again.

@@ -5,7 +5,7 @@ import { performance } from 'node:perf_hooks';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { libraryLock, lockPath } from '@support/drawer';
 import { launch } from '@support/exec';
-import { holdLock, sleepShim } from '@support/locks';
+import { holdLock, holdMove, sleepShim } from '@support/locks';
 import { pathPlant } from '@support/plants';
 import { sandbox } from '@support/sandbox';
 import { fresh } from '@support/snapshot';
@@ -137,5 +137,22 @@ describe('every docs write pipeline takes the library lock before its first read
     const r = await docs(sb, ['header', 'wtest', 'unit', '--add-keyword=unlocked']);
     expect([r.code, r.stdout, r.stderr]).toEqual([2, '', 'ctx docs header: the storage core library has no lock (need: the storage core of this release) (ERR_DRIVER_NOT_FOUND)\n']);
     expect(await stored(sb, 'unit')).toBe(before);
+  });
+});
+
+// a multi-doc verb (replace, ids) then names where it stopped, the docs before it landed
+const MOVING = (verb: string) =>
+  `ctx docs ${verb}: storage is being moved to another driver; retry after the move ends (ERR_STORAGE_LOCKED)\n` +
+  (verb === 'replace' || verb === 'ids' ? `ctx docs ${verb}: stopped at wtest/unit; the docs printed above landed (ERR_STORAGE_WRITE)\n` : '');
+
+describe('every docs write refuses while storage is being moved', { concurrent: true }, () => {
+  it.for(WRITES)('[the-engine-r-mvf01, docs-module-r18] ctx docs %s refuses rc 2 under its own name with the freeze\'s message and code, nothing written', async ([verb, args]) => {
+    const sb = fresh(wtest);
+    const before = await stored(sb, 'unit');
+    holdMove(sb, 'sqlite', 'live');
+    const r = await docs(sb, args);
+    expect([r.code, r.stdout, r.stderr]).toEqual([2, '', MOVING(verb)]);
+    expect(await stored(sb, 'unit')).toBe(before);
+    expect((await store(sb, 'posix').get('docs', 'wtest/held')).code).not.toBe(0);
   });
 });
