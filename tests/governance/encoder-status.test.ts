@@ -5,12 +5,17 @@ import { ROOT } from '../support/root';
 import { sandbox } from '../support/sandbox';
 import { kids, text, walk } from './walk';
 
-// A call reads its status as a direct command or the whole right side of an assignment with a ||
-// after it and no pipe between, or inside a condition; inside another command's argument never.
-const POSITION = String.raw`(?:^|;|&&|\|\||\||\$\(|(?<!\$)\((?!\()|(?<!\$)\{(?=\s)|!(?=\s)|\b(?:then|do|else|exec|if|while|until)\b)\s*`;
+// A call is the encoder at a command position, after any assignment words and a command, env, or
+// shell word. It reads its status as a direct command or the whole right side of an assignment
+// with a || after it and nothing between but redirections, the substitution's or a group's close,
+// and further && members, or as the condition of an if or a loop before its then or do; inside
+// another command's argument or in backticks never.
+const TICK = '`';
+const POSITION = String.raw`(?:^|;|&&|\|\||\||\$\(|${TICK}|(?<!\$)\((?!\()|(?<!\$)\{(?=\s)|!(?=\s)|\b(?:then|do|else|exec|if|while|until)\b)\s*(?:(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s;|&()"'${TICK}])*|command|env|sh|dash|bash)\s+)*`;
 const ASSIGNED = /(?:^|;|&&|\|\||(?<!\$)\(|(?<!\$)\{\s|!\s|\b(?:then|do|else|if|while|until)\s)\s*[A-Za-z_][A-Za-z0-9_]*=$/;
 const CONDITION = /^\s*(?:if|while|until|!)\s/;
 const COMMENT = /^[ \t]*(#|\/\/)/;
+const QUOTED = /'[^']*'|"(?:[^"\\]|\\.)*"/g;
 
 const UNIT = 'base/.contexture/modules/unit';
 const STORE = 'base/.contexture/modules/store/scripts/store';
@@ -81,14 +86,22 @@ function openSubstitution(s: string, at: number): number {
   return -1;
 }
 
+// the text between a call and what reads its status holds no list separator but a group's close,
+// no pipe, no background, and no backtick
+function between(t: string): boolean {
+  const bare = t.replace(QUOTED, '""').replace(/[0-9]*(?:[<>]&[0-9-]+|&>)/g, ' ').replace(/;\s*\}/g, ' }').replace(/&&/g, ' ');
+  return !new RegExp(`[;|&${TICK}]`).test(bare);
+}
+
 function verdict(s: string, at: number, end: number): 'read' | 'embedded' | 'unread' {
+  const head = s.slice(0, at);
+  if ((head.replace(/'[^']*'/g, '').split(TICK).length - 1) % 2 === 1) return 'embedded';
   const sub = openSubstitution(s, at);
   if (sub >= 0 && !ASSIGNED.test(s.slice(0, sub))) return 'embedded';
   const rest = s.slice(end);
   const or = rest.indexOf('||');
-  const piped = (t: string) => /(^|[^|])\|([^|]|$)/.test(t);
-  if (or >= 0 && !piped(rest.slice(0, or))) return 'read';
-  if (CONDITION.test(s) && !piped(rest.split(/;\s*then\b|;\s*do\b/)[0]!)) return 'read';
+  if (or >= 0 && between(rest.slice(0, or))) return 'read';
+  if (CONDITION.test(s) && !/\b(?:then|do)\b/.test(head.replace(QUOTED, '""')) && between(rest.split(/;\s*(?:then|do)\b/)[0]!)) return 'read';
   return 'unread';
 }
 
@@ -101,7 +114,7 @@ function census(root: string) {
     const rel = relative(root, file);
     const lines = logical(body);
     const names = encoderNames(lines.map((l) => l.text));
-    const word = [String.raw`"?[^\s"=;|&()]*store-b64"?`, ...names.map((n) => String.raw`"?\$\{?${n}\}?"?`), String.raw`od(?=\s+-)`].join('|');
+    const word = [String.raw`"?[^\s"=;|&()]*store-b64"?`, ...names.map((n) => String.raw`"?\$\{?${n}\}?"?`), String.raw`(?:/[^\s"'=;|&()]*/)?od(?=\s+-)`].join('|');
     const call = new RegExp(`${POSITION}(${word})(?=[\\s)"]|$)`, 'g');
     for (const l of lines) {
       for (const m of l.text.matchAll(call)) {
@@ -148,6 +161,15 @@ describe.concurrent('the encoder census: every value encoder call in the shipped
     ['a piped encoding before its ||', ['v=$("$CORE/store-b64" "$SCR/d.new" | tr -d =) || die 2 ERR_STORAGE_READ x'], 'unread'],
     ['an inline od encoding', ['od -An -v -tu1 "$SCR/d.new" | awk \'{ print }\''], 'unread'],
     ['a call through a variable assigned from the encoder', ['ENC=$CORE/store-b64', '"$ENC" "$SCR/d.new" > "$SCR/out"'], 'unread'],
+    ['a status a later command in the substitution hides', ['v=$("$CORE/store-b64" "$SCR/d.new"; true) || die 2 ERR_STORAGE_READ x'], 'unread'],
+    ['a || after a later command', ['v=$("$CORE/store-b64" "$SCR/d.new"); [ -n "$v" ] || die 2 ERR_STORAGE_READ x'], 'unread'],
+    ['a call in the then body of a condition on something else', ['if [ -s "$SCR/d.new" ]; then v=$("$CORE/store-b64" "$SCR/d.new"); fi'], 'unread'],
+    ['a call in the do body of a loop', ['while read -r k; do v=$("$CORE/store-b64" "$k"); done < "$SCR/keys"'], 'unread'],
+    ['a call in backticks', ['v=`"$CORE/store-b64" "$SCR/d.new"` || die 2 ERR_STORAGE_READ x'], 'embedded'],
+    ['a call after an assignment word', ['v=$(LC_ALL=C "$CORE/store-b64" "$SCR/d.new")'], 'unread'],
+    ['a call through command', ['v=$(command "$CORE/store-b64" "$SCR/d.new")'], 'unread'],
+    ['a call run by sh', ['v=$(sh "$CORE/store-b64" "$SCR/d.new")'], 'unread'],
+    ['an od named by its path', ['/usr/bin/od -An -v -tu1 "$SCR/d.new" | awk \'{ print }\''], 'unread'],
   ])('[the-record-r10] %s planted in a module reads red', (_name, lines, kind) => {
     const r = census(plantedTree(lines));
     const rest = remainder(r.calls);
@@ -155,10 +177,14 @@ describe.concurrent('the encoder census: every value encoder call in the shipped
     expect(rest[0]).toContain(`${kind}: ${lines[lines.length - 1]!.trim()}`);
   });
 
-  it('[the-record-r10] a planted call that reads its status adds no remainder', () => {
-    const line = 'v=$("$CORE/store-b64" "$SCR/d.new" 2>/dev/null) || die 2 ERR_STORAGE_READ x';
+  it.each([
+    ['an assignment with its ||', 'v=$("$CORE/store-b64" "$SCR/d.new" 2>/dev/null) || die 2 ERR_STORAGE_READ x', ['read']],
+    ['the condition of an if', 'if v=$("$CORE/store-b64" "$SCR/d.new" 2>/dev/null); then printf x; fi', ['read']],
+    ['a group whose || reads its last command', '{ "$CORE/store-b64" "$SCR/d.new" > "$SCR/out"; } 2>/dev/null || die 2 ERR_STORAGE_READ x', ['read']],
+    ['an and list read by one ||', 'a=$("$CORE/store-b64" "$SCR/a") && b=$("$CORE/store-b64" "$SCR/b") || die 2 ERR_STORAGE_READ x', ['read', 'read']],
+  ])('[the-record-r10] a planted call that reads its status adds no remainder: %s', (_name, line, verdicts) => {
     const r = census(plantedTree([line]));
     expect(remainder(r.calls)).toEqual([]);
-    expect(r.calls.filter((c) => c.line === line).map((c) => c.verdict)).toEqual(['read']);
+    expect(r.calls.filter((c) => c.line === line).map((c) => c.verdict)).toEqual(verdicts);
   });
 });

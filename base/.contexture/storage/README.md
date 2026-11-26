@@ -380,8 +380,11 @@ nothing written), and the unit module's batch values, which it encodes through t
 encoder found beside the library it loaded (rc 2 `ERR_STORAGE_WRITE` naming the key, nothing
 written). The governance encoder census (`tests/governance/encoder-status.test.ts`) holds
 every encoder call in the shipped code to it: a call of `store-b64`, of a variable assigned
-from it, or of `od` reads its status (`||` after it with no pipe between, or a condition),
-an encoding embedded in another command's argument reads red whatever its context, and the
+from it, or of `od` (by name or by path), at a command position after any assignment words
+and a `command`, `env`, or shell word, reads its status (a `||` after it with nothing between
+but redirections, the substitution's or a group's close, and further `&&` members, or the
+condition of an `if` or a loop before its `then` or `do`), an encoding embedded in another
+command's argument or in backticks reads red whatever its context, and the
 three calls that read no stored value whole by design stand on an exact allow list (this
 one pass `od`, whose stream the `awk` counts against the sizes, and the two `od` reads of
 random bytes for a generated id and a seed). A run's `od` and `awk`
