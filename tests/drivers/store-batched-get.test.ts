@@ -2,11 +2,12 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { dataFile } from '../support/data-file';
+import { exec } from '../support/exec';
 import { ROOT_USER, chmodPlant } from '../support/plants';
 import { moduleCall } from '../support/sh';
 import { fresh } from '../support/snapshot';
 import { DRIVERS, sqliteAvailable } from '../support/stage';
-import { docsStore, store } from '../support/store';
+import { docsStore, plantScript, store } from '../support/store';
 import { answer, refused } from '../support/wire';
 
 const LIBRARY = '.contexture/storage/scripts/library';
@@ -75,6 +76,12 @@ for (const driver of DRIVERS) {
       expect([r.code, r.stdout, r.stderr]).toEqual([0, '{"namespace":"docs","items":[{"key":"Workspace/a","missing":true},{"key":"workspace/a","value":"a\\n"},{"key":"Other/c","missing":true},{"key":"other/c","value":"c\\n"}]}\n', '']);
     });
 
+    it('[the-engine-r19, the-engine-r21] a value holding a NUL byte its encoder cannot read whole refuses the batch rc 2 naming the key, never packing part of it', async () => {
+      const sb = fresh(keyed);
+      plantScript(sb, 'store-b64', "printf 'YQ'\nexit 2");
+      refused(await store(sb, driver).op('store.get', ['docs', 'workspace/a', 'workspace/binary']), 'store.get', 2, 'ERR_STORAGE_READ', "cannot read key 'workspace/binary' in namespace 'docs'");
+    });
+
     it.each([
       [['docs'], 'store.get takes the namespace and the key'],
       [['docs', 'workspace/a', 'bad key'], "malformed key 'bad key'"],
@@ -120,6 +127,21 @@ describe('the batched store.get on posix alone', { concurrent: true }, () => {
     const r = await s.op('store.get', ['docs', 'workspace/a', 'workspace/ro', 'workspace/aa']);
     expect(r.stderr).not.toContain('docs/workspace');
     refused(r, 'store.get', 2, 'ERR_STORAGE_READ', "cannot read key 'workspace/ro' in namespace 'docs'");
+  });
+
+  it('[the-engine-r19] a batched get whose value paths pass the system\'s argument limit answers every item, the codec sizing and reading them in runs', { timeout: 120_000 }, async () => {
+    const sb = fresh(keyed);
+    const max = Number((await exec('getconf', ['ARG_MAX'], { cwd: sb, input: '' })).stdout.trim());
+    expect(max, 'the argument limit reads').toBeGreaterThan(0);
+    const path = (key: string) => join(sb, 'docs', `${key}.md`);
+    const n = Math.ceil((1.25 * max) / (path('workspace/k000000').length + 1));
+    const keys = Array.from({ length: n }, (_, i) => `workspace/k${String(i).padStart(6, '0')}`);
+    for (const key of keys) writeFileSync(path(key), `value of ${key}\n`);
+    const r = await store(sb, 'posix').op('store.get', ['docs', ...keys]);
+    expect([r.code, r.stderr]).toEqual([0, '']);
+    const items: { key: string; value?: string }[] = JSON.parse(r.stdout).items;
+    expect(items.length).toBe(n);
+    expect(items.filter((item, i) => item.key !== keys[i] || item.value !== `value of ${keys[i]}\n`)).toEqual([]);
   });
 
   it('[the-engine-r-b3r6t] a key served from the declared fallback root answers with the one notice line, the root\'s copy shadowing', async () => {

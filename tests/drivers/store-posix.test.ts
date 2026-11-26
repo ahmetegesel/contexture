@@ -268,6 +268,16 @@ describe('the posix scan reads a namespace in one pass', { concurrent: true }, (
   });
 
   it.each([
+    ['fails after its first line', 'exit 1'],
+    ['succeeds after its first line', 'exit 0'],
+  ])('[the-engine-r19, the-engine-r21] a key by key read whose encoder\'s od %s refuses rc 2 naming the key, never answering part of the value', async (_, end) => {
+    const sb = fresh(empty);
+    plant(sb, 'docs/workspace/a.md', pattern(100));
+    const od = pathPlant('od', `case "$3" in -tx1) exit 1 ;; -tu1) '${REAL_OD}' "$@" | head -n 1; ${end} ;; esac\nexec '${REAL_OD}' "$@"`);
+    refused(await store(sb, 'posix', od).scan('docs'), 'store.scan', 2, 'ERR_STORAGE_READ', "cannot read key 'workspace/a' in namespace 'docs'");
+  });
+
+  it.each([
     ['two values swapping places, the read\'s length unchanged', '(cd docs/workspace && mv a.md t && mv b.md a.md && mv t b.md)'],
     ['a value grown', "printf 'grown by a write between the sizing and the read\\n' > docs/workspace/a.new && mv docs/workspace/a.new docs/workspace/a.md"],
   ])('[the-engine-r21] answers every value whole when a write lands between a run\'s sizing and its read: %s', async (_, write) => {

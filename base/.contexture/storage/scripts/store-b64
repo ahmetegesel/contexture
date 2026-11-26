@@ -4,9 +4,13 @@
 # scan can carry a module value of any bytes (a NUL and invalid UTF-8 included) inside the
 # contract's one compact JSON answer. od reads the bytes; awk builds each group from the
 # decimal byte values, so no external base64 command and no locale folding is involved.
+# The answer is held until the read is proven whole: od succeeded and read as many bytes as
+# the file held when sized before or after the read (a value renamed over the file between
+# the two answers one version whole); a failed or short read prints nothing.
 #
 # Usage: store-b64 <file>
-# Exit codes: 0 the encoded answer; 1 a missing argument or an unreadable file.
+# Exit codes: 0 the encoded answer; 1 a missing argument or an unreadable file; 2 a read
+# that failed or did not read the file whole, nothing on stdout.
 
 set -u
 LC_ALL=C
@@ -25,31 +29,48 @@ export LC_ALL
   exit 1
 }
 
-od -An -v -tu1 "$1" | awk '
+sb_size=$(wc -c < "$1" 2>/dev/null) || sb_size=-1
+{
+  od -An -v -tu1 "$1" 2>/dev/null || printf '\nx\n'
+  sb_after=$(wc -c < "$1" 2>/dev/null) && printf '\ns%s\n' $sb_after
+} | SB_SIZE=$sb_size awk '
 BEGIN {
   b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-  k = 0
+  k = 0; n = 0; nb = 0; o = ""; w = 0; after = -1
 }
+$0 == "x" { bad = 1; next }
+substr($0, 1, 1) == "s" { after = substr($0, 2) + 0; next }
 {
+  l = ""
   for (i = 1; i <= NF; i++) {
     v = $i + 0
     if (k == 0) { x = v; k = 1 }
     else if (k == 1) { y = v; k = 2 }
-    else { z = v; k = 0; emit3(x, y, z) }
+    else { z = v; k = 0; l = l emit3(x, y, z) }
   }
+  n += NF
+  o = o l
+  w += length(l)
+  if (w >= 512) { O[++nb] = o; o = ""; w = 0 }
 }
 END {
-  if (k == 1) emit1(x)
-  else if (k == 2) emit2(x, y)
+  if (bad || (n != ENVIRON["SB_SIZE"] + 0 && n != after)) exit 2
+  if (k == 1) o = o emit1(x)
+  else if (k == 2) o = o emit2(x, y)
+  for (i = 1; i <= nb; i++) printf "%s", O[i]
+  printf "%s", o
 }
 function ch(n) { return substr(b64, n + 1, 1) }
 function emit3(a, b, c) {
-  printf "%s%s%s%s", ch(int(a / 4)), ch((a % 4) * 16 + int(b / 16)), ch((b % 16) * 4 + int(c / 64)), ch(c % 64)
+  return ch(int(a / 4)) ch((a % 4) * 16 + int(b / 16)) ch((b % 16) * 4 + int(c / 64)) ch(c % 64)
 }
 function emit1(a) {
-  printf "%s%s==", ch(int(a / 4)), ch((a % 4) * 16)
+  return ch(int(a / 4)) ch((a % 4) * 16) "=="
 }
 function emit2(a, b) {
-  printf "%s%s%s=", ch(int(a / 4)), ch((a % 4) * 16 + int(b / 16)), ch((b % 16) * 4)
+  return ch(int(a / 4)) ch((a % 4) * 16 + int(b / 16)) ch((b % 16) * 4) "="
 }
-'
+' || {
+  printf 'store-b64: error: cannot read the file whole (ERR_STORAGE_READ)\n' >&2
+  exit 2
+}

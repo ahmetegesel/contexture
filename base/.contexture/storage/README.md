@@ -190,9 +190,12 @@ from a deprecated fallback root prints the one notice. The value travels as a JS
 the backslash, the double quote, the tab, the carriage return, and the newline between
 lines escaped, every other byte below 0x20 as `\u00XX`, and the bytes from 0x80 as stored, so
 the posix driver encodes per line and the reader decodes per escape; a value holding a NUL
-byte, which awk cannot carry, travels in base64 instead. Inside a value every double quote
-is escaped, so the item separator and a key's closing quote cannot occur in one. Both
-drivers pack the line with `store-pack`, so their answers are byte identical; the posix
+byte, which awk cannot carry, travels in base64 instead, encoded by `store-b64` before the
+line is packed, so a value it cannot read whole refuses the call as unreadable. Inside a
+value every double quote is escaped, so the item separator and a key's closing quote cannot
+occur in one. Both drivers pack the line with `store-pack`, which hands the value paths to
+`wc` and `cat` in runs of at most 32768 bytes, so a batched get of any size answers, and
+their answers are byte identical; the posix
 driver finds the asked keys by listing their own folders alone, one level each, in runs
 bounded below the system's argument limit, as the walk of their common folder would list
 them (the exact stored spelling, the root's copy first), so a read across many units never
@@ -360,12 +363,16 @@ the namespace in one pass: the root's keys as the listing walk reads them and ea
 the fallback root lists placed where a get reads it, merged bytewise into runs of paths of at
 most 32768 bytes (so no call meets the system's argument limit), each run sized by `wc -c`,
 read by one `od -tx1` into one `awk` that splits the stream back into the values by those
-sizes and encodes three bytes at a time from a buffer never longer than one `od` line (linear
+sizes and encodes three bytes at a time from a buffer of at most one `od` line and two bytes (linear
 in a value's size on every supported awk), then sized again; its external commands grow with
 its runs, never with its keys. A run whose file cannot be sized or read, or changed size while
 the run read it (a write landing beside the unlocked scan), drops the pass, and the scan is
 read again key by key through `store-b64`, which skips a key gone since the listing and names
-the key it cannot read, so one value's bytes never land in another's. A run's `od` and `awk`
+the key it cannot read, so one value's bytes never land in another's. `store-b64` prints a
+value only when its `od` succeeded and read as many bytes as the file held, sized before or
+after the read (a value renamed over the file between the two answers one version whole), so
+a failed or short read refuses the scan rc 2 naming the key, never answering part of the
+value. A run's `od` and `awk`
 run in the background under the `wait` builtin, so a hangup, interrupt, or termination stops
 them at once, the `od` ending on its pipe. No driver keeps a
 change log: a module's delta is its own (the docs module's is git), and `store.changes` is

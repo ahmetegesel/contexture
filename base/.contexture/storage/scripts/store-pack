@@ -9,7 +9,11 @@
 #     hold, in the asked order; the answer is one compact JSON line {namespace, items:[...]},
 #     one item per line: {key, value} with the value's bytes as a JSON string, {key,
 #     value_b64} for a value holding a NUL byte, {key, missing: true} for an absent key.
-#     A value that cannot be read exits 3 with its key alone on stderr.
+#     The value paths reach wc and cat in runs of at most 32768 bytes, so no call meets the
+#     system's argument limit and a batched read of any size answers; a value holding a NUL
+#     byte is encoded by store-b64 before the answer is packed, its exit code read. A value
+#     that cannot be read, or that store-b64 cannot read whole, exits 3 with its key alone on
+#     stderr.
 #   store-pack unpack <answer> <targets>
 #     targets lines are <key><TAB><path> in the asked order; each present value lands in its
 #     path byte for byte, and one line per key prints: 1<TAB><key> or 0<TAB><key>. An answer
@@ -71,45 +75,65 @@ function dec(s,   n, S, i, o) {
 }
 '
 
+SP_NL='
+'
+
+# sp_unreadable <manifest>: the key of the first present value that cannot be sized alone on
+# stderr, exit 3; when every value sizes alone, the sizing itself failed
+sp_unreadable() {
+  while IFS='	' read -r su_k su_p; do
+    [ -n "$su_p" ] || continue
+    { wc -c < "$su_p"; } > /dev/null 2>&1 || { printf '%s\n' "$su_k" >&2; exit 3; }
+  done < "$1"
+  sp_fail 2 "cannot size the values" ERR_STORAGE_READ
+}
+
+# sp_run <paths> <count> <manifest>: one run of the manifest's value paths, one a line, sized
+# by one wc -c, the sizes appended in order to <manifest>.sizes, and the run's bytes less its
+# NUL bytes added to SP_KEPT
+sp_run() {
+  sr_s=$(set -f; IFS=$SP_NL; exec wc -c $1 < /dev/null 2>/dev/null) || sp_unreadable "$3"
+  { printf '%s\n' "$sr_s" | SR_N=$2 awk 'NR <= ENVIRON["SR_N"] + 0 { print $1 + 0 }' >> "$3.sizes"; } 2>/dev/null \
+    || sp_fail 2 "cannot write the codec's scratch" ERR_STORAGE_WRITE
+  sr_k=$( (set -f; IFS=$SP_NL; exec cat $1 < /dev/null) 2>/dev/null | tr -d '\000' | wc -c)
+  SP_KEPT=$((SP_KEPT + sr_k))
+}
+
 sp_pack() {
   [ $# -eq 2 ] || sp_fail 1 "pack takes the namespace and the manifest" ERR_INVALID_ARGUMENT
   pk_ns=$1; pk_man=$2
   [ -f "$pk_man" ] || sp_fail 2 "cannot read the manifest" ERR_STORAGE_READ
-  set --
+  { : > "$pk_man.sizes" && : > "$pk_man.nul" && : > "$pk_man.b64"; } 2>/dev/null || sp_fail 2 "cannot write the codec's scratch" ERR_STORAGE_WRITE
+  SP_KEPT=0
+  pk_run=""; pk_len=0; pk_n=0
   while IFS='	' read -r pk_k pk_p; do
-    [ -n "$pk_p" ] && set -- "$@" "$pk_p"
-  done < "$pk_man"
-  { : > "$pk_man.sizes" && : > "$pk_man.nul"; } 2>/dev/null || sp_fail 2 "cannot write the codec's scratch" ERR_STORAGE_WRITE
-  if [ $# -gt 0 ]; then
-    wc -c "$@" > "$pk_man.sizes" 2>/dev/null || {
-      for pk_p in "$@"; do
-        if ! { wc -c < "$pk_p"; } > /dev/null 2>&1; then
-          awk -F '\t' -v p="$pk_p" '$2 == p { print $1; exit }' "$pk_man" >&2
-          exit 3
-        fi
-      done
-      sp_fail 2 "cannot size the values" ERR_STORAGE_READ
-    }
-    pk_sum=0
-    pk_i=0
-    while read -r pk_c pk_rest; do
-      pk_i=$((pk_i + 1))
-      [ "$pk_i" -le $# ] || break
-      pk_sum=$((pk_sum + pk_c))
-    done < "$pk_man.sizes"
-    pk_kept=$(cat "$@" | tr -d '\000' | wc -c)
-    if [ "$((pk_kept + 0))" -ne "$pk_sum" ]; then
-      pk_i=0
-      for pk_p in "$@"; do
-        pk_i=$((pk_i + 1))
-        pk_all=$(wc -c < "$pk_p")
-        pk_non=$(tr -d '\000' < "$pk_p" | wc -c)
-        [ "$((pk_all + 0))" -eq "$((pk_non + 0))" ] || printf '%s\n' "$pk_i" >> "$pk_man.nul"
-      done
+    [ -n "$pk_p" ] || continue
+    if [ "$pk_n" -gt 0 ] && [ $((pk_len + ${#pk_p} + 1)) -gt 32768 ]; then
+      sp_run "$pk_run" "$pk_n" "$pk_man"
+      pk_run=""; pk_len=0; pk_n=0
     fi
+    pk_run=$pk_run$pk_p$SP_NL
+    pk_len=$((pk_len + ${#pk_p} + 1))
+    pk_n=$((pk_n + 1))
+  done < "$pk_man"
+  [ "$pk_n" -eq 0 ] || sp_run "$pk_run" "$pk_n" "$pk_man"
+  pk_sum=0
+  while read -r pk_c; do pk_sum=$((pk_sum + pk_c)); done < "$pk_man.sizes"
+  if [ "$SP_KEPT" -ne "$pk_sum" ]; then
+    pk_i=0
+    while IFS='	' read -r pk_k pk_p; do
+      [ -n "$pk_p" ] || continue
+      pk_i=$((pk_i + 1))
+      pk_all=$(wc -c < "$pk_p")
+      pk_non=$(tr -d '\000' < "$pk_p" | wc -c)
+      [ "$((pk_all + 0))" -ne "$((pk_non + 0))" ] || continue
+      { printf '%s\n' "$pk_i" >> "$pk_man.nul" && printf '%s\t' "$pk_i" >> "$pk_man.b64"; } 2>/dev/null \
+        || sp_fail 2 "cannot write the codec's scratch" ERR_STORAGE_WRITE
+      "$SP_DIR/store-b64" "$pk_p" >> "$pk_man.b64" 2>/dev/null || { printf '%s\n' "$pk_k" >&2; exit 3; }
+      { printf '\n' >> "$pk_man.b64"; } 2>/dev/null || sp_fail 2 "cannot write the codec's scratch" ERR_STORAGE_WRITE
+    done < "$pk_man"
   fi
-  SP_NS="$pk_ns" SP_B64="$SP_DIR/store-b64" awk -F '\t' "$SP_LIB"'
-    function sq(s) { return "'\''" sjoin(s, "'\''", "'\''\\'\'''\''") "'\''" }
+  SP_NS="$pk_ns" SP_B64="$pk_man.b64" awk -F '\t' "$SP_LIB"'
     BEGIN { ORS = ""; ctl_init(); nf = 0 }
     FILENAME == ARGV[1] { SZ[++nz] = $1 + 0; next }
     FILENAME == ARGV[2] { NUL[$1 + 0] = 1; next }
@@ -121,9 +145,10 @@ sp_pack() {
       nf++
       if (nf in NUL) {
         v = ""
-        if ((ENVIRON["SP_B64"] " " sq(p) | getline v) <= 0) { print k > "/dev/stderr"; exit 3 }
-        close(ENVIRON["SP_B64"] " " sq(p))
-        printf "\"value_b64\":\"%s\"}", v
+        if ((getline v < ENVIRON["SP_B64"]) <= 0) { print k > "/dev/stderr"; exit 3 }
+        t = index(v, "\t")
+        if (t == 0 || substr(v, 1, t - 1) != nf "") { print k > "/dev/stderr"; exit 3 }
+        printf "\"value_b64\":\"%s\"}", substr(v, t + 1)
         next
       }
       printf "\"value\":\""
@@ -145,7 +170,7 @@ sp_pack() {
       printf "]}\n"
     }' "$pk_man.sizes" "$pk_man.nul" "$pk_man"
   pk_rc=$?
-  rm -f "$pk_man.sizes" "$pk_man.nul"
+  rm -f "$pk_man.sizes" "$pk_man.nul" "$pk_man.b64"
   return "$pk_rc"
 }
 
