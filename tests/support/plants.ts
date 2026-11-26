@@ -42,8 +42,10 @@ export function pathPlant(name: string, script: string): Record<string, string> 
 }
 
 // a PATH of one shim per command the real PATH resolves, each logging its name to SHIM_LOG
-// before it runs the real command, so a run's external commands are counted by name
-export function shimPath(): string {
+// before it runs the real command, so a run's external commands are counted by name; a
+// command named in withArgs logs its working folder and its arguments after its name, tab
+// separated, in the same one line
+export function shimPath(withArgs: readonly string[] = []): string {
   const bin = join(sandbox('shim-path'), 'bin');
   mkdirSync(bin);
   const seen = new Set<string>();
@@ -59,7 +61,10 @@ export function shimPath(): string {
         continue;
       }
       seen.add(name);
-      writeFileSync(join(bin, name), `#!/bin/sh\nprintf '%s\\n' '${name}' >> "$SHIM_LOG"\nexec '${real}' "$@"\n`, { mode: 0o755 });
+      const log = withArgs.includes(name)
+        ? `l='${name}'"\t$PWD"\nfor a in "$@"; do l="$l\t$a"; done\nprintf '%s\\n' "$l" >> "$SHIM_LOG"`
+        : `printf '%s\\n' '${name}' >> "$SHIM_LOG"`;
+      writeFileSync(join(bin, name), `#!/bin/sh\n${log}\nexec '${real}' "$@"\n`, { mode: 0o755 });
     }
   }
   return bin;

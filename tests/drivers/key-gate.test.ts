@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { dataFile } from '../support/data-file';
+import { RECORD_ROOT } from '../support/drawer';
 import { driverOp } from '../support/driver';
 import { exec, launch } from '../support/exec';
 import { shimPath } from '../support/plants';
@@ -234,3 +235,77 @@ for (const driver of DRIVERS) {
     });
   });
 }
+
+// the unit namespace as the posix driver stores it under the record root: units of 30 keys
+// each, the four unit artifacts and nine lanes, eight of three artifacts and the ninth of two
+function plantUnits(sb: string, units: number): void {
+  for (let u = 1; u <= units; u++) {
+    const unit = join(sb, RECORD_ROOT, `u${String(u).padStart(4, '0')}`);
+    mkdirSync(unit, { recursive: true });
+    for (const a of ['state', 'backlog', 'knowledge', 'journal']) writeFileSync(join(unit, `${a}.md`), 'v\n');
+    for (let l = 1; l <= 9; l++) {
+      const lane = join(unit, 'lanes', `l${l}`);
+      mkdirSync(lane, { recursive: true });
+      for (const a of ['recipe', 'journal', 'report'].slice(0, l < 9 ? 3 : 2)) writeFileSync(join(lane, `${a}.md`), 'v\n');
+    }
+  }
+}
+
+describe('the posix batch reads the folders its keys touch, never the namespace', () => {
+  const KEYS = 33_510;
+  let shims: string;
+  let large: string;
+  const listed = (stdout: string): string[] => JSON.parse(stdout).keys;
+  beforeAll(async () => {
+    shims = shimPath(['find']);
+    large = stage('posix', 'walk-large');
+    plantUnits(large, KEYS / 30);
+    expect(listed((await rsv(large, ['store.list', 'unit'])).stdout)).toHaveLength(KEYS);
+  }, 180_000);
+
+  // every external command of one call by name, a find with its folder and its arguments
+  async function calls(sb: string, args: readonly string[], input = ''): Promise<string[]> {
+    const log = join(sb, 'calls.log');
+    writeFileSync(log, '');
+    const r = await rsv(sb, args, input, { PATH: shims, SHIM_LOG: log });
+    expect(r.code, r.stderr).toBe(0);
+    return readFileSync(log, 'utf8').split('\n').filter(Boolean);
+  }
+  const names = (log: string[]) => log.map((l) => l.split('\t')[0]).sort();
+  // a find that walks the namespace root: one starting at the root that prunes nothing
+  const walksRoot = (sb: string, line: string): boolean => {
+    const [name, cwd, ...args] = line.split('\t');
+    const root = realpathSync(join(sb, RECORD_ROOT));
+    return name === 'find' && !args.includes('-prune') && args.some((a) => existsSync(resolve(cwd, a)) && realpathSync(resolve(cwd, a)) === root);
+  };
+  const put = (key: string) => batchPayload([{ action: 'put', key, value: 'v\n' }]);
+
+  it('[the-engine-r-kvr01] a one action unit batch into 33510 keys runs no find over the namespace root and the external commands of the same batch into a namespace of 0 keys', { timeout: 120_000 }, async () => {
+    const zero = stage('posix', 'walk-zero');
+    answer(await rsv(zero, ['store.put', 'unit', 'seed/state'], 'v\n'), 'store.put');
+    answer(await rsv(zero, ['store.delete', 'unit', 'seed/state']), 'store.delete');
+    expect(listed((await rsv(zero, ['store.list', 'unit'])).stdout)).toEqual([]);
+    expect(existsSync(join(zero, RECORD_ROOT)), 'the emptied namespace keeps its root').toBe(true);
+    const none = await calls(zero, ['store.batch', 'unit'], put('zbench/state'));
+    const full = await calls(large, ['store.batch', 'unit'], put('zbench/state'));
+    expect(none.length, 'the instrument counts the batch\'s commands').toBeGreaterThan(3);
+    expect(names(full)).toEqual(names(none));
+    const finds = full.filter((l) => l.startsWith('find\t'));
+    expect(finds.length, 'the batch lists its folders').toBeGreaterThan(0);
+    for (const line of finds) {
+      expect(line.split('\t'), 'each find lists one level').toContain('-prune');
+      expect(walksRoot(large, line), line).toBe(false);
+    }
+    const list = await calls(large, ['store.list', 'unit']);
+    expect(list.some((l) => walksRoot(large, l)), 'the instrument sees a walk of the namespace root').toBe(true);
+  });
+
+  it('[the-engine-r-kvr01] a one action write into a stored unit\'s lane runs the same external commands at 30 keys and at 33510', { timeout: 120_000 }, async () => {
+    const small = stage('posix', 'walk-small');
+    plantUnits(small, 1);
+    const one = await calls(small, ['store.batch', 'unit'], put('u0001/lanes/l9/report'));
+    const full = await calls(large, ['store.batch', 'unit'], put('u0001/lanes/l9/report'));
+    expect(names(full)).toEqual(names(one));
+    expect(full.filter((l) => walksRoot(large, l))).toEqual([]);
+  });
+});

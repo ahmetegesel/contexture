@@ -240,7 +240,18 @@ ASCII case onto the same length run of a stored key with another spelling refuse
 `ERR_ENTITY_EXISTS` on every driver and volume (`A/x` beside `a/y`); the driver checks it
 under the namespace lock in one pass per call, the live key list folded once into its
 leading runs and each put of a batch checked and added in action order, the first failing
-action named. A read or delete acts on the exact key alone, and list is bytewise. The module
+action named. The posix batch reads that live list from the folders its keys touch alone
+(`batch_live`): one `find` pair (folders, then files) per root lists the namespace root's
+entries and each folder's along every action key's leading runs, one level each
+(`store_entries`, the listing the batched get reads), a folder's entries counting only when
+each folder above it is listed in its own exact spelling. Where every run the actions fold
+onto has one spelling (the actions', the stored folders', the stored keys') no twin can fire
+and no count reaches the answer, so the pass reads only the live keys among them; a run
+holding a second spelling (a twin, a case mismatch on a folding volume, legacy twins on a
+case sensitive one) has each of its stored folders walked whole and the list sorted, so the
+pass answers as over the whole namespace. So a one action unit write runs the same
+processes at 0 and at 33510 keys, and never a `find` over the namespace root (a `store.put`
+alone still lists the namespace for its twin check). A read or delete acts on the exact key alone, and list is bytewise. The module
 pattern filters list and scan and refuses a key outside it; `store.list` takes an optional
 literal bytewise key prefix (possibly ending on a slash) so a module reads its own keys
 without walking the namespace. The posix mapping is

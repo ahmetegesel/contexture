@@ -350,6 +350,30 @@ kr_load() {
   refuse 2 ERR_STORAGE_READ "the storage core key rule is not installed"
 }
 
+# PX_KEY: the awk functions reading a stored file's path, relative to its root folder, as the
+# key it holds when the key rule (KR, prepended) and the module pattern admit it, else as
+# nothing: px_init reads the suffix and the pattern from PX_SUFFIX and PX_KEYPAT once
+PX_KEY='
+function px_init(   i) {
+  px_sfx = ENVIRON["PX_SUFFIX"]
+  px_m = split(ENVIRON["PX_KEYPAT"], px_p, /\//)
+  for (i = 1; i <= px_m; i++) px_mul[i] = (px_p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+}
+function px_key(key,   n, k, i) {
+  if (px_sfx != "") {
+    if (length(key) < length(px_sfx) || substr(key, length(key) - length(px_sfx) + 1) != px_sfx) return ""
+    key = substr(key, 1, length(key) - length(px_sfx))
+  }
+  if (px_m < 1 || !kr_key(key, px_sfx, px_mul[px_m])) return ""
+  n = split(key, k, /\//)
+  if (px_mul[px_m]) { if (n < px_m) return "" } else if (n != px_m) return ""
+  for (i = 1; i < px_m; i++) if (px_p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/ || k[i] == "") return ""
+  if (px_mul[px_m]) { for (i = px_m; i <= n; i++) if (k[i] == "") return "" }
+  else if (px_p[px_m] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/ || k[px_m] == "") return ""
+  return key
+}
+'
+
 # store_prefix_ok <list|whole> <prefix>: a store.list prefix (whole segments, then a part of
 # one, or a slash) or a whole segment prefix ending in a slash (promote, sweep), under the key rule
 store_prefix_ok() {
@@ -458,37 +482,33 @@ store_list_root() {
     esac
   fi
   kr_load
-  find "$sl_scan" -type f -print 2>/dev/null | SL_DIR="$sl_dir" SL_SUFFIX="$SD_SUFFIX" SL_KEYPAT="$SD_KEYPAT" SL_PREFIX="$sl_prefix" SL_FIRST="$sl_first" LC_ALL=C awk "$KR"'
-    BEGIN {
-      dir = ENVIRON["SL_DIR"]; sfx = ENVIRON["SL_SUFFIX"]; pre = ENVIRON["SL_PREFIX"]; first = (ENVIRON["SL_FIRST"] != "")
-      m = split(ENVIRON["SL_KEYPAT"], p, /\//)
-      for (i = 1; i <= m; i++) mul[i] = (p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
-    }
+  find "$sl_scan" -type f -print 2>/dev/null | SL_DIR="$sl_dir" PX_SUFFIX="$SD_SUFFIX" PX_KEYPAT="$SD_KEYPAT" SL_PREFIX="$sl_prefix" SL_FIRST="$sl_first" LC_ALL=C awk "$KR$PX_KEY"'
+    BEGIN { dir = ENVIRON["SL_DIR"]; pre = ENVIRON["SL_PREFIX"]; first = (ENVIRON["SL_FIRST"] != ""); px_init() }
     {
-      f = $0
-      if (substr(f, 1, length(dir) + 1) != dir "/") next
-      key = substr(f, length(dir) + 2)
-      if (sfx != "") {
-        if (length(key) < length(sfx) || substr(key, length(key) - length(sfx) + 1) != sfx) next
-        key = substr(key, 1, length(key) - length(sfx))
-      }
-      if (m < 1 || !kr_key(key, sfx, mul[m])) next
-      n = split(key, k, /\//)
-      if (mul[m]) { if (n < m) next } else { if (n != m) next }
-      for (i = 1; i < m; i++) {
-        if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) next
-        if (k[i] == "") next
-      }
-      if (mul[m]) {
-        for (i = m; i <= n; i++) if (k[i] == "") next
-      } else {
-        if (p[m] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) next
-        if (k[m] == "") next
-      }
-      if (pre != "" && substr(key, 1, length(pre)) != pre) next
+      if (substr($0, 1, length(dir) + 1) != dir "/") next
+      key = px_key(substr($0, length(dir) + 2))
+      if (key == "" || (pre != "" && substr(key, 1, length(pre)) != pre)) next
       print key
       if (first) exit
     }' | LC_ALL=C sort
+}
+
+# store_entries <folder> <ops> <scratch>: the entries of <folder> and of each folder <ops>
+# names (./<path>/., one a line), one level each, folders in <scratch>.d and files in
+# <scratch>.f as find prints them from <folder>; a symbolic link is never followed, so a
+# folder that is one, the root included, lists nothing
+store_entries() {
+  : > "$3.d" && : > "$3.f" || return 1
+  [ -d "$1" ] && [ ! -h "$1" ] || return 0
+  (
+    CDPATH="" cd "$1" 2>/dev/null || exit 0
+    set -f
+    IFS='
+'
+    find . $2 ! -name . -prune -type d -print > "$3.d" 2>/dev/null
+    find . $2 ! -name . -prune -type f -print > "$3.f" 2>/dev/null
+    exit 0
+  )
 }
 
 # store_list_asked <folder> <prefix> <keys> <scratch>: the keys of the file <keys> (each under
@@ -513,16 +533,7 @@ store_list_asked() {
       f = "."
       for (i = 1; i < n; i++) { f = f "/" s[i]; if (!(f in seen)) { seen[f] = 1; print f "/." } }
     }' "$la_keys") || return 1
-  : > "$la_st.d" && : > "$la_st.f" || return 1
-  (
-    CDPATH="" cd "$la_scan" 2>/dev/null || exit 0
-    set -f
-    IFS='
-'
-    find . $la_ops ! -name . -prune -type d -print > "$la_st.d" 2>/dev/null
-    find . $la_ops ! -name . -prune -type f -print > "$la_st.f" 2>/dev/null
-    exit 0
-  )
+  store_entries "$la_scan" "$la_ops" "$la_st" || return 1
   LA_PRE="$la_pre" LA_SFX="$SD_SUFFIX" LC_ALL=C awk '
     function entry(l,    r, i) {
       if (substr(l, 1, 2) != "./") return ""
@@ -1033,13 +1044,97 @@ batch_parse() {
   [ "$SB_N" -gt 0 ] || batch_refuse 1 1 "?" "?" ERR_INVALID_ARGUMENT "the batch carries no actions"
 }
 
-# batch_validate: the whole action list against the live key set in one pass, under the
-# namespace lock: the live list folded once into its leading runs, a delete finding its key
-# live at its place in the order, a put never beside a leading run twin (both checked and
-# applied in action order, the first failing action named)
+# batch_live: SB_LIVE holds the live keys the twin pass needs, read from the entries of the
+# folders on each action key's path alone (the root's and each folder's along the key's
+# leading runs, one level each, in both roots), so a batch never walks the namespace. A
+# folder's entries count only when each folder above it is listed in its own exact spelling.
+# Each action run gathers its spellings: the actions' own, its stored folders', and its
+# stored keys'. Where every run has one spelling no twin can fire and no count reaches the
+# answer, so the pass needs only the live keys among them; a run of two spellings (a twin, a
+# case mismatch, a legacy pair) has each of its stored folders walked whole and the set
+# sorted, so the pass reads every key a fold of that run holds as the namespace walk gives it.
+batch_live() {
+  bl_st=$STORE_BATCH_STAGE
+  bl_ops=$(LC_ALL=C awk -F '\t' '{
+      n = split($3, s, "/"); f = "."
+      for (i = 1; i < n; i++) { f = f "/" s[i]; if (!(f in seen)) { seen[f] = 1; print f "/." } }
+    }' "$bl_st/man") || return 1
+  store_entries "$STORE_WS/$SD_ROOT" "$bl_ops" "$bl_st/r" || return 1
+  if [ -n "$SD_FALLBACK" ]; then
+    store_entries "$STORE_WS/$SD_FALLBACK" "$bl_ops" "$bl_st/f" || return 1
+  else
+    : > "$bl_st/f.d" && : > "$bl_st/f.f" || return 1
+  fi
+  bl_walk=$(BL_LIVE="$SB_LIVE" PX_SUFFIX="$SD_SUFFIX" PX_KEYPAT="$SD_KEYPAT" LC_ALL=C awk "$KR$PX_KEY"'
+    function entry(l,   r, i) {
+      if (substr(l, 1, 2) != "./") return ""
+      r = substr(l, 3)
+      i = index(r, "/./")
+      if (i) return substr(r, 1, i - 1) SUBSEP substr(r, i + 3)
+      return SUBSEP r
+    }
+    function valid(t, p,   n, s, i, f) {
+      if (p == "") return 1
+      if ((t SUBSEP p) in OK) return OK[t, p]
+      n = split(p, s, "/"); f = ""; OK[t, p] = 0
+      for (i = 1; i <= n; i++) {
+        if (!((t SUBSEP f SUBSEP s[i]) in D)) return 0
+        f = (i == 1 ? s[1] : f "/" s[i])
+      }
+      return OK[t, p] = 1
+    }
+    function spell(f, r) { if (!((f SUBSEP r) in SP)) { SP[f, r] = 1; NS[f]++ } }
+    BEGIN { px_init(); live = ENVIRON["BL_LIVE"]; printf "" > live }
+    FILENAME == ARGV[1] {
+      split($0, a, "\t"); n = split(a[3], s, "/"); r = ""
+      for (i = 1; i <= n; i++) { r = (i == 1 ? s[1] : r "/" s[i]); AF[tolower(r)] = 1; spell(tolower(r), r) }
+      next
+    }
+    { e = entry($0); if (e == "") next }
+    FILENAME == ARGV[2] || FILENAME == ARGV[4] { t = (FILENAME == ARGV[2] ? "r" : "f"); D[t SUBSEP e] = 1; DL[++dn] = t SUBSEP e; next }
+    { FL[++fn] = (FILENAME == ARGV[3] ? "r" : "f") SUBSEP e }
+    END {
+      for (i = 1; i <= dn; i++) {
+        split(DL[i], x, SUBSEP)
+        if (!valid(x[1], x[2])) continue
+        r = (x[2] == "" ? x[3] : x[2] "/" x[3]); f = tolower(r)
+        if (!(f in AF)) continue
+        spell(f, r); C[++cn] = x[1] SUBSEP r SUBSEP f
+      }
+      for (i = 1; i <= fn; i++) {
+        split(FL[i], x, SUBSEP)
+        if (!valid(x[1], x[2])) continue
+        k = px_key(x[2] == "" ? x[3] : x[2] "/" x[3])
+        if (k == "" || !(tolower(k) in AF)) continue
+        spell(tolower(k), k); print k > live
+      }
+      close(live)
+      for (f in NS) if (NS[f] > 1) { print "sort"; break }
+      for (i = 1; i <= cn; i++) { split(C[i], x, SUBSEP); if (NS[x[3]] > 1) W[x[1] SUBSEP x[2]] = 1 }
+      for (w in W) {
+        split(w, x, SUBSEP); n = split(x[2], s, "/"); r = ""; top = 1
+        for (i = 1; i < n && top; i++) { r = (i == 1 ? s[1] : r "/" s[i]); if ((x[1] SUBSEP r) in W) top = 0 }
+        if (top) printf "%s\t%s\n", x[1], x[2]
+      }
+    }' "$bl_st/man" "$bl_st/r.d" "$bl_st/r.f" "$bl_st/f.d" "$bl_st/f.f") || return 1
+  [ -n "$bl_walk" ] || return 0
+  printf '%s\n' "$bl_walk" | while IFS='	' read -r bl_t bl_p; do
+    case "$bl_t" in
+      r) store_list_root "$STORE_WS/$SD_ROOT" "$bl_p/" || exit 1 ;;
+      f) store_list_root "$STORE_WS/$SD_FALLBACK" "$bl_p/" || exit 1 ;;
+    esac
+  done >> "$SB_LIVE" || return 1
+  LC_ALL=C sort -u -o "$SB_LIVE" "$SB_LIVE"
+}
+
+# batch_validate: the whole action list against the live keys in one pass, under the
+# namespace lock: the live set batch_live reads from the folders the keys touch, folded once
+# into its leading runs, a delete finding its key live at its place in the order, a put never
+# beside a leading run twin (both checked and applied in action order, the first failing
+# action named)
 batch_validate() {
   SB_LIVE="$STORE_BATCH_STAGE/live"
-  { store_list_keys > "$SB_LIVE"; } 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  batch_live 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   sb_fail=$(store_twin_pass "$SB_LIVE" "$STORE_BATCH_STAGE/man") || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   [ -z "$sb_fail" ] || store_twin_refuse "$sb_fail"
 }
