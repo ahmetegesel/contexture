@@ -862,8 +862,9 @@ kv_handoff() {
 # to the move's target, and a delete only batch carrying it to the move's source, decided on
 # the payload the gate staged. A marker whose holder pid is gone freezes nothing and stays
 # for the next take to remove; one without a numeric pid counts as held. With no marker a
-# write gains one existence test and a read none, and a marker is read with the read and
-# kill builtins alone.
+# put and a batch gain two existence tests (before the gate and after its staging), every
+# other write one, and a read none, and a marker is read with the read and kill builtins
+# alone.
 MV_PID=""
 MV_TARGET=""
 MV_SOURCE=""
@@ -922,21 +923,37 @@ move_refuse() {
   exit 2
 }
 
-# move_check <the dispatched function's arguments>: the freeze at dispatch, before the gate
-# reads any stdin; a batch the holder sends to the move's source waits for move_source
-move_check() {
-  move_read "$@" && return 0
-  [ -d "$MV_MARK" ] || return 0
+# move_pass: the verdict over a standing marker: rc 0 for the move's own call or a holder that
+# is gone; the holder's batch to the move's source is marked for the payload check, and every
+# other call refuses
+move_pass() {
   move_own && return 0
   move_live || return 0
   move_holder && [ "$METHOD" = store.batch ] && [ "$TARGET_DRIVER" = "$MV_SOURCE" ] || move_refuse
   MV_SOURCE_PASS=1
 }
 
-# move_source: the holder's batch to the move's source passes only when the staged payload
-# holds actions and every one is a delete
-move_source() {
-  case "$MV_SOURCE_PASS" in "") return 0 ;; esac
+# move_check <the dispatched function's arguments>: the freeze at dispatch, before the gate
+# reads any stdin; a batch the holder sends to the move's source waits for move_staged
+move_check() {
+  move_read "$@" && return 0
+  [ -d "$MV_MARK" ] || return 0
+  move_pass
+}
+
+# move_staged: once the gate has staged a put's or a batch's stdin, the marker is tested
+# again, so a call that passed move_check before a take and was still reading its stdin when
+# the take answered meets the freeze; the holder's batch to the move's source passes only
+# when the staged payload holds actions and every one is a delete
+move_staged() {
+  case "$MV_SOURCE_PASS" in
+    "")
+      case "$KV_STAGE" in "") return 0 ;; esac
+      [ -d "$MV_MARK" ] || return 0
+      move_pass
+      case "$MV_SOURCE_PASS" in "") return 0 ;; esac
+      ;;
+  esac
   [ -n "$KV_STAGE" ] && LC_ALL=C awk '
     { sub(/\r$/, "") }
     /^action=/ { if ($0 != "action=delete") bad = 1; n++ }
@@ -1243,7 +1260,7 @@ case "$COMMAND" in
     shift
     move_check "$@"
     kv_gate "$@"
-    move_source
+    move_staged
     DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
     if [ ! -x "$DRIVER_PATH" ]; then
       printf 'driver-resolver: ERROR: driver '\''%s'\'' executable not found at %s (ERR_DRIVER_NOT_FOUND)\n' "$TARGET_DRIVER" "$DRIVER_PATH" >&2
@@ -1258,7 +1275,7 @@ case "$COMMAND" in
     METHOD="$COMMAND"
     move_check "$@"
     kv_gate "$@"
-    move_source
+    move_staged
     DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
     if [ ! -x "$DRIVER_PATH" ]; then
       printf 'driver-resolver: ERROR: driver '\''%s'\'' executable not found at %s (ERR_DRIVER_NOT_FOUND)\n' "$TARGET_DRIVER" "$DRIVER_PATH" >&2

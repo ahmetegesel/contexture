@@ -318,13 +318,18 @@ dispatched function but the reads (`store.list`, `store.get`, `store.scan`,
 `store.search`, `storage.health`, `storage.leftovers`, `capability`, and `storage.sweep`
 with `--dry-run`) refuses at once, before the key gate reads any stdin and before any
 driver runs, whichever driver it addresses; a function a later contract adds is a write
-until it is listed. The move's own calls pass: the holder pid in `CTX_STORAGE_MOVE` (the
+until it is listed. A put or a batch meets the marker test a second time once the key gate
+has staged its stdin, so a write that passed the first test before a take and was still
+reading its stdin when the take answered refuses too, its staged payload removed; the drain
+covers the writers past both tests, which hold or wait on a namespace lock. The move's own
+calls pass: the holder pid in `CTX_STORAGE_MOVE` (the
 token the holder exports into the move's own runs alone) with the resolved driver its
 target, or with the resolved driver its source for a `store.batch` whose staged actions
 are deletes alone. A marker whose holder pid is gone freezes nothing (a writer passes it
 and leaves it for the next take, which could otherwise remove a new move's marker); a
-pid-less one counts as held. With no marker a write pays one `[ -d ]` test and a read
-nothing; a marker is read with the `read` and `kill` builtins alone. A HUP, INT, or TERM
+pid-less one counts as held. With no marker a put and a batch pay two `[ -d ]` tests
+(before the key gate and after its staging), every other write one, and a read nothing; a
+marker is read with the `read` and `kill` builtins alone. A HUP, INT, or TERM
 to a draining take stops its probe, removes its marker, and exits 129, 130, or 143. A
 caller that runs the take in the background from a non-interactive shell hands it INT
 ignored on entry, which no shell can trap or reset, so that caller stops it with HUP or

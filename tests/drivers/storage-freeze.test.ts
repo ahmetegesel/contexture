@@ -191,18 +191,63 @@ for (const driver of DRIVERS) {
     }
 
     it('[the-engine-r-mvf01] cost: a write past a dead holder\'s marker runs the external commands of a write with no marker, and a read under a live holder those of a read with none', async () => {
-      const [none, dead, read, frozenRead] = [fresh(base), fresh(base), fresh(base), fresh(base)];
+      const [none, dead, noneBatch, deadBatch, read, frozenRead] = [fresh(base), fresh(base), fresh(base), fresh(base), fresh(base), fresh(base)];
       holdMove(dead, other(driver), 'dead', driver);
+      holdMove(deadBatch, other(driver), 'dead', driver);
       holdMove(frozenRead, other(driver), 'live', driver);
-      const [w0, w1, r0, r1] = await Promise.all([
+      const batch = batchPayload([{ action: 'put', key: 'a/two', value: 'two\n' }]);
+      const [w0, w1, b0, b1, r0, r1] = await Promise.all([
         calls(none, ['store.put', 'mv', 'a/two'], 'two\n'),
         calls(dead, ['store.put', 'mv', 'a/two'], 'two\n'),
+        calls(noneBatch, ['store.batch', 'mv'], batch),
+        calls(deadBatch, ['store.batch', 'mv'], batch),
         calls(read, ['store.get', 'mv', 'a/one'], ''),
         calls(frozenRead, ['store.get', 'mv', 'a/one'], ''),
       ]);
       expect(w0.length, 'the instrument counts the write\'s commands').toBeGreaterThan(3);
       expect(w1).toEqual(w0);
+      expect(b1).toEqual(b0);
       expect(r1).toEqual(r0);
+    });
+
+    it('[the-engine-r-mvf01] cost: with no marker a put and a batch test for it twice (before the gate and after its staging), a delete, a promote, and a sweep once, a read never', async () => {
+      const tests = async (args: readonly string[], input: string): Promise<number> => {
+        const sb = fresh(base);
+        const r = await exec('sh', ['-x', resolver(sb), ...args], { cwd: sb, input, env: { CTX_ROOT: sb } });
+        return r.stderr.split('\n').filter((l) => /^\++ .*\[.* -d .*storage-moving/.test(l)).length;
+      };
+      const batch = batchPayload([{ action: 'put', key: 'a/two', value: 'two\n' }]);
+      const counts = await Promise.all([
+        tests(['store.put', 'mv', 'a/two'], 'two\n'),
+        tests(['store.batch', 'mv'], batch),
+        tests(['store.delete', 'mv', 'a/one'], ''),
+        tests(['store.promote', 'mv', 'a/'], ''),
+        tests(['storage.sweep', 'mv'], ''),
+        tests(['store.get', 'mv', 'a/one'], ''),
+        tests(['store.list', 'mv'], ''),
+      ]);
+      expect(counts).toEqual([2, 2, 1, 1, 1, 0, 0]);
+    });
+
+    it('[the-engine-r-mvf01] a write that passed the check before the take and still reads its stdin when the take answers refuses with the freeze line, nothing written; the holder\'s own put toward the target still passes', { timeout: DRAIN_CEILING }, async () => {
+      const sb = fresh(base);
+      const hold = (args: readonly string[], env: Record<string, string> = {}) =>
+        launch(resolver(sb), args, { cwd: sb, input: null, env: { CTX_ROOT: sb, ...env }, timeout: DRAIN_CEILING - 10_000 });
+      const put = hold(['store.put', 'mv', 'a/late']);
+      const batch = hold(['store.batch', 'mv']);
+      const mine = hold(['--driver=posix', 'store.put', 'mv', 'a/own'], moveToken());
+      expect(await waitFor(() => staged(sb).length === 3, 30_000), 'all three are past the check, staging their stdin').toBe(true);
+      const take = await rsv(sb, ['move-freeze', PID, 'posix'], '', sleepShim(), DRAIN_CEILING - 10_000);
+      expect([take.code, take.stdout, take.stderr]).toEqual([0, '', '']);
+      put.child.stdin.end('late\n');
+      batch.child.stdin.end(batchPayload([{ action: 'put', key: 'a/late2', value: 'late\n' }]));
+      mine.child.stdin.end('own\n');
+      frozen(await put.result, 'store.put');
+      frozen(await batch.result, 'store.batch');
+      answer(await mine.result, 'store.put');
+      expect(staged(sb)).toEqual([]);
+      expect((await rsv(sb, ['--driver=posix', 'store.list', 'mv'])).stdout).toBe(listAnswer('mv', driver === 'posix' ? ['a/one', 'a/own'] : ['a/own']));
+      expect((await rsv(sb, ['store.list', 'mv'])).stdout).toBe(listAnswer('mv', driver === 'posix' ? ['a/one', 'a/own'] : ['a/one']));
     });
 
     it('[the-engine-r-mvf01] move-freeze takes the marker (target, source, then the holder pid), move-state reads it held, and move-release ends it', async () => {
