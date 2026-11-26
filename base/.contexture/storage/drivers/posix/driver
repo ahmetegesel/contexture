@@ -496,7 +496,9 @@ store_list_root() {
 # store_entries <folder> <ops> <scratch>: the entries of <folder> and of each folder <ops>
 # names (./<path>/., one a line), one level each, folders in <scratch>.d and files in
 # <scratch>.f as find prints them from <folder>; a symbolic link is never followed, so a
-# folder that is one, the root included, lists nothing
+# folder that is one, the root included, lists nothing. The folders reach find in runs of
+# at most 32768 bytes, so however many or deep the keys, no call meets the system's
+# argument limit, whose failure would read as folders holding nothing
 store_entries() {
   : > "$3.d" && : > "$3.f" || return 1
   [ -d "$1" ] && [ ! -h "$1" ] || return 0
@@ -505,8 +507,20 @@ store_entries() {
     set -f
     IFS='
 '
-    find . $2 ! -name . -prune -type d -print > "$3.d" 2>/dev/null
-    find . $2 ! -name . -prune -type f -print > "$3.f" 2>/dev/null
+    se_run=.
+    se_len=1
+    for se_op in $2; do
+      if [ $((se_len + ${#se_op})) -ge 32768 ]; then
+        find $se_run ! -name . -prune -type d -print >> "$3.d" 2>/dev/null
+        find $se_run ! -name . -prune -type f -print >> "$3.f" 2>/dev/null
+        se_run=""
+        se_len=0
+      fi
+      se_run="$se_run$SD_NL$se_op"
+      se_len=$((se_len + ${#se_op} + 1))
+    done
+    find $se_run ! -name . -prune -type d -print >> "$3.d" 2>/dev/null
+    find $se_run ! -name . -prune -type f -print >> "$3.f" 2>/dev/null
     exit 0
   )
 }

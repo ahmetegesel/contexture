@@ -309,3 +309,39 @@ describe('the posix batch reads the folders its keys touch, never the namespace'
     expect(full.filter((l) => walksRoot(large, l))).toEqual([]);
   });
 });
+
+// keys of 160 two byte segments under a top segment of their own, each naming some 40 KB of
+// folders for the posix listing, so a batch of them names twice the system's argument limit
+describe('the posix listing of deep keys past the argument limit', () => {
+  const tail = '/aa'.repeat(160);
+  const deepKey = (top: string) => `${top}${tail}/x`;
+  async function deepStore(label: string): Promise<{ sb: string; keys: string[] }> {
+    const sb = stage('posix', label);
+    dataFile(sb, 'modules', 'deep', DEEP);
+    answer(await rsv(sb, ['store.put', 'deep', deepKey('k0000')], 'v\n'), 'store.put');
+    answer(await rsv(sb, ['store.put', 'deep', 'K999/x'], 'v\n'), 'store.put');
+    const max = Number((await exec('getconf', ['ARG_MAX'], { cwd: sb, input: '' })).stdout.trim());
+    expect(max, 'the argument limit reads').toBeGreaterThan(0);
+    let folders = 0;
+    for (let i = 0; i <= 160; i++) folders += `./k0001${'/aa'.repeat(i)}/.`.length + 1;
+    const n = Math.ceil((2 * max) / folders);
+    return { sb, keys: Array.from({ length: n }, (_, i) => deepKey(`k${String(i + 1).padStart(4, '0')}`)) };
+  }
+
+  it('[the-engine-r-kvr01] a batch finds a stored deep key for its delete and refuses the put twin of a stored folder at its own action, as a batch of those two actions alone does', { timeout: 120_000 }, async () => {
+    const { sb, keys } = await deepStore('args-batch');
+    const pair = [{ action: 'delete' as const, key: deepKey('k0000') }, { action: 'put' as const, key: 'k999/y', value: 'v\n' }];
+    const twin = (n: number) => `action ${n} (put 'k999/y'): key 'k999/y' folds onto 'K999' under ASCII case at its leading segments 'k999'; keys whose leading segments differ only by case never coexist in namespace 'deep'`;
+    refused(await rsv(sb, ['store.batch', 'deep'], batchPayload(pair)), 'store.batch', 1, 'ERR_ENTITY_EXISTS', twin(2));
+    const actions = [...keys.map((key) => ({ action: 'put' as const, key, value: 'v\n' })), ...pair];
+    refused(await rsv(sb, ['store.batch', 'deep'], batchPayload(actions)), 'store.batch', 1, 'ERR_ENTITY_EXISTS', twin(keys.length + 2));
+    expect((await rsv(sb, ['store.list', 'deep'])).stdout).toBe(listAnswer('deep', ['K999/x', deepKey('k0000')]));
+  });
+
+  it('[the-engine-r-kvr01] a batched get reads a stored deep key among them', { timeout: 120_000 }, async () => {
+    const { sb, keys } = await deepStore('args-get');
+    const items = answer(await rsv(sb, ['store.get', 'deep', deepKey('k0000'), ...keys]), 'store.get').items;
+    expect(items[0]).toEqual({ key: deepKey('k0000'), value: 'v\n' });
+    expect(items.slice(1).every((i: { missing?: boolean }) => i.missing === true)).toBe(true);
+  });
+});

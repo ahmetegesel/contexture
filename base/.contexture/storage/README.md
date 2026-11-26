@@ -193,9 +193,10 @@ the posix driver encodes per line and the reader decodes per escape; a value hol
 byte, which awk cannot carry, travels in base64 instead. Inside a value every double quote
 is escaped, so the item separator and a key's closing quote cannot occur in one. Both
 drivers pack the line with `store-pack`, so their answers are byte identical; the posix
-driver finds the asked keys by listing their own folders alone, one level each, as the
-walk of their common folder would list them (the exact stored spelling, the root's copy
-first), so a read across many units never walks the namespace, and sqlite writes them in one
+driver finds the asked keys by listing their own folders alone, one level each, in runs
+bounded below the system's argument limit, as the walk of their common folder would list
+them (the exact stored spelling, the root's copy first), so a read across many units never
+walks the namespace, and sqlite writes them in one
 `sqlite3` call.
 
 Keys are exact and meet one key and value rule, the text of `scripts/store-key.awk`, so
@@ -241,10 +242,12 @@ ASCII case onto the same length run of a stored key with another spelling refuse
 under the namespace lock in one pass per call, the live key list folded once into its
 leading runs and each put of a batch checked and added in action order, the first failing
 action named. The posix batch reads that live list from the folders its keys touch alone
-(`batch_live`): one `find` pair (folders, then files) per root lists the namespace root's
+(`batch_live`): a `find` pair (folders, then files) per root lists the namespace root's
 entries and each folder's along every action key's leading runs, one level each
-(`store_entries`, the listing the batched get reads), a folder's entries counting only when
-each folder above it is listed in its own exact spelling. Where every run the actions fold
+(`store_entries`, the listing the batched get reads), its folders handed over in runs of at
+most 32768 bytes, so no call meets the system's argument limit however many or deep the
+keys (one pair for any ordinary batch), a folder's entries counting only when each folder
+above it is listed in its own exact spelling. Where every run the actions fold
 onto has one spelling (the actions', the stored folders', the stored keys') no twin can fire
 and no count reaches the answer, so the pass reads only the live keys among them; a run
 holding a second spelling (a twin, a case mismatch on a folding volume, legacy twins on a
