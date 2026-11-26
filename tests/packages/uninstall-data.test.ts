@@ -34,6 +34,17 @@ function memosPkg(sb: string, name = 'pkg-memos', module = 'memos', data = DATA,
   return p;
 }
 
+// twoPkg: pkg-two, carrying the data modules alpha and beta, each with its put and ls verbs
+function twoPkg(sb: string): string {
+  const p = memosPkg(sb, 'pkg-two', 'alpha');
+  const dir = join(p, '.contexture/extensions/modules/beta');
+  put(join(dir, 'module'), '# summary: the beta module of pkg-two\n# version: 1.0.0\n# description:\n# A second memo fixture module.\n');
+  put(join(dir, 'data'), DATA);
+  put(join(dir, 'scripts/put'), '#!/bin/sh\n# summary: save a memo\n. "$CTX_ROOT/.contexture/storage/scripts/library"\nstore_put "$1" > /dev/null && store_namespace\n', 0o755);
+  writeManifest(p);
+  return p;
+}
+
 async function memos(sb: string, as = '', keys = ['a/b', 'c/d']): Promise<string> {
   const p = memosPkg(sb);
   expect((await install(sb, p, ...(as ? [`--as=memos=${as}`] : []))).code).toBe(0);
@@ -312,6 +323,105 @@ describe.concurrent('ctx package uninstall: the data answer', () => {
     const dropped = await install(sb, p);
     expect([dropped.code, dropped.stdout, dropped.stderr]).toEqual([1, '', line]);
     expect(tree(sb)).toBe(before);
+  });
+
+  it('[the-engine-r22, modules-r13, modules-r15] a direct call of the uninstaller or the installer without CTX_ROOT counts and deletes in the workspace its package path names, never in the workspace it runs from', async () => {
+    const sb = sandbox();
+    await memos(sb);
+    const other = sandbox();
+    await memos(other, '', ['a/b', 'c/d', 'e/f']);
+    const direct = (script: string, env: Record<string, string>): Promise<Run> =>
+      exec('sh', [join(sb, '.contexture', script), join(sb, 'catalog/pkg-memos')], { cwd: other, env });
+    const asked = await direct('package-uninstall', {});
+    expect([asked.code, asked.stderr]).toEqual([1, `package-uninstall: uninstalling 'pkg-memos' leaves its data: memos (2 keys); ${ASK}\n`]);
+    const del = await direct('package-uninstall', { CTX_PACKAGE_DATA: 'delete' });
+    expect(del.code).toBe(0);
+    expect(del.stdout.endsWith('package-uninstall: deleted 2 keys of memos\n')).toBe(true);
+    expect(existsSync(join(sb, 'memos/a/b'))).toBe(false);
+    expect(await listed(other, 'memos')).toEqual(['a/b', 'c/d', 'e/f']);
+    const held = sandbox();
+    const p = await memos(held, 'notebook', ['a/b']);
+    const empty = sandbox();
+    await memos(empty, 'notebook', []);
+    const moved = await exec('sh', [join(held, '.contexture/package-install'), p], { cwd: empty, env: { CTX_PACKAGE_AS: 'memos=journal' } });
+    expect([moved.code, moved.stderr]).toEqual([1, "package-install: the re-install would leave the data of module 'memos' (namespace 'notebook', 1 key) undeclared; uninstall the package with --keep-data or --delete-data as the human answers, then install it\n"]);
+  });
+
+  it('[modules-r15] the same package returns over its kept data only while the returning module declares it under the kept roots: a version without its data file, or storing it under another root, refuses rc 1 before any write and the kept data stays', async () => {
+    const sb = sandbox();
+    const p = memosPkg(sb, 'pkg-memos', 'memos', 'root: memos-v1\nkey: <a>/<b>\n');
+    expect((await install(sb, p)).code).toBe(0);
+    expect((await ctx(sb, ['memos', 'put', 'a/b'], 'a/b\n')).code).toBe(0);
+    expect((await uninstall(sb, 'pkg-memos', '--keep-data')).code).toBe(0);
+    const before = tree(sb);
+    const way = 'so its verbs would not read the kept keys; install the version that kept it (1.0.0), or delete the kept data first: ctx package uninstall pkg-memos --delete-data';
+    memosPkg(sb, 'pkg-memos', 'memos', 'root: memos-v2\nkey: <a>/<b>\n', '2.0.0');
+    const moved = await install(sb, p);
+    expect([moved.code, moved.stdout, moved.stderr]).toEqual([1, '', `package-install: module 'memos' returns over the data kept under 'memos', but this version stores it under 'memos-v2' where the kept data lies under 'memos-v1', ${way}\n`]);
+    rmSync(join(p, '.contexture/extensions/modules/memos/data'));
+    const bare = await install(sb, p);
+    expect([bare.code, bare.stdout, bare.stderr]).toEqual([1, '', `package-install: module 'memos' returns over the data kept under 'memos', but this version carries no data file for it, ${way}\n`]);
+    expect(tree(sb)).toBe(before);
+    memosPkg(sb, 'pkg-memos', 'memos', 'root: memos-v1\nkey: <a>/<b>\n', '3.0.0');
+    expect((await install(sb, p)).code).toBe(0);
+    expect(JSON.parse((await ctx(sb, ['memos', 'ls'])).stdout).keys).toEqual(['a/b']);
+  });
+
+  it('[modules-r15] a kept declaration the reader refuses is repaired by the same package\'s return, which takes it back', async () => {
+    const sb = sandbox();
+    const p = await memos(sb, '', ['a/b']);
+    expect((await uninstall(sb, 'pkg-memos', '--keep-data')).code).toBe(0);
+    writeFileSync(join(keptDir(sb, 'memos'), 'data'), `${DATA}bogus: x\n`);
+    expect((await exec('./.contexture/storage/scripts/store-data', ['--list'], { cwd: sb })).code).toBe(1);
+    const back = await install(sb, p);
+    expect(back.code).toBe(0);
+    expect(back.stderr).not.toMatch(/error|refus/);
+    expect((await exec('./.contexture/storage/scripts/store-data', ['--list'], { cwd: sb })).code).toBe(0);
+    expect(JSON.parse((await ctx(sb, ['memos', 'ls'])).stdout).keys).toEqual(['a/b']);
+  });
+
+  it('[modules-r15] a take back that fails part way restores the kept declarations it already took, and the retry takes both', async () => {
+    const sb = sandbox();
+    const p = twoPkg(sb);
+    expect((await install(sb, p)).code).toBe(0);
+    expect((await ctx(sb, ['alpha', 'put', 'a/b'], 'a/b\n')).code).toBe(0);
+    expect((await ctx(sb, ['beta', 'put', 'c/d'], 'c/d\n')).code).toBe(0);
+    expect((await uninstall(sb, 'pkg-two', '--keep-data')).code).toBe(0);
+    const before = tree(sb);
+    chmodSync(keptDir(sb, 'beta'), 0o555);
+    let failed: Run;
+    try {
+      failed = await install(sb, p);
+    } finally {
+      chmodSync(keptDir(sb, 'beta'), 0o755);
+    }
+    expect(failed.code).toBe(2);
+    expect(failed.stderr).toContain("package-install: cannot take back the kept data of 'beta'\n");
+    expect(tree(sb)).toBe(before);
+    expect((await install(sb, p)).code).toBe(0);
+    expect(existsSync(extPath(sb, '.state/retained'))).toBe(false);
+    expect(JSON.parse((await ctx(sb, ['alpha', 'ls'])).stdout).keys).toEqual(['a/b']);
+  });
+
+  it('[modules-r13] a delete that stops at a later namespace first names the keys the earlier namespaces lost, so no deletion goes unreported', async () => {
+    const sb = sandbox();
+    const p = twoPkg(sb);
+    expect((await install(sb, p)).code).toBe(0);
+    for (const k of ['a/b', 'c/d']) expect((await ctx(sb, ['alpha', 'put', k], `${k}\n`)).code).toBe(0);
+    expect((await ctx(sb, ['beta', 'put', 'e/f'], 'e/f\n')).code).toBe(0);
+    chmodSync(join(sb, 'beta/e'), 0o555);
+    let failed: Run;
+    try {
+      failed = await uninstall(sb, 'pkg-two', '--delete-data');
+    } finally {
+      chmodSync(join(sb, 'beta/e'), 0o755);
+    }
+    expect([failed.code, failed.stdout]).toEqual([2, 'package-uninstall: deleted 2 keys of alpha\n']);
+    expect(failed.stderr).toMatch(/^package-uninstall: deleting the data of 'beta' stopped \(deleting the keys of namespace 'beta' stopped after 0 of 1 keys: .*\); no file and no record removed, so the package stays installed: run the uninstall again to finish\n$/);
+    expect(existsSync(recordPath(sb, 'pkg-two'))).toBe(true);
+    const rerun = await uninstall(sb, 'pkg-two', '--delete-data');
+    expect(rerun.code).toBe(0);
+    expect(rerun.stdout).toContain('package-uninstall: deleted 1 key of beta\n');
   });
 
   it('[the-engine-r22] ctx package uninstall --help and the package table name both data flags', async () => {

@@ -157,7 +157,7 @@ cat "$scratch/kept" >> "$scratch/data"
 
 : > "$scratch/counts"
 while read -r _ns _orig _src; do
-  if _n=$("$clear_bin" count "$_ns" 2>/dev/null) && [ -n "$_n" ]; then :; else _n=unknown; fi
+  if _n=$(CTX_ROOT=$ws_root "$clear_bin" count "$_ns" 2>/dev/null) && [ -n "$_n" ]; then :; else _n=unknown; fi
   printf '%s %s %s %s\n' "$_ns" "$_orig" "$_src" "$_n" >> "$scratch/counts"
 done < "$scratch/data"
 
@@ -181,12 +181,15 @@ if [ -z "$answer" ] && [ -n "$held" ]; then
   answer=$(cfg_answer package-uninstall "$_subject" keep --keep-data delete --delete-data) || exit $?
 fi
 
-# delete_ns <namespace> <installed|kept>: every key through the configured driver, then a
-# kept declaration's folder; the outcome line staged, a failure stopping rc 2
+# delete_ns <namespace> <installed|kept>: every key through the configured driver of this
+# workspace (CTX_ROOT named, never the working folder's), then a kept declaration's folder;
+# the outcome line staged, a failure stopping rc 2 after the lines of the namespaces it
+# already emptied
 delete_ns() {
-  _dn=$("$clear_bin" namespace "$1" 2> "$scratch/clear.err")
+  _dn=$(CTX_ROOT=$ws_root "$clear_bin" namespace "$1" 2> "$scratch/clear.err")
   _drc=$?
   if [ "$_drc" -ne 0 ]; then
+    cat "$scratch/outcome"
     _why=$(sed -n '1p' "$scratch/clear.err")
     _why=${_why#store-clear namespace: error: }
     if [ "$installed" -eq 1 ]; then

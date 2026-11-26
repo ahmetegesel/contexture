@@ -44,6 +44,8 @@
 # package's kept data holds; a storage root another installed module resolves to, kept data
 # holds, or two modules of the package share; a re-install that would leave an installed
 # module's data undeclared while it holds a key (an --as moving it, a version dropping it);
+# a module returning over this package's kept data without a data file, or under other
+# storage roots than the kept declaration's;
 # a driver name against the
 # core posix driver or a driver that already resolves ahead of the extension
 # root; a malformed module manifest; a driver part
@@ -267,7 +269,13 @@ if [ "$have_record" -eq 1 ]; then
 fi
 # the package's kept data, "<original> <kept name>" per kept declaration whose origin names
 # this package: a payload module returns under the name its data was kept under, read as a
-# record's module line is, and an --as naming another name for it refuses naming the kept one
+# record's module line is, and an --as naming another name for it refuses naming the kept one;
+# a returning module must carry a data file, and the storage root check below holds it to the
+# kept roots, so the return never takes a declaration away from keys its verbs cannot read
+kept_back_refuse() {
+  _krv=$(awk '$1 == "version" && NF == 2 { print $2; exit }' "$kept_root/$2/origin" 2>/dev/null)
+  die 1 "module '$1' returns over the data kept under '$2', but $3, so its verbs would not read the kept keys; install the version that kept it (${_krv:-unknown}), or delete the kept data first: ctx package uninstall $pkg_name --delete-data"
+}
 kept_root=$state_root/retained
 : > "$scratch/kept_own"
 if [ -d "$kept_root" ]; then
@@ -290,6 +298,7 @@ while read -r _km _kn; do
   elif [ "$_ka" != "$_kn" ]; then
     die 1 "module '$_km' has kept data under the name '$_kn', so it returns under that name: --as=$_km=$_kn (or delete the kept data first: ctx package uninstall $pkg_name --delete-data)"
   fi
+  grep -Fqx "modules/$_km/data" "$scratch/files" || kept_back_refuse "$_km" "$_kn" "this version carries no data file for it"
   printf '%s %s\n' "$_km" "$_kn" >> "$scratch/kept_return"
 done < "$scratch/kept_own"
 awk 'FILENAME == ARGV[1] { n[$1] = $2; next } { print $0 " " (($0 in n) ? n[$0] : $0) }' "$scratch/aliases" "$scratch/modules" > "$scratch/inames"
@@ -315,7 +324,7 @@ if [ "$have_record" -eq 1 ]; then
     if [ -n "$_keeps" ] && grep -Fqx "modules/$_keeps/data" "$scratch/files"; then
       continue
     fi
-    if _dc=$("$clear_bin" count "$_dn" 2>/dev/null) && [ -n "$_dc" ]; then :; else _dc=unknown; fi
+    if _dc=$(CTX_ROOT=$ws_root "$clear_bin" count "$_dn" 2>/dev/null) && [ -n "$_dc" ]; then :; else _dc=unknown; fi
     [ "$_dc" != 0 ] || continue
     case "$_dc" in
       unknown) _dk="key count unknown" ;;
@@ -433,6 +442,13 @@ if [ -x "$sd_bin" ] && grep -q '^modules/[^/]*/data$' "$scratch/files"; then
       die 2 "a module data file of the workspace cannot be read, so the storage roots cannot be checked (${_left:-$(sd_why "$scratch/roots.old.err")}); fix that module's data file first"
     fi
   fi
+  # a returning module keeps the kept roots, the fallback root among them; a kept declaration
+  # the reader cannot read gives no row, and the return then repairs it
+  while read -r _km _kn; do
+    _kr=$(awk -F '\t' -v n="$_kn" '$1 == n { s = $2; for (i = 3; i <= NF; i++) s = s "\047 and \047" $i; print s; exit }' "$scratch/roots.old")
+    _nr=$(awk -F '\t' -v n="$_kn" '$1 == n { s = $2; for (i = 3; i <= NF; i++) s = s "\047 and \047" $i; print s; exit }' "$scratch/roots.new")
+    [ -z "$_kr" ] || [ "$_kr" = "$_nr" ] || kept_back_refuse "$_km" "$_kn" "this version stores it under '$_nr' where the kept data lies under '$_kr'"
+  done < "$scratch/kept_return"
   _clash=$(awk '
     FILENAME == ARGV[1] { own[$0] = 1; next }
     FILENAME == ARGV[2] { orig[$2] = $1; next }
