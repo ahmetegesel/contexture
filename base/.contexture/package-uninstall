@@ -89,6 +89,7 @@ state_file=$state_root/$pkg_name.files
 stash_uninstall=$state_root/$pkg_name.uninstall
 kept_root=$state_root/retained
 clear_bin=$ws_root/.contexture/storage/scripts/store-clear
+sd_bin=$ws_root/.contexture/storage/scripts/store-data
 
 case "$0" in */*) pu_home=${0%/*} ;; *) pu_home=. ;; esac
 pu_lib=""
@@ -190,6 +191,12 @@ delete_ns() {
   _drc=$?
   if [ "$_drc" -ne 0 ]; then
     cat "$scratch/outcome"
+    # a kept declaration the reader refuses lists no key on any rerun: its package's return
+    # is the one repair
+    if [ "$2" = kept ] && ! _sdw=$(CTX_STORE_WORKSPACE=$ws_root "$sd_bin" "$1" 2>&1 > /dev/null); then
+      _sdw=$(printf '%s\n' "$_sdw" | sed -n '1s/^store-data: //p')
+      die 2 "deleting the kept data of '$1' cannot list its keys, since its kept declaration cannot be read ($_sdw); install $pkg_name again to take it back, which repairs it, then uninstall it with --delete-data"
+    fi
     _why=$(sed -n '1p' "$scratch/clear.err")
     _why=${_why#store-clear namespace: error: }
     if [ "$installed" -eq 1 ]; then
