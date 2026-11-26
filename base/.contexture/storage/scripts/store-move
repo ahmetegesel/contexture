@@ -1,0 +1,731 @@
+#!/bin/sh
+# store-move: the storage core's private move engine (no summary line, so discovery ignores
+# it and it is never a verb). It moves the records of every namespace the core's declaration
+# listing names from one storage driver to another through the core resolver, the driver
+# named by --driver=<name> on every call and the namespace as the store function's argument,
+# so every dispatch gate applies (the key and value gate, the storage moving freeze, the
+# write rule). The package installer drives it under the freeze it holds; the freeze token
+# (CTX_STORAGE_MOVE) passes through the environment and is never demanded here.
+#
+# Usage:
+#   store-move preflight <source> <target>
+#       writes nothing: refuses a storage variable other than the token, a source key
+#       outside the core key rule or the namespace's document rules, a posix source holding
+#       refused keys or keys outside the document rules, a target that already lists a key,
+#       and a source listing no key while its storage health reads the store present
+#   store-move copy <source> <target>
+#       runs the preflight, then per namespace scans the source once, writes the target in
+#       batches of at most 200 puts and 8 MiB of values (a larger value alone), and
+#       verifies: the two scans compare byte equal and the source list, the source scan,
+#       the batch answers, the target scan, and the target list count alike, the storage
+#       health reading the store present exactly when that count is above zero
+#   store-move check <source>
+#       after the switch: the source scanned again through --driver=<source> against the
+#       configured driver, compared and counted as the copy verifies
+#   store-move unwind <target>
+#       deletes the keys this run wrote that the target still lists
+#   store-move retire <source> <backup|delete>
+#       after a passed check: the check's source dumps saved into a stamped move backup on
+#       backup, then the records the dumps name deleted from the source
+#
+# Output: one line per namespace on stdout and one summary line. A refusal is one stderr
+# line, store-move <command>: error: <message> (<CODE>), with the keys, counts, or the
+# diagnosis it names on indented lines after it; rc 1 semantic, rc 2 storage. Nothing
+# printed names a storage, scratch, or driver path.
+#
+# The run folder is CTX_SCRATCH_ROOT when exported, else the drawer's scratch folder
+# store-move; it keeps the run's state across commands: the move's drivers, the keys each
+# namespace's copy wrote, the batch answers' sum, and the check's verified source dumps. Each
+# command works in one folder inside it, removed on exit and on a hangup, interrupt, or
+# termination (exit 129, 130, 143), which also stop the resolver call in flight.
+
+set -u
+LC_ALL=C
+export LC_ALL
+
+SM_BATCH=200
+SM_BYTES=8388608
+SM_CMD=${1:-}
+SM_LABEL=store-move
+SM_WORK=""
+SM_CHILD=""
+SM_SRC=""
+SM_DST=""
+SM_ANSWER=""
+
+sm_clean() {
+  [ -z "$SM_WORK" ] || rm -rf "$SM_WORK"
+  SM_WORK=""
+}
+
+# sm_refuse <rc> <code> <message> [<detail file>]: the one refusal line, then the detail
+# file's indented lines
+sm_refuse() {
+  printf '%s: error: %s (%s)\n' "$SM_LABEL" "$3" "$2" >&2
+  if [ -n "${4:-}" ] && [ -s "$4" ]; then cat "$4" >&2; fi
+  sm_clean
+  exit "$1"
+}
+
+sm_note() {
+  printf '%s: note: %s\n' "$SM_LABEL" "$1" >&2
+}
+
+sm_stop() {
+  trap '' HUP INT TERM
+  if [ -n "$SM_CHILD" ]; then
+    kill -TERM "$SM_CHILD" 2>/dev/null
+    wait "$SM_CHILD" 2>/dev/null
+  fi
+  sm_clean
+  exit "$1"
+}
+
+sm_args() {
+  sm_refuse 1 ERR_INVALID_ARGUMENT "takes $1"
+}
+
+case "$SM_CMD" in
+  preflight|copy)
+    shift
+    SM_LABEL="store-move $SM_CMD"
+    [ $# -eq 2 ] || sm_args "<source> <target>"
+    SM_SRC=$1
+    SM_DST=$2
+    ;;
+  check)
+    shift
+    SM_LABEL="store-move check"
+    [ $# -eq 1 ] || sm_args "<source>"
+    SM_SRC=$1
+    ;;
+  unwind)
+    shift
+    SM_LABEL="store-move unwind"
+    [ $# -eq 1 ] || sm_args "<target>"
+    SM_DST=$1
+    ;;
+  retire)
+    shift
+    SM_LABEL="store-move retire"
+    [ $# -eq 2 ] || sm_args "<source> <backup|delete>"
+    SM_SRC=$1
+    SM_ANSWER=$2
+    case "$SM_ANSWER" in
+      backup|delete) ;;
+      *) sm_refuse 1 ERR_INVALID_ARGUMENT "the answer is backup or delete, not '$SM_ANSWER'" ;;
+    esac
+    ;;
+  "") sm_refuse 1 ERR_INVALID_ARGUMENT "takes a command: preflight, copy, check, unwind, or retire" ;;
+  *) sm_refuse 1 ERR_INVALID_ARGUMENT "unknown command '$SM_CMD' (preflight, copy, check, unwind, or retire)" ;;
+esac
+
+sm_name() {
+  case "$1" in
+    ""|[!A-Za-z0-9]*|*[!A-Za-z0-9._-]*) sm_refuse 1 ERR_INVALID_ARGUMENT "malformed driver name '$1'" ;;
+  esac
+}
+case "$SM_CMD" in preflight|copy|check|retire) sm_name "$SM_SRC" ;; esac
+case "$SM_CMD" in preflight|copy|unwind) sm_name "$SM_DST" ;; esac
+case "$SM_CMD" in
+  preflight|copy) [ "$SM_SRC" != "$SM_DST" ] || sm_refuse 1 ERR_INVALID_ARGUMENT "the source and the target are both '$SM_SRC'" ;;
+esac
+
+sm_vars=$(env | sed -n 's/^\(CTX_STORAGE_[A-Za-z0-9_]*\)=.*/\1/p' | sort -u \
+  | awk '$0 != "CTX_STORAGE_MOVE" { s = s (s == "" ? "" : ", ") $0 } END { print s }')
+[ -z "$sm_vars" ] || sm_refuse 1 ERR_INVALID_ARGUMENT \
+  "the environment sets $sm_vars; a storage variable other than the move's token can point a driver elsewhere, so unset it and run again"
+
+case "$0" in */*) SM_HOME=${0%/*} ;; *) SM_HOME=. ;; esac
+SM_HOME=$(CDPATH= cd -- "$SM_HOME" 2>/dev/null && pwd) || sm_refuse 2 ERR_DRIVER_NOT_FOUND "the storage core cannot be located"
+SM_RESOLVER=$SM_HOME/driver-resolver
+SM_DATA=$SM_HOME/store-data
+SM_CLEAR=$SM_HOME/store-clear
+SM_JSON=$SM_HOME/json.awk
+SM_KEYRULE=$SM_HOME/store-key.awk
+[ -x "$SM_RESOLVER" ] && [ -x "$SM_DATA" ] && [ -x "$SM_CLEAR" ] && [ -f "$SM_JSON" ] && [ -f "$SM_KEYRULE" ] \
+  || sm_refuse 2 ERR_DRIVER_NOT_FOUND "the storage core resolver is not installed"
+
+SM_WS=""
+if [ -n "${CTX_ROOT:-}" ] && [ -d "$CTX_ROOT/.contexture" ]; then
+  SM_WS=$CTX_ROOT
+else
+  sm_d=$PWD
+  while [ -n "$sm_d" ] && [ "$sm_d" != / ]; do
+    if [ -d "$sm_d/.contexture" ]; then SM_WS=$sm_d; break; fi
+    sm_d=${sm_d%/*}
+  done
+fi
+[ -n "$SM_WS" ] || sm_refuse 2 ERR_STORAGE_READ "no workspace drawer above the working folder"
+SM_WS=$(CDPATH= cd -- "$SM_WS" 2>/dev/null && pwd) || sm_refuse 2 ERR_STORAGE_READ "the workspace root cannot be entered"
+cd "$SM_WS" || sm_refuse 2 ERR_STORAGE_READ "the workspace root cannot be entered"
+
+trap 'sm_clean' EXIT
+trap 'sm_stop 129' HUP
+trap 'sm_stop 130' INT
+trap 'sm_stop 143' TERM
+
+SM_RUN=${CTX_SCRATCH_ROOT:-}
+[ -n "$SM_RUN" ] || SM_RUN=$SM_WS/.contexture/tmp/store-move
+{ [ -d "$SM_RUN" ] || mkdir -p "$SM_RUN" 2>/dev/null; } && [ -w "$SM_RUN" ] \
+  && SM_RUN=$(CDPATH= cd -- "$SM_RUN" 2>/dev/null && pwd) \
+  || sm_refuse 2 ERR_STORAGE_WRITE "the move's scratch folder cannot be written"
+SM_WORK=$(mktemp -d "$SM_RUN/work.XXXXXX" 2>/dev/null) || {
+  SM_WORK=""
+  sm_refuse 2 ERR_STORAGE_WRITE "the move's scratch folder cannot be written"
+}
+
+# sm_run <stdin> <stdout> <stderr> <command...>: one storage core call from the workspace
+# root, held in the background so a signal reaches the trap at once
+sm_run() {
+  sm_in=$1; sm_out=$2; sm_err=$3
+  shift 3
+  (
+    unset CTX_DIR
+    CTX_ROOT=$SM_WS
+    CTX_STORE_WORKSPACE=$SM_WS
+    CTX_SCRATCH_ROOT=$SM_WORK
+    export CTX_ROOT CTX_STORE_WORKSPACE CTX_SCRATCH_ROOT
+    exec "$@"
+  ) < "$sm_in" > "$sm_out" 2> "$sm_err" &
+  SM_CHILD=$!
+  wait "$SM_CHILD"
+  sm_rc=$?
+  SM_CHILD=""
+  return "$sm_rc"
+}
+
+# sm_call <stdin> <stdout> <driver, empty for the configured one> <function> <namespace>: one
+# store function through the resolver, its stderr in the work folder's err file
+sm_call() {
+  if [ -z "$3" ]; then
+    sm_run "$1" "$2" "$SM_WORK/err" "$SM_RESOLVER" "$4" "$5"
+  else
+    sm_run "$1" "$2" "$SM_WORK/err" "$SM_RESOLVER" --driver="$3" "$4" "$5"
+  fi
+}
+
+# sm_relay <rc> <stderr file> <code> <lead> [<rc>]: the refusal re-framed from a storage line,
+# its message and code kept (the given code when the line carries none); its rc 1 or 2 kept,
+# or the given rc
+sm_relay() {
+  sm_line=$(sed -n '1p' "$2" 2>/dev/null)
+  sm_code=$3
+  sm_msg=$sm_line
+  case "$sm_line" in
+    *": error: "*" ("*")")
+      sm_msg=${sm_line#*": error: "}
+      sm_code=${sm_msg##*" ("}
+      sm_code=${sm_code%")"}
+      sm_msg=${sm_msg%" ("*")"}
+      ;;
+    driver-resolver:\ ERROR:\ *)
+      sm_msg=${sm_line#driver-resolver: ERROR: }
+      case "$sm_msg" in
+        *" (ERR_"*")")
+          sm_code=${sm_msg##*" ("}
+          sm_code=${sm_code%")"}
+          sm_msg=${sm_msg%" ("*")"}
+          ;;
+      esac
+      ;;
+  esac
+  [ -n "$sm_msg" ] || sm_msg="exited $1"
+  sm_rrc=$1
+  [ "$sm_rrc" -eq 1 ] || sm_rrc=2
+  if [ -n "${5:-}" ]; then sm_rrc=$5; sm_code=$3; fi
+  sm_refuse "$sm_rrc" "$sm_code" "$4: $sm_msg"
+}
+
+# sm_driver <name>: the driver resolves and passes its handshake; a failing line that names a
+# path is left out of the refusal
+sm_driver() {
+  sm_run /dev/null "$SM_WORK/cap" "$SM_WORK/err" "$SM_RESOLVER" capability "$1" && return 0
+  sm_drc=$?
+  case "$(sed -n '1p' "$SM_WORK/err" 2>/dev/null)" in
+    */*) printf '%s\n' "the storage driver '$1' cannot be resolved or fails its handshake" > "$SM_WORK/err" ;;
+  esac
+  sm_relay "$sm_drc" "$SM_WORK/err" ERR_DRIVER_NOT_FOUND "the storage driver '$1' cannot be used"
+}
+
+# sm_configured <driver>: rc 0 when the configured driver resolves to the named one; the two
+# resolved executables are compared and never printed
+sm_configured() {
+  sm_run /dev/null "$SM_WORK/where.c" "$SM_WORK/err" "$SM_RESOLVER" resolve \
+    || sm_relay $? "$SM_WORK/err" ERR_DRIVER_NOT_FOUND "the configured storage driver cannot be resolved"
+  sm_run /dev/null "$SM_WORK/where.n" "$SM_WORK/err" "$SM_RESOLVER" resolve "$1" \
+    || sm_relay $? "$SM_WORK/err" ERR_DRIVER_NOT_FOUND "the storage driver '$1' cannot be resolved"
+  cmp -s "$SM_WORK/where.c" "$SM_WORK/where.n"
+}
+
+sm_flat() {
+  awk -f "$SM_JSON" < "$1" > "$1.flat" 2>/dev/null
+}
+
+# sm_list_n <answer file>: the key count of a store.list answer
+sm_list_n() {
+  sm_flat "$1" || return 1
+  awk 'index($0, "keys#") == 1 { print substr($0, 6); f = 1 } END { if (!f) exit 1 }' "$1.flat"
+}
+
+# sm_keys <answer file> <out>: the listed keys, one per line in the payload escape
+sm_keys() {
+  sm_flat "$1" || return 1
+  awk 'index($0, "keys.") == 1 { p = index($0, "="); if (p > 0) print substr($0, p + 1) }' "$1.flat" > "$2"
+}
+
+# sm_present <answer file>: present or absent from a storage.health answer
+sm_present() {
+  sm_flat "$1" || return 1
+  awk 'index($0, "store=") == 1 { print substr($0, 7); f = 1 } END { if (!f) exit 1 }' "$1.flat"
+}
+
+# sm_items <dump>: the item count of a store.scan answer
+sm_items() {
+  tr '{' '\n' < "$1" | awk 'index($0, "\"key\":\"") == 1 { n++ } END { print n + 0 }'
+}
+
+# sm_dump_keys <dump> <out>: the keys of a store.scan answer, one per line
+sm_dump_keys() {
+  tr '{' '\n' < "$1" | awk '
+    index($0, "\"key\":\"") == 1 {
+      s = substr($0, 8); i = index(s, "\",\"value_b64\":\"")
+      if (i) print substr(s, 1, i - 1)
+    }' > "$2"
+}
+
+# the namespaces: the first column of the core's declaration listing, and the kept ones with
+# the package that kept them
+sm_namespaces() {
+  sm_run /dev/null "$SM_WORK/ns.list" "$SM_WORK/ns.err" "$SM_DATA" --list
+  sm_lrc=$?
+  if [ "$sm_lrc" -ne 0 ]; then
+    sm_why=$(sed -n '1s/^store-data: //p' "$SM_WORK/ns.err")
+    [ -n "$sm_why" ] || sm_why="the listing exited $sm_lrc"
+    sm_refuse 2 ERR_STORAGE_READ "the namespace listing left a module out: $sm_why"
+  fi
+  sm_run /dev/null "$SM_WORK/ns.kept" "$SM_WORK/ns.err" "$SM_DATA" --retained
+  sm_lrc=$?
+  if [ "$sm_lrc" -ne 0 ]; then
+    sm_why=$(sed -n '1s/^store-data: //p' "$SM_WORK/ns.err")
+    [ -n "$sm_why" ] || sm_why="the listing exited $sm_lrc"
+    sm_refuse 2 ERR_STORAGE_READ "the kept data listing left a namespace out: $sm_why"
+  fi
+  cut -f 1 "$SM_WORK/ns.list" > "$SM_WORK/ns"
+}
+
+sm_kept() {
+  awk -F '\t' -v ns="$1" '$1 == ns { printf ", kept by package '\''%s'\''", $2; exit }' "$SM_WORK/ns.kept"
+}
+
+SM_PRE_AWK='
+function isdoc(key,   n, ks, j, i, ok) {
+  if (ndp == 0) return 1
+  n = split(key, ks, "/")
+  for (j = 1; j <= ndp; j++) {
+    if (DM[j]) { if (n < DN[j]) continue } else if (n != DN[j]) continue
+    ok = 1
+    for (i = 1; i <= DN[j]; i++) {
+      if (i == DN[j] && DM[j]) break
+      if (DS[j, i] ~ /^<[A-Za-z][A-Za-z0-9_]*>$/) { if (ks[i] == "") { ok = 0; break } }
+      else if (DS[j, i] != ks[i]) { ok = 0; break }
+    }
+    if (ok) return 1
+  }
+  return 0
+}
+BEGIN {
+  ns = ENVIRON["SM_NS"]; sfx = ENVIRON["SM_SFX"]; multi = kr_multi(ENVIRON["SM_PAT"])
+  nd0 = split(ENVIRON["SM_DOCS"], D0, "\n")
+  ndp = 0
+  for (j = 1; j <= nd0; j++) {
+    if (D0[j] == "") continue
+    ndp++
+    DN[ndp] = split(D0[j], T, "/")
+    for (i = 1; i <= DN[ndp]; i++) DS[ndp, i] = T[i]
+    DM[ndp] = (T[DN[ndp]] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+  }
+}
+$0 == "" { next }
+!kr_key($0, sfx, multi) { printf "  %s: '\''%s'\'' is outside the key rule\n", ns, $0; next }
+!isdoc($0) { printf "  %s: '\''%s'\'' is outside the namespace'\''s document rules\n", ns, $0 }'
+
+SM_LO_AWK='
+{
+  p = index($0, ":"); path = substr($0, 1, p - 1); v = substr($0, p + 1)
+  n = split(path, a, ".")
+  if (n == 4 && a[2] == "kinds" && (a[1] == "root" || a[1] == "fallback")) {
+    if (!(a[3] in seen)) { seen[a[3]] = 1; order[++k] = a[3] }
+    if (a[4] == "count") C[a[3]] += v; else if (a[4] == "bytes") B[a[3]] += v
+  }
+}
+END {
+  bad = C["refused_keys"] + C["outside_keys"]
+  if (bad > 0) {
+    if (ns == "unit") how = "preview the sweep with ctx unit migrate --sweep --dry-run --all"
+    else if (ns == "store") how = "preview the sweep with ctx store check --leftovers --sweep --dry-run"
+    else how = "no sweep serves this namespace, so clearing them is the human'\''s own act"
+    printf "R  %s: refused keys %d, keys outside the document rules %d; %s\n", ns, C["refused_keys"], C["outside_keys"], how
+  }
+  s = ""
+  for (i = 1; i <= k; i++) {
+    t = order[i]
+    if (t == "refused_keys" || t == "outside_keys" || C[t] == 0) continue
+    s = s (s == "" ? "" : ", ") sprintf("%s %d (%d bytes)", t, C[t], B[t])
+  }
+  if (s != "") printf "I%s: the source'\''s posix store also holds %s beside its records; the move leaves them in place\n", ns, s
+}'
+
+# sm_preflight <print>: every check over every namespace, writing nothing; the per namespace
+# source list count and health kept in the work folder for the copy's verify
+sm_preflight() {
+  sm_driver "$SM_SRC"
+  sm_driver "$SM_DST"
+  sm_namespaces
+  : > "$SM_WORK/pf.blind"; : > "$SM_WORK/pf.keys"; : > "$SM_WORK/pf.left"; : > "$SM_WORK/pf.target"; : > "$SM_WORK/pf.say"
+  sm_kr=$(cat "$SM_KEYRULE")
+  sm_total=0
+  sm_m=0
+  while IFS= read -r ns; do
+    [ -n "$ns" ] || continue
+    sm_run /dev/null "$SM_WORK/decl" "$SM_WORK/err" "$SM_DATA" "$ns" --with-unsearched || {
+      sm_why=$(sed -n '1s/^store-data: //p' "$SM_WORK/err")
+      sm_refuse 2 ERR_STORAGE_READ "the declaration of namespace '$ns' cannot be read: ${sm_why:-the reader failed}"
+    }
+    sm_sfx=$(sed -n '3p' "$SM_WORK/decl")
+    sm_pat=$(sed -n '4p' "$SM_WORK/decl")
+    sm_docs=$(sed -n '11,$p' "$SM_WORK/decl" | awk -F '\t' '$1 == "@unsearched" { print $2; next } $1 != "" && substr($1, 1, 1) != "@" { print $1 }')
+
+    sm_call /dev/null "$SM_WORK/list" "$SM_SRC" store.list "$ns" \
+      || sm_relay $? "$SM_WORK/err" ERR_STORAGE_READ "the source's keys of namespace '$ns' cannot be listed"
+    sm_keys "$SM_WORK/list" "$SM_WORK/keys" \
+      || sm_refuse 2 ERR_STORAGE_READ "the source's keys of namespace '$ns' cannot be listed: the listing is malformed"
+    sm_n=$(awk 'END { print NR }' "$SM_WORK/keys")
+    SM_NS=$ns SM_SFX=$sm_sfx SM_PAT=$sm_pat SM_DOCS=$sm_docs awk "$sm_kr$SM_PRE_AWK" "$SM_WORK/keys" >> "$SM_WORK/pf.keys" \
+      || sm_refuse 2 ERR_STORAGE_READ "the source's keys of namespace '$ns' cannot be checked"
+
+    if [ "$SM_SRC" = posix ]; then
+      sm_call /dev/null "$SM_WORK/lo" posix storage.leftovers "$ns" \
+        || sm_relay $? "$SM_WORK/err" ERR_STORAGE_READ "the source's posix store of namespace '$ns' cannot be probed"
+      sm_flat "$SM_WORK/lo" || sm_refuse 2 ERR_STORAGE_READ "the source's posix store of namespace '$ns' cannot be probed: the answer is malformed"
+      awk -v ns="$ns" "$SM_LO_AWK" "$SM_WORK/lo.flat" > "$SM_WORK/lo.out"
+      sed -n 's/^R//p' "$SM_WORK/lo.out" >> "$SM_WORK/pf.left"
+      sm_info=$(sed -n 's/^I//p' "$SM_WORK/lo.out")
+      [ -z "$sm_info" ] || sm_note "$sm_info"
+    fi
+
+    sm_call /dev/null "$SM_WORK/health" "$SM_SRC" storage.health "$ns" \
+      || sm_relay $? "$SM_WORK/err" ERR_STORAGE_READ "the source's storage health of namespace '$ns' cannot be read"
+    sm_h=$(sm_present "$SM_WORK/health") \
+      || sm_refuse 2 ERR_STORAGE_READ "the source's storage health of namespace '$ns' cannot be read: the answer is malformed"
+    [ "$sm_n" -gt 0 ] || [ "$sm_h" != present ] || printf '  %s\n' "$ns" >> "$SM_WORK/pf.blind"
+
+    sm_call /dev/null "$SM_WORK/tlist" "$SM_DST" store.list "$ns" \
+      || sm_relay $? "$SM_WORK/err" ERR_STORAGE_READ "the target's keys of namespace '$ns' cannot be listed"
+    sm_tn=$(sm_list_n "$SM_WORK/tlist") \
+      || sm_refuse 2 ERR_STORAGE_READ "the target's keys of namespace '$ns' cannot be listed: the listing is malformed"
+    [ "$sm_tn" -eq 0 ] || printf '  %s: %s keys\n' "$ns" "$sm_tn" >> "$SM_WORK/pf.target"
+
+    printf '%s %s\n' "$sm_n" "$sm_h" > "$SM_WORK/pf.$ns"
+    printf '%s: %s keys to copy%s\n' "$ns" "$sm_n" "$(sm_kept "$ns")" >> "$SM_WORK/pf.say"
+    sm_total=$((sm_total + sm_n))
+    sm_m=$((sm_m + 1))
+  done < "$SM_WORK/ns"
+
+  [ ! -s "$SM_WORK/pf.blind" ] || sm_refuse 2 ERR_STORAGE_READ \
+    "the source lists no key of a namespace whose store its storage health reads present, so it cannot be read whole" "$SM_WORK/pf.blind"
+  [ ! -s "$SM_WORK/pf.keys" ] || sm_refuse 1 ERR_INVALID_ARGUMENT \
+    "the source holds keys the move cannot carry, named below; rename or remove them and run again" "$SM_WORK/pf.keys"
+  [ ! -s "$SM_WORK/pf.left" ] || sm_refuse 1 ERR_INVALID_ARGUMENT \
+    "the source's posix store holds keys the move cannot carry, counted below; clear them and run again" "$SM_WORK/pf.left"
+  [ ! -s "$SM_WORK/pf.target" ] || sm_refuse 1 ERR_ENTITY_EXISTS \
+    "the target already holds keys and a move never merges, counted below" "$SM_WORK/pf.target"
+  if [ "$1" = print ]; then
+    cat "$SM_WORK/pf.say"
+    printf 'ready to copy %s keys in %s namespaces\n' "$sm_total" "$sm_m"
+  fi
+}
+
+SM_BUILD_AWK='
+BEGIN { hdr = "\"namespace\":\"" ns "\",\"items\":["; b = 0; c = 0; bytes = 0; n = 0 }
+NR == 1 { if ($0 != "") bad = 1; next }
+NR == 2 { if ($0 == hdr "]}") done = 1; else if ($0 != hdr) bad = 1; next }
+bad || done { bad = 1; next }
+{
+  if (index($0, "\"key\":\"") != 1) { bad = 1; next }
+  s = substr($0, 8)
+  i = index(s, "\",\"value_b64\":\"")
+  if (!i) { bad = 1; next }
+  k = substr(s, 1, i - 1)
+  v = substr(s, i + 15)
+  L = length(v)
+  if (L >= 3 && substr(v, L - 2) == "\"},") v = substr(v, 1, L - 3)
+  else if (L >= 4 && substr(v, L - 3) == "\"}]}") { v = substr(v, 1, L - 4); done = 1 }
+  else { bad = 1; next }
+  L = length(v)
+  d = int(L / 4) * 3
+  if (L > 0 && substr(v, L, 1) == "=") d--
+  if (L > 1 && substr(v, L - 1, 1) == "=") d--
+  if (c > 0 && (c >= max || bytes + d > cap)) { close(f); b++; c = 0; bytes = 0 }
+  if (c == 0) f = sprintf("%s/%08d", dir, b)
+  printf "action=put\nkey=%s\nvalue_b64=%s\n", k, v > f
+  c++; bytes += d; n++
+}
+END {
+  if (c > 0) close(f)
+  if (bad || !done) exit 3
+  print n
+}'
+
+SM_DIAG_AWK='
+function kv(line,   i, L) {
+  if (index(line, "\"key\":\"") != 1) return 0
+  line = substr(line, 8); i = index(line, "\",\"value_b64\":\"")
+  if (!i) return 0
+  K = substr(line, 1, i - 1); V = substr(line, i + 15); L = length(V)
+  if (L >= 4 && substr(V, L - 3) == "\"}]}") V = substr(V, 1, L - 4)
+  else if (L >= 3 && substr(V, L - 2) == "\"},") V = substr(V, 1, L - 3)
+  return 1
+}
+FILENAME == ARGV[1] { if (kv($0)) S[K] = V; next }
+{ if (kv($0)) D[K] = V }
+END {
+  for (k in S) if (!(k in D)) printf "  %s: missing in the target\n", k; else if (S[k] != D[k]) printf "  %s: the value differs\n", k
+  for (k in D) if (!(k in S)) printf "  %s: extra in the target\n", k
+}'
+
+# sm_judge <ns> <side> <source dump> <side dump> <source list> <source scan> <written>
+# <side scan> <side list> <source health> <side health> <lead>: the dump compare by cmp, its
+# exit code read alone, and the five counts with the health presence; a failure refuses rc 2
+# with the diagnosis from the two dumps
+sm_judge() {
+  j_ns=$1; j_side=$2; j_sd=$3; j_td=$4
+  cmp -s "$j_sd" "$j_td"
+  j_cmp=$?
+  j_why=""
+  if [ "$j_cmp" -eq 1 ]; then j_why="the dumps differ"
+  elif [ "$j_cmp" -ne 0 ]; then j_why="the dumps cannot be compared"
+  fi
+  j_written=written
+  [ "$j_side" = target ] || j_written=copied
+  if [ "$5" != "$6" ] || [ "$6" != "$7" ] || [ "$7" != "$8" ] || [ "$8" != "$9" ]; then
+    j_why="${j_why:+$j_why; }the counts differ (source list $5, source scan $6, $j_written $7, $j_side scan $8, $j_side list $9)"
+  fi
+  if { [ "$5" -gt 0 ] && [ "${10}" != present ]; } || { [ "$5" -eq 0 ] && [ "${10}" = present ]; }; then
+    j_why="${j_why:+$j_why; }the source's storage health reads the store ${10} with $5 keys listed"
+  fi
+  if { [ "$9" -gt 0 ] && [ "${11}" != present ]; } || { [ "$9" -eq 0 ] && [ "${11}" = present ]; }; then
+    j_why="${j_why:+$j_why; }the $j_side's storage health reads the store ${11} with $9 keys listed"
+  fi
+  [ -n "$j_why" ] || return 0
+  : > "$SM_WORK/diag"
+  if [ "$j_cmp" -eq 1 ]; then
+    tr '{' '\n' < "$j_sd" > "$SM_WORK/diag.s"
+    tr '{' '\n' < "$j_td" > "$SM_WORK/diag.t"
+    awk "$SM_DIAG_AWK" "$SM_WORK/diag.s" "$SM_WORK/diag.t" | sort > "$SM_WORK/diag"
+  fi
+  sm_refuse 2 ERR_STORAGE_WRITE "${12} of namespace '$j_ns' fails: $j_why" "$SM_WORK/diag"
+}
+
+# sm_state <file>: a run state file's first line, empty when absent
+sm_state() {
+  [ -f "$SM_RUN/$1" ] && sed -n '1p' "$SM_RUN/$1"
+}
+
+sm_copy() {
+  sm_preflight quiet
+  rm -f "$SM_RUN"/written.* "$SM_RUN"/copied.* "$SM_RUN"/checked.* "$SM_RUN/checked" "$SM_RUN/move"
+  printf '%s\t%s\n' "$SM_SRC" "$SM_DST" > "$SM_RUN/move" || sm_refuse 2 ERR_STORAGE_WRITE "the move's scratch folder cannot be written"
+  while IFS= read -r ns; do
+    [ -n "$ns" ] || continue
+    : > "$SM_RUN/written.$ns" || sm_refuse 2 ERR_STORAGE_WRITE "the move's scratch folder cannot be written"
+  done < "$SM_WORK/ns"
+  sm_all=0
+  sm_m=0
+  while IFS= read -r ns; do
+    [ -n "$ns" ] || continue
+    read -r sm_sl sm_sh < "$SM_WORK/pf.$ns"
+    sm_call /dev/null "$SM_WORK/src" "$SM_SRC" store.scan "$ns" \
+      || sm_relay $? "$SM_WORK/err" ERR_STORAGE_READ "the source's namespace '$ns' cannot be scanned"
+    rm -rf "$SM_WORK/batches"
+    mkdir "$SM_WORK/batches" || sm_refuse 2 ERR_STORAGE_WRITE "the move's scratch folder cannot be written"
+    sm_ss=$(tr '{' '\n' < "$SM_WORK/src" | awk -v ns="$ns" -v dir="$SM_WORK/batches" -v max="$SM_BATCH" -v cap="$SM_BYTES" "$SM_BUILD_AWK") \
+      || sm_refuse 2 ERR_STORAGE_READ "the source's scan of namespace '$ns' is malformed or cannot be staged"
+    sm_w=0
+    for sm_b in "$SM_WORK"/batches/*; do
+      [ -f "$sm_b" ] || continue
+      awk 'index($0, "key=") == 1 { print substr($0, 5) }' "$sm_b" >> "$SM_RUN/written.$ns" \
+        || sm_refuse 2 ERR_STORAGE_WRITE "the move's scratch folder cannot be written"
+      sm_call "$sm_b" "$SM_WORK/answer" "$SM_DST" store.batch "$ns" \
+        || sm_relay $? "$SM_WORK/err" ERR_STORAGE_WRITE "copying namespace '$ns' stopped after $sm_w of $sm_ss keys were written" 2
+      sm_flat "$SM_WORK/answer" && sm_a=$(awk 'index($0, "actions:") == 1 { print substr($0, 9) }' "$SM_WORK/answer.flat") \
+        && case "$sm_a" in ""|*[!0-9]*) false ;; esac \
+        || sm_refuse 2 ERR_STORAGE_WRITE "copying namespace '$ns' stopped after $sm_w of $sm_ss keys were written: the target's batch answer is malformed"
+      sm_w=$((sm_w + sm_a))
+      rm -f "$sm_b"
+    done
+    printf '%s\n' "$sm_w" > "$SM_RUN/copied.$ns" || sm_refuse 2 ERR_STORAGE_WRITE "the move's scratch folder cannot be written"
+
+    sm_call /dev/null "$SM_WORK/dst" "$SM_DST" store.scan "$ns" \
+      || sm_relay $? "$SM_WORK/err" ERR_STORAGE_READ "the target's namespace '$ns' cannot be scanned"
+    sm_call /dev/null "$SM_WORK/tlist" "$SM_DST" store.list "$ns" \
+      || sm_relay $? "$SM_WORK/err" ERR_STORAGE_READ "the target's keys of namespace '$ns' cannot be listed"
+    sm_tl=$(sm_list_n "$SM_WORK/tlist") || sm_refuse 2 ERR_STORAGE_READ "the target's keys of namespace '$ns' cannot be listed: the listing is malformed"
+    sm_call /dev/null "$SM_WORK/health" "$SM_DST" storage.health "$ns" \
+      || sm_relay $? "$SM_WORK/err" ERR_STORAGE_READ "the target's storage health of namespace '$ns' cannot be read"
+    sm_th=$(sm_present "$SM_WORK/health") || sm_refuse 2 ERR_STORAGE_READ "the target's storage health of namespace '$ns' cannot be read: the answer is malformed"
+    sm_ts=$(sm_items "$SM_WORK/dst")
+    sm_judge "$ns" target "$SM_WORK/src" "$SM_WORK/dst" "$sm_sl" "$sm_ss" "$sm_w" "$sm_ts" "$sm_tl" "$sm_sh" "$sm_th" "the copy"
+    rm -f "$SM_WORK/src" "$SM_WORK/dst" "$SM_WORK"/*.flat
+    printf '%s: %s keys copied, dumps equal%s\n' "$ns" "$sm_w" "$(sm_kept "$ns")"
+    sm_all=$((sm_all + sm_w))
+    sm_m=$((sm_m + 1))
+  done < "$SM_WORK/ns"
+  printf 'copied %s keys in %s namespaces\n' "$sm_all" "$sm_m"
+}
+
+sm_check() {
+  sm_driver "$SM_SRC"
+  [ "$(sm_state move | cut -f 1)" = "$SM_SRC" ] \
+    || sm_refuse 1 ERR_INVALID_ARGUMENT "this run holds no copy from '$SM_SRC'; run store-move copy in the same run first"
+  ! sm_configured "$SM_SRC" \
+    || sm_refuse 1 ERR_INVALID_ARGUMENT "the configured driver is still the source '$SM_SRC'; switch the storage driver before the check"
+  sm_namespaces
+  rm -f "$SM_RUN"/checked.* "$SM_RUN/checked"
+  sm_all=0
+  sm_m=0
+  while IFS= read -r ns; do
+    [ -n "$ns" ] || continue
+    sm_w=$(sm_state "copied.$ns")
+    [ -n "$sm_w" ] || sm_refuse 1 ERR_INVALID_ARGUMENT "this run holds no copy of namespace '$ns'; run store-move copy in the same run first"
+    sm_call /dev/null "$SM_WORK/src" "$SM_SRC" store.scan "$ns" \
+      || sm_relay $? "$SM_WORK/err" ERR_STORAGE_READ "the source's namespace '$ns' cannot be scanned"
+    sm_call /dev/null "$SM_WORK/list" "$SM_SRC" store.list "$ns" \
+      || sm_relay $? "$SM_WORK/err" ERR_STORAGE_READ "the source's keys of namespace '$ns' cannot be listed"
+    sm_sl=$(sm_list_n "$SM_WORK/list") || sm_refuse 2 ERR_STORAGE_READ "the source's keys of namespace '$ns' cannot be listed: the listing is malformed"
+    sm_call /dev/null "$SM_WORK/health" "$SM_SRC" storage.health "$ns" \
+      || sm_relay $? "$SM_WORK/err" ERR_STORAGE_READ "the source's storage health of namespace '$ns' cannot be read"
+    sm_sh=$(sm_present "$SM_WORK/health") || sm_refuse 2 ERR_STORAGE_READ "the source's storage health of namespace '$ns' cannot be read: the answer is malformed"
+    sm_call /dev/null "$SM_WORK/dst" "" store.scan "$ns" \
+      || sm_relay $? "$SM_WORK/err" ERR_STORAGE_READ "the configured driver's namespace '$ns' cannot be scanned"
+    sm_call /dev/null "$SM_WORK/tlist" "" store.list "$ns" \
+      || sm_relay $? "$SM_WORK/err" ERR_STORAGE_READ "the configured driver's keys of namespace '$ns' cannot be listed"
+    sm_tl=$(sm_list_n "$SM_WORK/tlist") || sm_refuse 2 ERR_STORAGE_READ "the configured driver's keys of namespace '$ns' cannot be listed: the listing is malformed"
+    sm_call /dev/null "$SM_WORK/health" "" storage.health "$ns" \
+      || sm_relay $? "$SM_WORK/err" ERR_STORAGE_READ "the configured driver's storage health of namespace '$ns' cannot be read"
+    sm_th=$(sm_present "$SM_WORK/health") || sm_refuse 2 ERR_STORAGE_READ "the configured driver's storage health of namespace '$ns' cannot be read: the answer is malformed"
+    sm_ss=$(sm_items "$SM_WORK/src")
+    sm_ts=$(sm_items "$SM_WORK/dst")
+    sm_judge "$ns" "configured driver" "$SM_WORK/src" "$SM_WORK/dst" "$sm_sl" "$sm_ss" "$sm_w" "$sm_ts" "$sm_tl" "$sm_sh" "$sm_th" "the check"
+    mv -f "$SM_WORK/src" "$SM_RUN/checked.$ns" || sm_refuse 2 ERR_STORAGE_WRITE "the move's scratch folder cannot be written"
+    rm -f "$SM_WORK/dst" "$SM_WORK"/*.flat
+    printf '%s: %s keys, dumps equal through the configured driver%s\n' "$ns" "$sm_ss" "$(sm_kept "$ns")"
+    sm_all=$((sm_all + sm_ss))
+    sm_m=$((sm_m + 1))
+  done < "$SM_WORK/ns"
+  printf '%s\n' "$SM_SRC" > "$SM_RUN/checked" || sm_refuse 2 ERR_STORAGE_WRITE "the move's scratch folder cannot be written"
+  printf 'checked %s keys in %s namespaces\n' "$sm_all" "$sm_m"
+}
+
+# sm_clear <command> <driver> <namespace> [<key file>] <lead>: one store-clear call, its
+# stdout count in SM_CLEARED, a refusal re-framed with its rc and code kept
+sm_clear() {
+  sm_cc=$1; sm_cd=$2; sm_cn=$3
+  shift 3
+  if [ "$sm_cc" = keys ]; then
+    sm_ck=$1; shift
+    sm_run /dev/null "$SM_WORK/cleared" "$SM_WORK/err" "$SM_CLEAR" keys --driver="$sm_cd" "$sm_cn" "$sm_ck"
+  else
+    sm_run /dev/null "$SM_WORK/cleared" "$SM_WORK/err" "$SM_CLEAR" "$sm_cc" --driver="$sm_cd" "$sm_cn"
+  fi || sm_relay $? "$SM_WORK/err" ERR_STORAGE_WRITE "$1"
+  SM_CLEARED=$(sed -n '1p' "$SM_WORK/cleared")
+}
+
+sm_unwind() {
+  sm_target=$(sm_state move | cut -f 2)
+  sm_all=0
+  sm_m=0
+  for sm_f in "$SM_RUN"/written.*; do
+    [ -f "$sm_f" ] || continue
+    [ "$sm_target" = "$SM_DST" ] \
+      || sm_refuse 1 ERR_INVALID_ARGUMENT "this run wrote into '${sm_target:-an unknown driver}', not '$SM_DST'; unwind the run's own target"
+    break
+  done
+  sm_driver "$SM_DST"
+  for sm_f in "$SM_RUN"/written.*; do
+    [ -f "$sm_f" ] || continue
+    ns=${sm_f##*/written.}
+    sm_clear keys "$SM_DST" "$ns" "$sm_f" "unwinding namespace '$ns' stopped"
+    rm -f "$sm_f"
+    printf '%s: %s keys unwound\n' "$ns" "$SM_CLEARED"
+    sm_all=$((sm_all + SM_CLEARED))
+    sm_m=$((sm_m + 1))
+  done
+  rm -f "$SM_RUN"/copied.* "$SM_RUN"/checked.* "$SM_RUN/checked" "$SM_RUN/move"
+  printf 'unwound %s keys in %s namespaces\n' "$sm_all" "$sm_m"
+}
+
+sm_retire() {
+  sm_driver "$SM_SRC"
+  [ "$(sm_state checked)" = "$SM_SRC" ] \
+    || sm_refuse 1 ERR_INVALID_ARGUMENT "this run holds no passed check of the source '$SM_SRC'; run store-move check first"
+  ! sm_configured "$SM_SRC" \
+    || sm_refuse 1 ERR_INVALID_ARGUMENT "the configured driver is still the source '$SM_SRC', so its records stay"
+  sm_namespaces
+  while IFS= read -r ns; do
+    [ -n "$ns" ] || continue
+    [ -f "$SM_RUN/checked.$ns" ] \
+      || sm_refuse 1 ERR_INVALID_ARGUMENT "this run holds no passed check of namespace '$ns'; run store-move check first"
+  done < "$SM_WORK/ns"
+  rm -f "$SM_RUN"/written.*
+  sm_all=0
+  while IFS= read -r ns; do
+    [ -n "$ns" ] || continue
+    sm_n=$(sm_items "$SM_RUN/checked.$ns")
+    printf '%s\n' "$sm_n" > "$SM_WORK/count.$ns" || sm_refuse 2 ERR_STORAGE_WRITE "the move's scratch folder cannot be written"
+    sm_all=$((sm_all + sm_n))
+  done < "$SM_WORK/ns"
+  sm_stamp=""
+  if [ "$SM_ANSWER" = backup ] && [ "$sm_all" -gt 0 ]; then
+    sm_stamp="$(date +%Y%m%d-%H%M%S)-$$"
+    sm_bk=$SM_WS/.contexture/backups/move-$sm_stamp
+    { mkdir -p "$SM_WS/.contexture/backups" && mkdir "$sm_bk"; } 2>/dev/null \
+      || sm_refuse 2 ERR_STORAGE_WRITE "the move's backup folder cannot be made in the drawer"
+    while IFS= read -r ns; do
+      [ -n "$ns" ] || continue
+      { mkdir "$sm_bk/$ns" && cp "$SM_RUN/checked.$ns" "$sm_bk/$ns/scan" && cp "$SM_WORK/count.$ns" "$sm_bk/$ns/count"; } 2>/dev/null \
+        || sm_refuse 2 ERR_STORAGE_WRITE "the move's backup of namespace '$ns' cannot be written; nothing was retired"
+    done < "$SM_WORK/ns"
+  fi
+  sm_all=0
+  sm_m=0
+  while IFS= read -r ns; do
+    [ -n "$ns" ] || continue
+    sm_dump_keys "$SM_RUN/checked.$ns" "$SM_WORK/doomed" || sm_refuse 2 ERR_STORAGE_WRITE "the move's scratch folder cannot be written"
+    sm_clear keys "$SM_SRC" "$ns" "$SM_WORK/doomed" "retiring namespace '$ns' of the source stopped"
+    sm_gone=$SM_CLEARED
+    sm_clear count "$SM_SRC" "$ns" "retiring namespace '$ns' of the source stopped"
+    [ "$SM_CLEARED" -eq 0 ] \
+      || sm_refuse 2 ERR_STORAGE_WRITE "namespace '$ns' of the source still lists $SM_CLEARED keys the check did not see; they stay"
+    printf '%s: %s keys retired%s\n' "$ns" "$sm_gone" "$(sm_kept "$ns")"
+    sm_all=$((sm_all + sm_gone))
+    sm_m=$((sm_m + 1))
+  done < "$SM_WORK/ns"
+  rm -f "$SM_RUN"/checked.* "$SM_RUN"/copied.* "$SM_RUN/checked" "$SM_RUN/move"
+  if [ -n "$sm_stamp" ]; then
+    printf 'retired %s keys in %s namespaces, backup stamped %s\n' "$sm_all" "$sm_m" "$sm_stamp"
+  elif [ "$SM_ANSWER" = backup ]; then
+    printf 'retired %s keys in %s namespaces, nothing to back up\n' "$sm_all" "$sm_m"
+  else
+    printf 'retired %s keys in %s namespaces, no backup kept\n' "$sm_all" "$sm_m"
+  fi
+}
+
+case "$SM_CMD" in
+  preflight) sm_preflight print ;;
+  copy) sm_copy ;;
+  check) sm_check ;;
+  unwind) sm_unwind ;;
+  retire) sm_retire ;;
+esac
+exit 0

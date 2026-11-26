@@ -3,7 +3,7 @@
 The storage core sits beside the engine at `.contexture/storage/`. It is not a module:
 the engine does not discover it, `ctx help` does not list it, and a package never writes
 it. It owns the driver resolver, the generic storage layer contract, the module-facing
-library, and the posix driver.
+library, the move engine, and the posix driver.
 
 ```text
 storage/
@@ -15,6 +15,8 @@ storage/
                             listings (every declaration, the kept data ones among them)
   scripts/store-clear       the private counter and deleter of one named namespace's keys,
                             through the resolver in bounded batches (the uninstall's delete)
+  scripts/store-move        the private move engine: every namespace from one driver to another
+                            (preflight, copy and verify, check, unwind, retire), through the resolver
   scripts/store-key.awk     the one key rule: the awk functions the dispatch gate and every bundled
                             driver read (the key, the prefixes, the leading run fold set)
   scripts/store-search      the private exact search engine
@@ -531,6 +533,116 @@ the message naming the namespace and, for a batch, the keys deleted before it; i
 is one folder under the per verb scratch root, else the drawer's scratch, removed on exit,
 and a hangup, interrupt, or termination stops the resolver call in flight (129, 130, 143).
 The package uninstaller counts and deletes a package's namespaces through it.
+
+## Moving the records to another driver
+
+`scripts/store-move` is the move engine the package installer drives when the storage
+driver changes (no summary line, so never a verb). It moves every namespace
+`store-data --list` names, the kept ones included, from one driver to another through the
+resolver, the driver named by `--driver=<name>` on every call and the namespace as the
+store function's argument, from the workspace root with `CTX_DIR` unset, so the key and
+value gate, the storage moving freeze, and the write rule all apply. The installer runs it
+under the freeze it holds and exports the freeze token (`CTX_STORAGE_MOVE`) into each
+command; the engine passes it through and never demands it.
+
+```text
+store-move preflight <source> <target>      every check, nothing written
+store-move copy <source> <target>           the preflight, then the copy and its verify per namespace
+store-move check <source>                   after the storage.driver switch: the source against the configured driver
+store-move unwind <target>                  deletes the keys this run wrote that the target still lists
+store-move retire <source> <backup|delete>  after a passed check: the old copy backed up or not, then deleted
+```
+
+Every command first refuses rc 1 `ERR_INVALID_ARGUMENT` while a `CTX_STORAGE_` variable
+other than the token is set (a `CTX_STORAGE_SQLITE_PATH` or `CTX_STORAGE_DRIVER` would point
+a driver at another store), and a namespace listing that exits non zero refuses rc 2
+`ERR_STORAGE_READ` quoting its first reason. The preflight reads every namespace, then
+refuses in this order: rc 2 `ERR_STORAGE_READ` a source namespace whose `store.list` reads
+no key while its `storage.health` reads the store present (a blind source); rc 1
+`ERR_INVALID_ARGUMENT` each source key outside the core key rule (`store-key.awk`) or
+outside the declaration's document patterns (its `document` and `unsearched` lines, read
+from `store-data <ns> --with-unsearched`, every key a document when it declares neither),
+one indented line per key; on a source named `posix`, rc 1 `ERR_INVALID_ARGUMENT` when
+`storage.leftovers` counts refused keys or keys outside the document rules in either root,
+one line per namespace with the counts and the way to clear them (`ctx unit migrate --sweep
+--dry-run --all` for unit, `ctx store check --leftovers --sweep --dry-run` for store, the
+human's own act elsewhere), every other leftover kind a `note:` line on stderr and left in
+place (a killed writer's dot named temp among them, which no listing names, so it is never
+copied); and rc 1 `ERR_ENTITY_EXISTS` a target namespace that already lists a key, with its
+count, since a move never merges.
+
+The copy runs the preflight, then for each namespace scans the source once into scratch,
+splits the scan line on the item brace (`tr '{' '\n'`, so no awk record holds the whole
+namespace), turns each item into `action=put`, `key=<the scan's key string>`,
+`value_b64=<the scan's base64>` with no decode, and writes the target in `store.batch` calls
+of at most 200 puts and 8 MiB of decoded values, a larger value alone. Each batch's keys are
+appended to the namespace's written keys file before the batch is sent, so the unwind
+covers a batch that landed while a signal stopped the engine. The verify scans the target,
+compares the two scans with `cmp` (its exit code read alone), and counts five ways, the
+source list, the source scan's items, the sum of the batch answers' `actions`, the target
+scan's items, and the target list, all equal, with `storage.health` reading the store
+present on each side exactly when its count is above zero: two empty dumps compare equal,
+so the counts catch a source whose scan is blind, and the health catches one blind to both
+its list and its scan. A failure refuses rc 2 `ERR_STORAGE_WRITE`, the diagnosis from the
+two dumps on indented lines (`<key>: missing in the target`, `<key>: extra in the target`,
+`<key>: the value differs`), with no further driver call; a refused batch stops rc 2
+`ERR_STORAGE_WRITE` naming the namespace and the keys written so far.
+
+The check, run after the installer switches `storage.driver`, refuses rc 1 while the
+configured driver still resolves to the source or the run holds no copy from it, then scans
+the source again through `--driver=<source>` and the configured driver with no override,
+compared and counted the same way (the copy's answer sum the third count), so a source write
+that slipped in after the copy's scan, or a configured driver reading another store, fails rc
+2 before the move is trusted. The unwind deletes, through `store-clear keys
+--driver=<target>`, the keys the run's written keys files name that the target still lists,
+so a key the run did not write stays and a rerun finds nothing to do; it refuses rc 1 a
+driver that is not the run's target. The retire, after a passed check and once the configured
+driver no longer resolves to the source, removes the run's written keys files first (no
+unwind can then empty the only copy), on `backup` saves each namespace's checked source dump
+to `.contexture/backups/move-<stamp>/<namespace>/scan` with its key count in `count` beside
+it, then deletes the keys each dump names through `store-clear keys --driver=<source>` (delete
+only batches, which pass the freeze toward the source with the token) and requires
+`store-clear count` to read 0. The output names the backup by its stamp alone. A saved dump
+restores by one batch of puts built from it as the copy builds its payload:
+
+```sh
+tr '{' '\n' < .contexture/backups/move-<stamp>/<namespace>/scan \
+  | awk 'index($0, "\"key\":\"") == 1 { s = substr($0, 8); i = index(s, "\",\"value_b64\":\""); v = substr(s, i + 15); sub(/".*$/, "", v); printf "action=put\nkey=%s\nvalue_b64=%s\n", substr(s, 1, i - 1), v }' \
+  | .contexture/storage/scripts/driver-resolver store.batch <namespace>
+```
+
+The run's state lives in the run folder, `CTX_SCRATCH_ROOT` when exported (the installer
+exports one folder into every command of a run), else `.contexture/tmp/store-move`: `move`
+(the source and the target), `written.<namespace>` (the keys the copy wrote, one per line in
+the payload escape), `copied.<namespace>` (the batch answers' sum), `checked.<namespace>`
+(the check's verified source dump), and `checked` (the source a passed check named). Each
+command works in one `work.XXXXXX` folder inside it, exported as `CTX_SCRATCH_ROOT` to every
+call so a driver's staged scan goes with it, removed on exit; a hangup, interrupt, or
+termination stops the resolver call in flight (TERM to the background child) and exits 129,
+130, or 143, the written keys kept for the unwind. A run folder that cannot be written
+refuses rc 2 `ERR_STORAGE_WRITE`; the system temp is never used. The scratch peaks near four
+times the largest namespace's bytes (the two base64 dumps and the driver's staged scan), and
+the check keeps every namespace's source dump until the retire.
+
+Output is one stdout line per namespace and one summary line:
+
+```text
+docs: 20 keys copied, dumps equal
+notebook: 20 keys copied, dumps equal, kept by package 'pkg-a'
+copied 40 keys in 2 namespaces
+```
+
+`preflight` prints `<ns>: <n> keys to copy` and `ready to copy <n> keys in <m> namespaces`,
+`check` `<ns>: <n> keys, dumps equal through the configured driver` and `checked <n> keys in
+<m> namespaces`, `unwind` `<ns>: <n> keys unwound` and `unwound <n> keys in <m> namespaces`,
+and `retire` `<ns>: <n> keys retired` and `retired <n> keys in <m> namespaces` closed by
+`backup stamped <stamp>`, `no backup kept`, or `nothing to back up`. A refusal is one stderr
+line, `store-move <command>: error: <message> (<CODE>)`, rc 1 semantic and rc 2 storage over
+the existing codes, its keys, counts, or diagnosis on indented lines after it; nothing printed
+names a storage, scratch, or driver path. Measured on one host, posix and sqlite, each leg
+alone: 83 small keys copy in about 6 s and check in about 3.5 s either way; a 6 MiB value
+adds about 7 s to a copy and 5.5 s to a check; 1003 keys of 10 KB copy in about 45 s, check in
+about 22 s, and retire or unwind in 13 to 19 s.
 
 ## The behavior test a driver meets
 

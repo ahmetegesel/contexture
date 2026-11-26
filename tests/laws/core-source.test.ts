@@ -25,7 +25,7 @@ describe.concurrent('the core law source and the composer', () => {
     expect(core.split('\n')[0]).toMatch(/^# contexture v\d+\.\d+\.\d+:/);
     const storage = core.split('\n').slice(0, 25).filter((l) => /^ {2}\.contexture\/storage\/: the storage core/.test(l));
     expect(storage).toHaveLength(1);
-    expect(storage[0]).toContain('the driver resolver, the store-data reader, the module-facing library, the store contract, and the built-in posix driver;');
+    expect(storage[0]).toContain('the driver resolver, the store-data reader, the move engine (store-move, every namespace from one driver to another under the move\'s freeze), the module-facing library, the store contract, and the built-in posix driver;');
     expect(blockClauses(core, 'record')).toEqual([]);
   });
 });
