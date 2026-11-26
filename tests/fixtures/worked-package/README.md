@@ -20,7 +20,9 @@ end:
 - `tests/notes.test.ts`: the test, a vitest file, which stages the shipped base
   in a sandbox, copies this package into the sandbox's catalog, installs it
   there through `ctx package install` with its package root path, exercises
-  the verbs over the store, and proves the uninstall leaves the module data.
+  the verbs over the store, and proves the uninstall asks for the notes,
+  keeps them on `--keep-data`, and the re-install brings the module back
+  over them.
 
 The package carries no install or uninstall script of its own: `ctx package
 install` and `ctx package uninstall` take its root.

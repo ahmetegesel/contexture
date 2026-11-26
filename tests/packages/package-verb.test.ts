@@ -70,7 +70,7 @@ describe.concurrent('ctx package: the group and its help', () => {
     const r = await verb(sb, [sub, flag]);
     expect(r.code).toBe(0);
     expect(r.stderr).toBe('');
-    expect(r.stdout.split('\n')[0]).toBe(sub === 'install' ? 'usage: ctx package install [<package>] [--as=<module>=<alias>]...' : `usage: ctx package ${sub} <package>`);
+    expect(r.stdout.split('\n')[0]).toBe(sub === 'install' ? 'usage: ctx package install [<package>] [--as=<module>=<alias>]...' : 'usage: ctx package uninstall <package> [--keep-data|--delete-data]');
     expect(r.stdout).toContain('a value holding a slash is a package root path');
     expect(r.stdout).toMatch(sub === 'install' ? /a catalog name .*\.contexture\/plugins\/<name>.*plugins\/<name>/ : /the installed package's name/);
     expect(r.stdout).toMatch(/^an (un)?install runs only on the human's explicit go at the act; this verb checks no go/m);

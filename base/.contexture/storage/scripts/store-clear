@@ -1,0 +1,247 @@
+#!/bin/sh
+# store-clear: the storage core's private key counter and deleter (no summary line, so
+# discovery ignores it and it is never a verb). It reaches one named namespace through the
+# core resolver, the namespace passed as the store function's argument, so every dispatch
+# gate applies (the key and value gate and the storage moving freeze among them). Only the
+# storage core and the package uninstaller name a namespace this way: a module verb reaches
+# its own namespace alone, through the module library.
+#
+# Usage:
+#   store-clear count [--driver=<name>] <namespace>
+#       the number of keys the namespace lists, one line on stdout
+#   store-clear namespace [--driver=<name>] <namespace>
+#       deletes every key the namespace lists; stdout: the number deleted
+#   store-clear keys [--driver=<name>] <namespace> <key file>
+#       deletes each key the file names (one per line, in the payload escape a listing
+#       answers) that the namespace still lists; stdout: the number deleted
+# --driver=<name> names the driver the resolver dispatches to, the configured driver when
+# none is named. The caller's environment passes through, so a storage move's token reaches
+# the resolver and is never demanded here. The deletes go in store.batch calls of at most
+# 200 delete actions each, every batch all or none; a key the namespace no longer lists is
+# skipped, so a run that stopped part way finishes when run again, and a key outside the
+# namespace's listing is never touched.
+#
+# A refusal is one stderr line, store-clear <command>: error: <message> (<CODE>), nothing on
+# stdout: rc 1 a bad argument (ERR_INVALID_ARGUMENT); a listing that fails takes the
+# listing's rc and code, its message quoted; a batch that fails takes the batch's rc and
+# code, the message naming the namespace and the keys deleted before it. A scratch folder
+# that cannot be made refuses rc 2 ERR_STORAGE_WRITE. Every call runs from the workspace
+# root (CTX_ROOT, else the nearest folder above the working folder holding a drawer) with
+# CTX_DIR unset; the scratch is one folder under the per verb scratch root when exported,
+# else the drawer's scratch, removed on exit, and a hangup, interrupt, or termination stops
+# the resolver call in flight and exits 129, 130, or 143.
+
+set -u
+LC_ALL=C
+export LC_ALL
+
+SC_BATCH=200
+SC_CMD=${1:-}
+SC_LABEL=store-clear
+SC_DRIVER=""
+SC_NS=""
+SC_KEYS=""
+SC_SCRATCH=""
+SC_CHILD=""
+
+sc_refuse() {
+  printf '%s: error: %s (%s)\n' "$SC_LABEL" "$3" "$2" >&2
+  sc_clean
+  exit "$1"
+}
+
+sc_clean() {
+  [ -z "$SC_SCRATCH" ] || rm -rf "$SC_SCRATCH"
+  SC_SCRATCH=""
+}
+
+sc_stop() {
+  trap '' HUP INT TERM
+  if [ -n "$SC_CHILD" ]; then
+    kill -TERM "$SC_CHILD" 2>/dev/null
+    wait "$SC_CHILD" 2>/dev/null
+  fi
+  sc_clean
+  exit "$1"
+}
+
+case "$SC_CMD" in
+  count|namespace|keys) shift; SC_LABEL="store-clear $SC_CMD" ;;
+  "") sc_refuse 1 ERR_INVALID_ARGUMENT "takes a command: count, namespace, or keys" ;;
+  *) sc_refuse 1 ERR_INVALID_ARGUMENT "unknown command '$SC_CMD' (count, namespace, or keys)" ;;
+esac
+
+sc_need() {
+  case "$SC_CMD" in
+    keys) sc_refuse 1 ERR_INVALID_ARGUMENT "takes [--driver=<name>] <namespace> <key file>" ;;
+    *) sc_refuse 1 ERR_INVALID_ARGUMENT "takes [--driver=<name>] <namespace>" ;;
+  esac
+}
+
+for sc_a in "$@"; do
+  case "$sc_a" in
+    --driver=*)
+      [ -z "$SC_DRIVER" ] || sc_refuse 1 ERR_INVALID_ARGUMENT "--driver is given twice"
+      SC_DRIVER=${sc_a#--driver=}
+      [ -n "$SC_DRIVER" ] || sc_refuse 1 ERR_INVALID_ARGUMENT "--driver names no driver"
+      ;;
+    -*) sc_refuse 1 ERR_INVALID_ARGUMENT "unknown option '$sc_a'" ;;
+    *)
+      if [ -z "$SC_NS" ]; then
+        SC_NS=$sc_a
+      elif [ "$SC_CMD" = keys ] && [ -z "$SC_KEYS" ]; then
+        SC_KEYS=$sc_a
+      else
+        sc_need
+      fi
+      ;;
+  esac
+done
+[ -n "$SC_NS" ] || sc_need
+[ "$SC_CMD" != keys ] || [ -n "$SC_KEYS" ] || sc_need
+case "$SC_NS" in
+  [!a-z0-9]*|*[!a-z0-9._-]*) sc_refuse 1 ERR_INVALID_ARGUMENT "malformed namespace '$SC_NS'" ;;
+esac
+if [ -n "$SC_KEYS" ] && { [ ! -f "$SC_KEYS" ] || [ ! -r "$SC_KEYS" ]; }; then
+  sc_refuse 1 ERR_INVALID_ARGUMENT "the key file cannot be read"
+fi
+
+case "$0" in */*) SC_HOME=${0%/*} ;; *) SC_HOME=. ;; esac
+SC_HOME=$(CDPATH= cd -- "$SC_HOME" 2>/dev/null && pwd) || sc_refuse 2 ERR_DRIVER_NOT_FOUND "the storage core cannot be located"
+SC_RESOLVER=$SC_HOME/driver-resolver
+SC_JSON=$SC_HOME/json.awk
+[ -x "$SC_RESOLVER" ] && [ -f "$SC_JSON" ] || sc_refuse 2 ERR_DRIVER_NOT_FOUND "the storage core resolver is not installed"
+
+SC_WS=""
+if [ -n "${CTX_ROOT:-}" ] && [ -d "$CTX_ROOT/.contexture" ]; then
+  SC_WS=$CTX_ROOT
+else
+  sc_d=$PWD
+  while [ -n "$sc_d" ] && [ "$sc_d" != / ]; do
+    if [ -d "$sc_d/.contexture" ]; then SC_WS=$sc_d; break; fi
+    sc_d=${sc_d%/*}
+  done
+fi
+[ -n "$SC_WS" ] || sc_refuse 2 ERR_STORAGE_READ "no workspace drawer above the working folder"
+SC_WS=$(CDPATH= cd -- "$SC_WS" 2>/dev/null && pwd) || sc_refuse 2 ERR_STORAGE_READ "the workspace root cannot be entered"
+
+trap 'sc_clean' EXIT
+trap 'sc_stop 129' HUP
+trap 'sc_stop 130' INT
+trap 'sc_stop 143' TERM
+
+sc_tmp=${CTX_SCRATCH_ROOT:-}
+if [ -z "$sc_tmp" ] || ! { [ -d "$sc_tmp" ] || mkdir -p "$sc_tmp" 2>/dev/null; } || [ ! -w "$sc_tmp" ]; then
+  sc_tmp=$SC_WS/.contexture/tmp
+  mkdir -p "$sc_tmp" 2>/dev/null
+fi
+SC_SCRATCH=$(mktemp -d "$sc_tmp/store-clear.XXXXXX" 2>/dev/null) || {
+  SC_SCRATCH=""
+  sc_refuse 2 ERR_STORAGE_WRITE "the scratch folder cannot be made in the drawer"
+}
+
+# sc_call <stdin> <stdout> <stderr> <resolver arguments...>: one resolver call from the
+# workspace root, held in the background so a signal reaches the trap at once
+sc_call() {
+  sc_in=$1; sc_out=$2; sc_err=$3
+  shift 3
+  (
+    unset CTX_DIR
+    CTX_ROOT=$SC_WS
+    export CTX_ROOT
+    cd "$SC_WS" || exit 2
+    if [ -n "$SC_DRIVER" ]; then
+      exec "$SC_RESOLVER" --driver="$SC_DRIVER" "$@"
+    fi
+    exec "$SC_RESOLVER" "$@"
+  ) < "$sc_in" > "$sc_out" 2> "$sc_err" &
+  SC_CHILD=$!
+  wait "$SC_CHILD"
+  sc_rc=$?
+  SC_CHILD=""
+  return "$sc_rc"
+}
+
+# sc_relay <rc> <stderr file> <lead>: the refusal re-framed from the resolver's one line,
+# its message and code kept, its rc 1 or 2 kept
+sc_relay() {
+  sc_line=$(sed -n '1p' "$2" 2>/dev/null)
+  sc_code=ERR_STORAGE_WRITE
+  [ "$SC_PHASE" = list ] && sc_code=ERR_STORAGE_READ
+  sc_msg=$sc_line
+  case "$sc_line" in
+    *": error: "*" ("*")")
+      sc_msg=${sc_line#*": error: "}
+      sc_code=${sc_msg##*" ("}
+      sc_code=${sc_code%")"}
+      sc_msg=${sc_msg%" ("*")"}
+      ;;
+    driver-resolver:\ ERROR:\ *)
+      sc_msg=${sc_line#driver-resolver: ERROR: }
+      case "$sc_msg" in
+        *" (ERR_"*")")
+          sc_code=${sc_msg##*" ("}
+          sc_code=${sc_code%")"}
+          sc_msg=${sc_msg%" ("*")"}
+          ;;
+      esac
+      ;;
+  esac
+  [ -n "$sc_msg" ] || sc_msg="the resolver exited $1"
+  sc_rc=$1
+  [ "$sc_rc" -eq 1 ] || sc_rc=2
+  sc_refuse "$sc_rc" "$sc_code" "$3: $sc_msg"
+}
+
+# the listing: every key the namespace lists, one per line in the payload escape
+SC_PHASE=list
+: > "$SC_SCRATCH/none"
+sc_call "$SC_SCRATCH/none" "$SC_SCRATCH/list.json" "$SC_SCRATCH/list.err" store.list "$SC_NS"
+sc_lrc=$?
+[ "$sc_lrc" -eq 0 ] || sc_relay "$sc_lrc" "$SC_SCRATCH/list.err" "the keys of namespace '$SC_NS' cannot be listed"
+if ! awk -f "$SC_JSON" < "$SC_SCRATCH/list.json" > "$SC_SCRATCH/list.flat" 2>/dev/null; then
+  sc_refuse 2 ERR_STORAGE_READ "the keys of namespace '$SC_NS' cannot be listed: the listing is malformed"
+fi
+awk 'index($0, "keys.") == 1 { p = index($0, "="); if (p > 0) print substr($0, p + 1) }' "$SC_SCRATCH/list.flat" > "$SC_SCRATCH/live" \
+  || sc_refuse 2 ERR_STORAGE_READ "the keys of namespace '$SC_NS' cannot be listed: the scratch cannot be written"
+
+if [ "$SC_CMD" = count ]; then
+  sc_n=$(awk 'END { print NR }' "$SC_SCRATCH/live")
+  printf '%s\n' "$sc_n"
+  exit 0
+fi
+
+if [ "$SC_CMD" = keys ]; then
+  awk 'FILENAME == ARGV[1] { live[$0] = 1; next } ($0 in live) && !seen[$0]++' \
+    "$SC_SCRATCH/live" "$SC_KEYS" > "$SC_SCRATCH/doomed" \
+    || sc_refuse 2 ERR_STORAGE_WRITE "the keys to delete cannot be staged"
+else
+  cp "$SC_SCRATCH/live" "$SC_SCRATCH/doomed" || sc_refuse 2 ERR_STORAGE_WRITE "the keys to delete cannot be staged"
+fi
+
+# the batches: at most SC_BATCH delete actions each, in listing order
+SC_PHASE=delete
+mkdir "$SC_SCRATCH/batches" || sc_refuse 2 ERR_STORAGE_WRITE "the batches cannot be staged"
+awk -v dir="$SC_SCRATCH/batches" -v size="$SC_BATCH" '
+  {
+    if ((NR - 1) % size == 0) {
+      if (f != "") close(f)
+      f = sprintf("%s/%08d", dir, int((NR - 1) / size))
+    }
+    printf "action=delete\nkey=%s\n", $0 > f
+  }
+  END { if (f != "") close(f) }' "$SC_SCRATCH/doomed" || sc_refuse 2 ERR_STORAGE_WRITE "the batches cannot be staged"
+
+sc_total=$(awk 'END { print NR }' "$SC_SCRATCH/doomed")
+sc_done=0
+for sc_b in "$SC_SCRATCH"/batches/*; do
+  [ -f "$sc_b" ] || continue
+  sc_n=$(awk 'index($0, "action=") == 1 { n++ } END { print n + 0 }' "$sc_b")
+  sc_call "$sc_b" "$SC_SCRATCH/batch.out" "$SC_SCRATCH/batch.err" store.batch "$SC_NS"
+  sc_brc=$?
+  [ "$sc_brc" -eq 0 ] || sc_relay "$sc_brc" "$SC_SCRATCH/batch.err" "deleting the keys of namespace '$SC_NS' stopped after $sc_done of $sc_total keys"
+  sc_done=$((sc_done + sc_n))
+  rm -f "$sc_b"
+done
+printf '%s\n' "$sc_done"
+exit 0

@@ -1794,8 +1794,8 @@ EOF
 # workspace configuration, and the bare install installs every declared package
 
 package_install_line="  ctx package install [<package>]  install or update a package (a catalog name or a package root path; --as=<module>=<alias> renames a module), or bare every declared one, on the human's explicit go at the act"
-package_uninstall_line="  ctx package uninstall <package>  remove an installed package (its name or its package root path), on the human's explicit go at the act"
-package_list_line="  ctx package list                 the declared packages against the installed ones: versions, modules, aliases, and drift; read only"
+package_uninstall_line="  ctx package uninstall <package> [--keep-data|--delete-data]  remove an installed package (its name or its package root path), its modules' data kept or deleted as the human answers, on the human's explicit go at the act"
+package_list_line="  ctx package list                 the declared packages against the installed ones: versions, modules, aliases, drift, and kept data; read only"
 package_catalog_line="  ctx package catalog [--names] [--no-probe] [--json]  list available catalog packages with value, install status, and host readiness; read only"
 package_info_line="  ctx package info <package> [--no-probe] [--json]     show one package's metadata, parts, install status, and host readiness; read only"
 
@@ -1821,11 +1821,14 @@ EOF
       ;;
     uninstall)
       cat <<'EOF'
-usage: ctx package uninstall <package>
+usage: ctx package uninstall <package> [--keep-data|--delete-data]
 removes an installed package from this workspace's extension root through the core package uninstaller, running its uninstall actions first and preserving a file changed after install, then recomposes the law layer and removes the package's package.<name> line from the workspace configuration
 <package>: the installed package's name (its .contexture/plugins/<name> or plugins/<name> folder, when present, passes as the package root); a value holding a slash is a package root path, read from the working folder; either way the package leaves the workspace this engine serves
+the data answer: a module of the package that declares data and holds a key needs the human's answer before anything is removed: keep retains its data declaration, so its data stays reachable, moves with the record, and returns when the same package is installed again; delete removes every key it holds, which cannot be undone
+--keep-data, --delete-data: the answer given ahead; with neither, a terminal is asked once, and a run with no terminal (an agent's, or any run under ctx run) refuses naming each namespace with its key count and both flags, so the agent relays the question to the human and never picks one; either flag on a package holding no data changes nothing
+kept data whose package is not installed: --delete-data deletes it by the package's name, --keep-data leaves it; ctx package list names each kept namespace
 an uninstall runs only on the human's explicit go at the act; this verb checks no go: the gate binds the act, never the doorway
-exit codes: 0 removed; 1 a refusal (a usage error, a malformed name, a package not installed); 2 an environment or I/O failure (a missing uninstaller, a read-only root, a failed lifecycle action or recompose)
+exit codes: 0 removed; 1 a refusal (a usage error, a malformed name, a package not installed, both data flags, no answer); 2 an environment or I/O failure (a missing uninstaller, a read-only root, a failed lifecycle action, delete, or recompose)
 EOF
       ;;
     list)
@@ -1833,6 +1836,7 @@ EOF
 usage: ctx package list
 prints one line per package the workspace configuration declares or the install records hold, in name order: installed with its version and modules (an alias read as <alias> (alias of <module>)), or declared and not installed; then one closing line counting the declared, the installed, and the drift
 drift: a package declared but not installed, installed but not declared, or installed at a version other than its declared source's; a record without module lines reads as plainly installed, never an error
+kept data: one line per namespace whose data an uninstall kept, before the closing line: the package that kept it, its key count (unknown when the count fails), and the two ways forward, installing that package again or deleting the data with ctx package uninstall <package> --delete-data
 read only: it writes nothing and installs nothing, and needs no go
 exit codes: 0 the listing; 1 an argument; 2 an install record area or record that exists but cannot be read
 EOF
@@ -2018,13 +2022,15 @@ package_run_probe() {
   return 0
 }
 
-# package_run <install|uninstall> <package root or name> <as pairs>: one private script run
-# as a child from the workspace root, its streams and exit code passed through
+# package_run <install|uninstall> <package root or name> <as pairs> [<data answer>]: one
+# private script run as a child from the workspace root, its streams and exit code passed
+# through; an uninstall carries the data answer (keep or delete) as CTX_PACKAGE_DATA
 package_run() {
   ( cd "$root" || exit 2
     CTX_ROOT=$root
     CTX_PACKAGE_AS=$3
-    export CTX_ROOT CTX_PACKAGE_AS
+    CTX_PACKAGE_DATA=${4:-}
+    export CTX_ROOT CTX_PACKAGE_AS CTX_PACKAGE_DATA
     exec sh "$dir/package-$1" "$2" )
 }
 
@@ -2117,6 +2123,7 @@ package_list() {
     fi
   done
   pl_decl=$(pkg_decl_lines 2>/dev/null)
+  pl_kept=$(package_kept_lines)
   pl_names=$(
     { printf '%s\n' "$pl_decl" | awk 'NF { print $1 }'
       for pl_f in "$dir"/extensions/.state/*.files; do
@@ -2126,6 +2133,7 @@ package_list() {
       done
     } | LC_ALL=C sort -u)
   if [ -z "$pl_names" ]; then
+    [ -z "$pl_kept" ] || printf '%s\n' "$pl_kept"
     printf 'package list: no package is declared or installed\n'
     exit 0
   fi
@@ -2172,8 +2180,34 @@ package_list() {
   done <<EOF
 $pl_names
 EOF
+  [ -z "$pl_kept" ] || printf '%s\n' "$pl_kept"
   printf 'package list: %s declared, %s installed, %s drift\n' "$pl_nd" "$pl_ni" "$pl_nx"
   exit 0
+}
+
+# package_kept_lines: one line per namespace whose data a package uninstall kept, read from
+# the storage core's data reader and counted through the configured driver (unknown when
+# the count fails), naming the package that kept it and the two ways forward and no storage
+# or record path; the reader's own lines (a shadowed or unreadable kept declaration) pass to
+# stderr
+package_kept_lines() {
+  pkl_sd=$dir/storage/scripts/store-data
+  pkl_sc=$dir/storage/scripts/store-clear
+  [ -x "$pkl_sd" ] && [ -d "$dir/extensions/.state/retained" ] || return 0
+  ( cd "$root" || exit 0
+    CTX_STORE_WORKSPACE=$root "$pkl_sd" --retained | while IFS='	' read -r pkl_ns pkl_pkg pkl_orig; do
+      [ -n "$pkl_ns" ] || continue
+      pkl_n=$(CTX_ROOT=$root "$pkl_sc" count "$pkl_ns" 2>/dev/null) || pkl_n=""
+      case "$pkl_n" in
+        "") pkl_k="key count unknown" ;;
+        1) pkl_k="1 key" ;;
+        *) pkl_k="$pkl_n keys" ;;
+      esac
+      pkl_m=""
+      [ "$pkl_orig" = "$pkl_ns" ] || pkl_m=", module $pkl_orig"
+      printf "kept data %s: kept by %s%s (%s); install %s again to use it, or delete it with ctx package uninstall %s --delete-data\n" \
+        "$pkl_ns" "$pkl_pkg" "$pkl_m" "$pkl_k" "$pkl_pkg" "$pkl_pkg"
+    done )
 }
 
 # package_catalog: read-only catalog listing with optional --names, --no-probe, --json.
@@ -2605,12 +2639,25 @@ package_builtin() {
   # installer as CTX_PACKAGE_AS, space separated <module>=<alias> pairs
   pk_as=""
   pk_as_seen=" "
+  pk_data=""
   pk_n=$#
   while [ "$pk_n" -gt 0 ]; do
     pk_a=$1
     shift
     pk_n=$((pk_n - 1))
     case "$pk_a" in
+      --keep-data|--delete-data)
+        if [ "$pk_verb" != uninstall ]; then
+          ctx_err "package $pk_verb: $pk_a answers an uninstall's data question; an install takes no data answer"
+          exit 1
+        fi
+        case "$pk_data" in
+          "") ;;
+          "$pk_a") ctx_err "package uninstall: $pk_a is given twice"; exit 1 ;;
+          *) ctx_err "package uninstall: --keep-data and --delete-data together; give the one answer the human chose"; exit 1 ;;
+        esac
+        pk_data=$pk_a
+        ;;
       --as=*)
         if [ "$pk_verb" != install ]; then
           ctx_err "package $pk_verb: --as names an install alias; an uninstall takes the installed package alone"
@@ -2682,14 +2729,19 @@ package_builtin() {
     ctx_err "package $pk_verb: cannot enter workspace root: $root"
     exit 2
   fi
-  package_run "$pk_verb" "$pk_arg" "$pk_as"
+  pk_name=${pk_arg##*/}
+  pk_was=0
+  [ -f "$dir/extensions/.state/$pk_name.files" ] && pk_was=1
+  pk_data=${pk_data#--}
+  package_run "$pk_verb" "$pk_arg" "$pk_as" "${pk_data%-data}"
   pk_rc=$?
   [ "$pk_rc" -eq 0 ] || exit "$pk_rc"
   # the declaration follows the act: an install writes its package.<name> line (the source as
   # given, a path inside the workspace kept relative to its root, and every alias the record
-  # now holds), an uninstall removes it
-  pk_name=${pk_arg##*/}
+  # now holds), an uninstall removes it; an uninstall of a package that was not installed
+  # (its kept data deleted, or kept) leaves the configuration as it found it
   if [ "$pk_verb" = uninstall ]; then
+    [ "$pk_was" -eq 1 ] || exit 0
     pkg_decl_write "$pk_name" || { ctx_err "package uninstall: removed, but the workspace configuration's package.$pk_name line could not be removed"; exit 2; }
     exit 0
   fi

@@ -24,7 +24,10 @@
 # CTX_PACKAGE_AS names (space separated <module>=<alias> pairs, which ctx package
 # install --as=<module>=<alias> sets); a module the pairs do not name keeps the alias
 # the install record's module line holds, so a re-install without the flags keeps
-# every alias. The module's files land under modules/<alias>/, its laws and hooks go
+# every alias, and a module whose data this package kept at an uninstall returns under
+# the name it was kept under, taking the kept declaration back in its record phase (a
+# rollback restores it), so its verbs read the kept keys; an --as naming another name for
+# it refuses naming the kept one. The module's files land under modules/<alias>/, its laws and hooks go
 # with them, and the module's namespace is the alias, its folder's name, and so is its
 # storage root: a root its data file declares applies only under its own name. A name
 # collision without an alias refuses naming --as, and so does a storage root another
@@ -37,8 +40,11 @@
 # matching the manifest; a path that escapes or carries blanks; a payload file
 # outside the extension root; a core path; an existing file no package recorded;
 # a path another package recorded; a module name against a builtin (unit,
-# run, lane, rhythm, store), a workspace module, or a reserved name; a storage root another
-# installed module resolves to, or two modules of the package share; a driver name against the
+# run, lane, rhythm, store), a workspace module, or a reserved name; a module name another
+# package's kept data holds; a storage root another installed module resolves to, kept data
+# holds, or two modules of the package share; a re-install that would leave an installed
+# module's data undeclared while it holds a key (an --as moving it, a version dropping it);
+# a driver name against the
 # core posix driver or a driver that already resolves ahead of the extension
 # root; a malformed module manifest; a driver part
 # without an executable.
@@ -259,9 +265,66 @@ if [ "$have_record" -eq 1 ]; then
     printf '%s %s\n' "$_am" "$_aa"
   done >> "$scratch/aliases"
 fi
+# the package's kept data, "<original> <kept name>" per kept declaration whose origin names
+# this package: a payload module returns under the name its data was kept under, read as a
+# record's module line is, and an --as naming another name for it refuses naming the kept one
+kept_root=$state_root/retained
+: > "$scratch/kept_own"
+if [ -d "$kept_root" ]; then
+  for _ko in "$kept_root"/*/origin; do
+    [ -f "$_ko" ] || continue
+    _kn=${_ko%/origin}
+    _kn=${_kn##*/}
+    awk -v p="$pkg_name" -v k="$_kn" '
+      $1 == "package" && NF == 2 && pk == "" { pk = $2 }
+      $1 == "module" && NF == 3 && $2 == k && m == "" { m = $3 }
+      END { if (pk == p && m != "") print m " " k }' "$_ko" 2>/dev/null
+  done > "$scratch/kept_own"
+fi
+: > "$scratch/kept_return"
+while read -r _km _kn; do
+  grep -Fqx -- "$_km" "$scratch/modules" || continue
+  _ka=$(awk -v m="$_km" '$1 == m { print $2; exit }' "$scratch/aliases")
+  if [ -z "$_ka" ]; then
+    printf '%s %s\n' "$_km" "$_kn" >> "$scratch/aliases"
+  elif [ "$_ka" != "$_kn" ]; then
+    die 1 "module '$_km' has kept data under the name '$_kn', so it returns under that name: --as=$_km=$_kn (or delete the kept data first: ctx package uninstall $pkg_name --delete-data)"
+  fi
+  printf '%s %s\n' "$_km" "$_kn" >> "$scratch/kept_return"
+done < "$scratch/kept_own"
 awk 'FILENAME == ARGV[1] { n[$1] = $2; next } { print $0 " " (($0 in n) ? n[$0] : $0) }' "$scratch/aliases" "$scratch/modules" > "$scratch/inames"
 _dup=$(awk '{ print $2 }' "$scratch/inames" | LC_ALL=C sort | uniq -d | head -n 1)
 [ -z "$_dup" ] || die 1 "two modules of the package would install as '$_dup' (name each with its own --as=<module>=<name>)"
+
+# a re-install never leaves an installed module's data undeclared: a data carrying module the
+# record names whose installed name no payload module with a data file takes again (an --as
+# moving it, a version dropping it or its data file) refuses while its namespace holds a key
+# or its key count fails, since its data would be neither listed nor moved
+clear_bin=$ws_root/.contexture/storage/scripts/store-clear
+if [ "$have_record" -eq 1 ]; then
+  awk '
+    $1 == "module" && NF == 3 { orig[$2] = $3; next }
+    $1 == "file" {
+      n = split($4, a, "/")
+      if (n == 5 && a[1] == ".contexture" && a[2] == "extensions" && a[3] == "modules" && a[5] == "data") d[a[4]] = 1
+    }
+    END { for (m in d) print m " " ((m in orig) ? orig[m] : m) }' "$state_file" | LC_ALL=C sort > "$scratch/data_now"
+  while read -r _dn _do; do
+    [ -f "$ext_root/modules/$_dn/data" ] || continue
+    _keeps=$(awk -v n="$_dn" '$2 == n { print $1; exit }' "$scratch/inames")
+    if [ -n "$_keeps" ] && grep -Fqx "modules/$_keeps/data" "$scratch/files"; then
+      continue
+    fi
+    if _dc=$("$clear_bin" count "$_dn" 2>/dev/null) && [ -n "$_dc" ]; then :; else _dc=unknown; fi
+    [ "$_dc" != 0 ] || continue
+    case "$_dc" in
+      unknown) _dk="key count unknown" ;;
+      1) _dk="1 key" ;;
+      *) _dk="$_dc keys" ;;
+    esac
+    die 1 "the re-install would leave the data of module '$_do' (namespace '$_dn', $_dk) undeclared; uninstall the package with --keep-data or --delete-data as the human answers, then install it"
+  done < "$scratch/data_now"
+fi
 # the destination of every payload path: modules/<original>/... lands at modules/<installed>/...
 awk 'FILENAME == ARGV[1] { n[$1] = $2; next }
   { split($0, a, "/"); d = $0
@@ -290,6 +353,13 @@ while read -r mname_o mname; do
   fi
   if [ -e "$ws_root/.contexture/modules/$mname" ]; then
     die 1 "module name '$mname' collides with a workspace module (install it under another name: --as=$mname_o=<name>)"
+  fi
+  if [ -e "$kept_root/$mname" ]; then
+    _kp=$(awk '$1 == "package" && NF == 2 { print $2; exit }' "$kept_root/$mname/origin" 2>/dev/null)
+    _km=$(awk -v k="$mname" '$1 == "module" && NF == 3 && $2 == k { print $3; exit }' "$kept_root/$mname/origin" 2>/dev/null)
+    if [ "$_kp" != "$pkg_name" ] || [ "$_km" != "$mname_o" ]; then
+      die 1 "module name '$mname' holds data that package '${_kp:-unknown}' kept at its uninstall (install it under another name: --as=$mname_o=<name>)"
+    fi
   fi
   if [ -e "$ext_root/modules/$mname" ]; then
     if record_has_prefix ".contexture/extensions/modules/$mname/"; then
@@ -341,6 +411,8 @@ if [ -x "$sd_bin" ] && grep -q '^modules/[^/]*/data$' "$scratch/files"; then
   if [ "$have_record" -eq 1 ]; then
     awk '$1 == "file" { n = split($4, a, "/"); if (n >= 5 && a[1] == ".contexture" && a[2] == "extensions" && a[3] == "modules") print a[4] }' "$state_file" > "$scratch/own"
   fi
+  awk '{ print $2 }' "$scratch/kept_return" >> "$scratch/own"
+  CTX_STORE_WORKSPACE=$ws_root "$sd_bin" --retained > "$scratch/kept_rows" 2>/dev/null || :
   CTX_STORE_WORKSPACE=$ws_root "$sd_bin" --list > "$scratch/roots.old" 2> "$scratch/roots.old.err"
   sd_rc=$?
   if [ "$sd_rc" -ne 0 ]; then
@@ -385,9 +457,13 @@ if [ -x "$sd_bin" ] && grep -q '^modules/[^/]*/data$' "$scratch/files"; then
     _cr=${_clash#*"$_tab"}
     _co=${_cr#*"$_tab"}
     _cr=${_cr%%"$_tab"*}
+    _ckp=$(awk -F '\t' -v n="$_co" '$1 == n { print $2; exit }' "$scratch/kept_rows")
     case "$_co" in
       @*) die 1 "two modules of the package would store under the root '$_cr', '${_co#@}' and '$_cm' (install one under another name: --as=$_cm=<name>)" ;;
-      *) die 1 "module '$_cm' would store under the root '$_cr', which the installed module '$_co' stores under (install it under another name: --as=$_cm=<name>)" ;;
+      *)
+        [ -z "$_ckp" ] || die 1 "module '$_cm' would store under the root '$_cr', which holds the data of namespace '$_co' that package '$_ckp' kept at its uninstall (install it under another name: --as=$_cm=<name>)"
+        die 1 "module '$_cm' would store under the root '$_cr', which the installed module '$_co' stores under (install it under another name: --as=$_cm=<name>)"
+        ;;
     esac
   fi
 fi
@@ -512,6 +588,12 @@ rollback() {
     else
       rm -f "$stash_uninstall" 2>/dev/null
     fi
+  fi
+  if [ -s "$scratch/kept_back" ]; then
+    mkdir -p "$kept_root" 2>/dev/null
+    while IFS= read -r _k; do
+      mv "$stage/.backup/.kept/$_k" "$kept_root/$_k" 2>/dev/null
+    done < "$scratch/kept_back"
   fi
   rm -rf "$stage" 2>/dev/null
   LC_ALL=C sort -ru "$scratch/made" | while IFS= read -r _d; do
@@ -648,6 +730,17 @@ if [ -f "$stage/.uninstall" ]; then
 elif [ -e "$stash_uninstall" ]; then
   rm -f "$stash_uninstall" || rollback "cannot remove the dropped uninstall hook"
 fi
+# the returning modules take their kept data back: each kept declaration leaves the record
+# area now that the module's own data file declares the namespace, restored by a rollback
+: > "$scratch/kept_back"
+if [ -s "$scratch/kept_return" ]; then
+  mkdir -p "$stage/.backup/.kept" || rollback "cannot take back the kept data"
+  while read -r _km _kn; do
+    mv "$kept_root/$_kn" "$stage/.backup/.kept/$_kn" || rollback "cannot take back the kept data of '$_kn'"
+    printf '%s\n' "$_kn" >> "$scratch/kept_back"
+  done < "$scratch/kept_return"
+  rmdir "$kept_root" 2>/dev/null
+fi
 rm -rf "$stage"
 
 # prune the folders the stale removals emptied (bottom-up), stopping at the extension
@@ -690,6 +783,13 @@ fi
 # run; a boot then reads the set this install just changed.
 "$ctx_bin" compose || die 2 "the law layer did not recompose; run .contexture/ctx compose and fix what it names (the overlay and its record are in place)"
 
+while read -r _km _kn; do
+  if [ "$_km" = "$_kn" ]; then
+    printf 'package-install: took back the kept data of %s\n' "$_kn"
+  else
+    printf 'package-install: took back the kept data of %s (module %s under its kept name)\n' "$_kn" "$_km"
+  fi
+done < "$scratch/kept_return"
 printf 'package-install: installed %s (%s) into .contexture/extensions (%s files: %s added, %s updated; %s stale removed, %s preserved)\n' \
   "$pkg_name" "$pkg_summary" "$((added + updated))" "$added" "$updated" "$stale_removed" "$stale_kept"
 exit 0

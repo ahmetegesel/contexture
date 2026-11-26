@@ -39,8 +39,23 @@ describe.concurrent('the real catalog installs by catalog name through ctx packa
     expect(readFileSync(extPath(sb, 'rhythms/work.md'), 'utf8')).toContain('a work request arrives');
     expect((await uninstall(sb, starter)).code).toBe(0);
     expect(existsSync(extPath(sb, 'rhythms/work.md'))).toBe(false);
-    expect((await uninstall(sb, docs)).code).toBe(0);
+    const asked = await uninstall(sb, docs);
+    expect([asked.code, asked.stdout]).toEqual([1, '']);
+    expect(asked.stderr).toBe("package-uninstall: uninstalling 'docs-discipline' leaves its data: docs (1 key); this needs the human's answer, keep (--keep-data) or delete (--delete-data): relay the question and run it again with the flag the human chooses (the answer is the human's, never a default)\n");
+    expect(existsSync(extPath(sb, 'modules/docs/module'))).toBe(true);
+    const kept = await uninstall(sb, docs, '--keep-data');
+    expect(kept.code).toBe(0);
+    expect(kept.stdout).toContain('package-uninstall: kept the data of docs (1 key); install docs-discipline again to use it\n');
     expect(existsSync(extPath(sb, 'modules/docs/module'))).toBe(false);
+    expect(existsSync(join(sb, '.contexture/docs/workspace/conventions.md'))).toBe(true);
+    const back = await install(sb, docs);
+    expect(back.code).toBe(0);
+    expect(back.stdout).toContain('took back the kept data of docs');
+    expect((await ctx(sb, 'docs', 'query', 'workspace', 'conventions')).stdout).toContain('conventions: conventions');
+    const deleted = await uninstall(sb, docs, '--delete-data');
+    expect(deleted.code).toBe(0);
+    expect(deleted.stdout).toContain('package-uninstall: deleted 1 key of docs\n');
+    expect(existsSync(join(sb, '.contexture/docs/workspace/conventions.md'))).toBe(false);
   });
 
   it('[plugins-r6, modules-r20] starter-rhythms puts work and debug in the rhythm list with their use-when and activation', async () => {

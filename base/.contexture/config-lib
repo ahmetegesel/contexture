@@ -1816,3 +1816,50 @@ config_owner_verb() {
       ;;
   esac
 }
+
+# ---------------------------------------------------------------------------
+# 6. The human's answer
+#
+# cfg_answer <label> <subject> <word1> <flag1> <word2> <flag2>: the answer to a question only
+# the human answers (an irreversible choice a package script needs before it writes), its
+# word on stdout rc 0. It asks only when stdin and stderr are both terminals ([ -t 0 ] and
+# [ -t 2 ]), or when CTX_PACKAGE_TTY names a file read as the terminal (the test seam); never
+# /dev/tty, so a harness shell holding a controlling terminal never blocks, and never on
+# stdin alone, so a run under ctx run, whose capture makes stderr a file, refuses instead of
+# waiting. The question is one stderr line, <label>: <subject>; answer <word1> or <word2>:,
+# an unknown answer re-asks, and end of input refuses rc 1 with one line naming both flags.
+# With no terminal it refuses rc 1 with one stderr line naming the subject, both flags, and
+# that the answer is the human's, so an agent relays the question and never picks a default;
+# a seam naming a file that cannot be read refuses rc 2. Nothing is written in any case.
+cfg_answer() {
+  ca_lbl=$1 ca_subj=$2 ca_w1=$3 ca_f1=$4 ca_w2=$5 ca_f2=$6
+  if [ -n "${CTX_PACKAGE_TTY:-}" ]; then
+    if [ ! -f "$CTX_PACKAGE_TTY" ] || [ ! -r "$CTX_PACKAGE_TTY" ]; then
+      printf "%s: the answer cannot be read: CTX_PACKAGE_TTY names no readable file\n" "$ca_lbl" >&2
+      return 2
+    fi
+  elif ! { [ -t 0 ] && [ -t 2 ]; }; then
+    printf "%s: %s; this needs the human's answer, %s (%s) or %s (%s): relay the question and run it again with the flag the human chooses (the answer is the human's, never a default)\n" \
+      "$ca_lbl" "$ca_subj" "$ca_w1" "$ca_f1" "$ca_w2" "$ca_f2" >&2
+    return 1
+  fi
+  (
+    if [ -n "${CTX_PACKAGE_TTY:-}" ]; then
+      exec < "$CTX_PACKAGE_TTY" || exit 2
+    fi
+    ca_ask="$ca_lbl: $ca_subj; answer $ca_w1 or $ca_w2: "
+    while :; do
+      printf '%s' "$ca_ask" >&2
+      if ! IFS= read -r ca_line; then
+        printf "\n%s: no answer was read; answer %s or %s, or run it again with %s or %s as the human chooses\n" "$ca_lbl" "$ca_w1" "$ca_w2" "$ca_f1" "$ca_f2" >&2
+        exit 1
+      fi
+      ca_line=$(printf '%s' "$ca_line" | tr -d ' \t\r')
+      if [ "$ca_line" = "$ca_w1" ] || [ "$ca_line" = "$ca_w2" ]; then
+        printf '%s\n' "$ca_line"
+        exit 0
+      fi
+      ca_ask="$ca_lbl: '$ca_line' is no answer; answer $ca_w1 or $ca_w2: "
+    done
+  )
+}

@@ -20,7 +20,7 @@
   AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
   .contexture/laws/ = the law sources: core.md the core law source
   workspace configuration = module-scoped settings, loaded at boot via .contexture/ctx config load (schemas via ctx config schema)
-  .contexture/ctx             = the runtime (run .contexture/ctx help; --help and -h are the same table): ctx unit <verb>, ctx run <cmd>, ctx compose [--check], ctx package install|uninstall|list|catalog|info (install and uninstall only on the human's explicit go at the act; the verb checks no go), ctx <module>
+  .contexture/ctx             = the runtime (run .contexture/ctx help; --help and -h are the same table): ctx unit <verb>, ctx run <cmd>, ctx compose [--check], ctx package install|uninstall|list|catalog|info (install and uninstall only on the human's explicit go at the act; the verb checks no go; the uninstall's keep or delete answer for a package's data is the human's too, relayed and never defaulted), ctx <module>
   .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms
   .contexture/storage/: the storage core, not a module: the driver resolver, the store-data reader, the module-facing library, the store contract, and the built-in posix driver; a driver serves only the store contract (contract 4), and the record's 35 operations are the unit module's (ctx unit help)
 

@@ -40,10 +40,9 @@ describe('the docs module part hooks, in order on one workspace', { concurrent: 
     expect(after).toBe(before);
   });
 
-  it('RS3d [plugins-r2, modules-r13] uninstall leaves the corpus readable', async () => {
+  it('RS3d [plugins-r2, modules-r13] the uninstall hook claims nothing about the corpus, which the core keeps or deletes on the human\'s answer, and leaves it readable', async () => {
     const r = await hook('uninstall', context());
-    expect(r.code).toBe(0);
-    expect(r.stdout + r.stderr).toContain('the corpus data stays in the storage layer');
+    expect([r.code, r.stdout, r.stderr]).toEqual([0, '', '']);
     expect((await docs(ws, ['query', 'workspace', 'conventions'])).stdout).toContain('A locally kept description');
   });
 

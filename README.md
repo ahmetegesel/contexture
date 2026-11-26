@@ -112,7 +112,7 @@ Five modules ship inside `base/.contexture/modules/` and work out of the box wit
 
 ### Optional catalog plugins
 
-Optional packages live in `.contexture/plugins/` (with `./plugins/` as fallback) and install into `.contexture/extensions/` via `.contexture/ctx package install <name>` (and uninstall via `.contexture/ctx package uninstall <name>`). Inspect available packages, versions, and live host readiness read-only via `.contexture/ctx package catalog`, `.contexture/ctx package info <name>`, and `.contexture/ctx package list`. Package installation runs **only on the human's explicit go at the act** (boot never installs packages, and the verb itself checks no go).
+Optional packages live in `.contexture/plugins/` (with `./plugins/` as fallback) and install into `.contexture/extensions/` via `.contexture/ctx package install <name>` (and uninstall via `.contexture/ctx package uninstall <name>`, whose keep or delete answer for a package's module data is the human's: `--keep-data` keeps it reachable for a later install, `--delete-data` removes it). Inspect available packages, versions, and live host readiness read-only via `.contexture/ctx package catalog`, `.contexture/ctx package info <name>`, and `.contexture/ctx package list`. Package installation runs **only on the human's explicit go at the act** (boot never installs packages, and the verb itself checks no go).
 
 | Plugin | Kind | What it adds | Guide |
 | :--- | :--- | :--- | :--- |

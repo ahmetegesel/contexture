@@ -215,7 +215,7 @@ describe.concurrent('store-data, the data file reader', () => {
 
   it('[modules-r10, the-engine-r-cj0ey] refuses an argument beyond the namespace, --with-fallback, --with-fields, and --with-unsearched, a repeated flag, and an argument beyond the listing flag, rc 1', async () => {
     const sb = workspace();
-    const usage = (arg: string) => `store-data: unexpected argument '${arg}' (store-data <namespace> [--with-fallback] [--with-fields] [--with-unsearched], or store-data --list)\n`;
+    const usage = (arg: string) => `store-data: unexpected argument '${arg}' (store-data <namespace> [--with-fallback] [--with-fields] [--with-unsearched], store-data --list, or store-data --retained)\n`;
     const one = await exec(STORE_DATA, ['docs', 'extra'], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
     expect([one.code, one.stdout, one.stderr]).toEqual([1, '', usage('extra')]);
     const two = await exec(STORE_DATA, ['docs', '--with-fallback', 'extra'], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });

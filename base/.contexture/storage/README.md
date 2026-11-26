@@ -11,7 +11,10 @@ storage/
                             the storage moving freeze (move-freeze, move-release, move-state)
   scripts/driver-behavior   the private differential behavior test a driver meets: posix and the
                             candidate in two scratch workspaces, one step set compared
-  scripts/store-data        the private reader and validator of a module's data file, and its listing
+  scripts/store-data        the private reader and validator of a module's data file, and its
+                            listings (every declaration, the kept data ones among them)
+  scripts/store-clear       the private counter and deleter of one named namespace's keys,
+                            through the resolver in bounded batches (the uninstall's delete)
   scripts/store-key.awk     the one key rule: the awk functions the dispatch gate and every bundled
                             driver read (the key, the prefixes, the leading run fold set)
   scripts/store-search      the private exact search engine
@@ -467,7 +470,16 @@ column-0 head marker that starts an entity; a key no rule covers stays searchabl
 generic document). The reader refuses an unknown field. The namespace `<ns>` is served by
 the data file of the module folder named `<ns>`, the workspace modules root first, then
 the extension root, as discovery resolves a module name (a workspace module shadows an
-extension module of its name). `store-data <namespace>` answers one namespace on ten fixed lines, then the document
+extension module of its name), then the kept data: a package uninstall answered keep
+retains a data carrying module's declaration under its installed name in the install
+record area, `.contexture/extensions/.state/retained/<ns>/`, holding `data` (a byte copy
+of the module's data file) and `origin` (the `package <name>`, `version <v>`, and
+`module <installed name> <original name>` lines), so the namespace stays declared,
+listed, and movable while no module serves it; the reader hands the origin to its alias
+rule, so an aliased kept namespace keeps its namespace as its root and no fallback root,
+and an origin it cannot read refuses rc 2 naming no path. No file named `module` ever sits
+there, so the library's caller lookup never answers a kept namespace; the same package's
+install takes the declaration back. `store-data <namespace>` answers one namespace on ten fixed lines, then the document
 rules, and never the fallback root, so a parser reading by position ignores the field;
 `store-data <namespace> --with-fallback` answers the fallback root as line 11 (an empty
 line when none applies) and the rules from line 12, the form the posix driver reads;
@@ -489,11 +501,36 @@ cannot be written, when a field line needs them, refuses rc 2. `store-data --lis
 every valid declaration of both module roots, one `<namespace><TAB><root>` line each (the root the
 namespace when none is declared or the module is installed under an alias, then
 `<TAB><fallback root>` when one applies), sorted
-by namespace, a name both roots hold answered once (the workspace module's), and leaves
-out a declaration it cannot read (a malformed one, or an extension module's whose install
-record area cannot be read) and a module folder whose name is no namespace token, one
-stderr line each, then exits 1 with the rows it read, so a reader never takes a partial
-listing for the whole (rc 0 when nothing is left out, rc 2 with no module drawer).
+by namespace, the kept declarations among them in the same row shape, a name both roots
+hold answered once (the workspace module's), and leaves out a declaration it cannot read
+(a malformed one, or an extension module's whose install record area cannot be read), a
+module folder whose name is no namespace token, a kept declaration a module root's name
+shadows, and kept data it cannot walk, one stderr line each, then exits 1 with the rows it
+read, so a reader never takes a partial listing for the whole (rc 0 when nothing is left
+out, rc 2 with no module drawer). `store-data --retained` answers one
+`<namespace><TAB><package><TAB><original module name>` line per kept declaration no
+module root shadows, read from its origin, sorted by namespace, leaving out a shadowed one
+or an unreadable origin with one stderr line each and then exiting 1, so an enumeration
+names a namespace kept and the package that kept it.
+
+`scripts/store-clear` is the one place a namespace no module serves is emptied: `store-clear
+count [--driver=<name>] <namespace>` prints the number of keys the namespace lists,
+`store-clear namespace [--driver=<name>] <namespace>` deletes every key it lists, and
+`store-clear keys [--driver=<name>] <namespace> <key file>` deletes each key the file names
+(one per line, in the payload escape a listing answers) that the namespace still lists,
+each printing the number deleted. Every call goes through the resolver from the workspace
+root (`CTX_ROOT`, else the nearest drawer above the working folder) with `CTX_DIR` unset
+and the caller's environment otherwise passed through (a move's token among it, never
+demanded), the driver the one `--driver` names or the configured one; the deletes go in
+`store.batch` calls of at most 200 delete actions in listing order (posix deletes about 14
+ms a key at any batch size from 50 to 1000, so the bound sizes the all or none unit and the
+staging), and a key the namespace no longer lists is skipped, so a run that stopped part
+way finishes when run again. A refusal is one line, `store-clear <command>: error: <message>
+(<CODE>)`: rc 1 a bad argument, a failed listing or batch keeping its own rc and code with
+the message naming the namespace and, for a batch, the keys deleted before it; its scratch
+is one folder under the per verb scratch root, else the drawer's scratch, removed on exit,
+and a hangup, interrupt, or termination stops the resolver call in flight (129, 130, 143).
+The package uninstaller counts and deletes a package's namespaces through it.
 
 ## The behavior test a driver meets
 

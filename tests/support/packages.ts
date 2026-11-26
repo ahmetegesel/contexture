@@ -67,8 +67,10 @@ export function installPkg(sb: string, pkg: string, version = '1.0.0'): Promise<
   return install(sb, pkg);
 }
 
-export function uninstall(sb: string, target: string): Promise<Run> {
-  return exec('./.contexture/ctx', ['package', 'uninstall', target], { cwd: sb });
+// uninstall: ctx package uninstall with the data answer given ahead (--keep-data or
+// --delete-data), or none, so a package holding data meets the question
+export function uninstall(sb: string, target: string, answer: '' | '--keep-data' | '--delete-data' = '', env: Record<string, string> = {}): Promise<Run> {
+  return exec('./.contexture/ctx', ['package', 'uninstall', target, ...(answer ? [answer] : [])], { cwd: sb, env });
 }
 
 export function catalogCopy(sb: string, plugin: string): string {
