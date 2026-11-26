@@ -290,7 +290,7 @@ if [ -n "$fwd" ]; then
   export MG_FWD_OLD MG_FWD_NEW
   vb_call unit.migrate --collect "$@"
   vb_ok
-  : > "$mg_dir/forward.tsv" 2>/dev/null || { printf 'migrate: error: cannot write the census folder in the workspace scratch (ERR_STORAGE_WRITE)\n' >&2; exit 2; }
+  { true > "$mg_dir/forward.tsv"; } 2>/dev/null || { printf 'migrate: error: cannot write the census folder in the workspace scratch (ERR_STORAGE_WRITE)\n' >&2; exit 2; }
   if [ -s "$mg_dir/forward.cand" ]; then
     LC_ALL=C sort -u "$mg_dir/forward.cand" > "$mg_dir/forward.list" || { printf 'migrate: error: cannot write the census folder in the workspace scratch (ERR_STORAGE_WRITE)\n' >&2; exit 2; }
     while IFS= read -r fwd_a; do

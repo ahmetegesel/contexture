@@ -151,9 +151,9 @@ bh_del() { for bd_k in "$@"; do printf 'action=delete\nkey=%s\n' "$bd_k"; done; 
 # 65281 bytes, so no line reaches 64 KiB
 bh_fixtures() {
   mkdir "$BH_FX" || return 1
-  { : > "$BH_FX/none" && : > "$BH_FX/empty" && printf 'one\n' > "$BH_FX/one" && printf 'two' > "$BH_FX/two" \
+  { true > "$BH_FX/none" && true > "$BH_FX/empty" && printf 'one\n' > "$BH_FX/one" && printf 'two' > "$BH_FX/two" \
     && printf 'three\n' > "$BH_FX/three" && printf 'a\000b\000' > "$BH_FX/nul" \
-    && printf '\377\376\200\300\257\355\240\200x' > "$BH_FX/bad"; } || return 1
+    && printf '\377\376\200\300\257\355\240\200x' > "$BH_FX/bad"; } 2>/dev/null || return 1
   bf_fmt=$(awk 'BEGIN { for (i = 0; i < 256; i++) printf "\\%03o", i }') || return 1
   # shellcheck disable=SC2059
   printf "$bf_fmt" > "$BH_FX/all" || return 1

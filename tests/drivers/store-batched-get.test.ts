@@ -1,10 +1,10 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { dataFile } from '../support/data-file';
 import { exec } from '../support/exec';
 import { ROOT_USER, chmodPlant } from '../support/plants';
-import { moduleCall } from '../support/sh';
+import { moduleCall, moduleScript } from '../support/sh';
 import { fresh } from '../support/snapshot';
 import { DRIVERS, sqliteAvailable } from '../support/stage';
 import { docsStore, plantScript, store } from '../support/store';
@@ -17,6 +17,12 @@ const ASKED = ['workspace/u_n-1', 'workspace/a', 'workspace/missing', 'workspace
 const ASKED_ANSWER = '{"namespace":"docs","items":[{"key":"workspace/u_n-1","value":"turkce\\n"},{"key":"workspace/a","value":"a\\n"},{"key":"workspace/missing","missing":true},{"key":"workspace/binary","value_b64":"YQBi/w=="},{"key":"workspace/q.uote","value":"quote\\n"},{"key":"workspace/a","value":"a\\n"}]}\n';
 
 const lib = (sb: string, fn: string, args: string[] = []) => moduleCall(sb, 'docs', join(sb, LIBRARY), fn, args, { input: '', env: { CTX_STORE_ROOT: sb }, root: 'extensions' });
+
+// libClosed: store_get_into called with its stdout open for reading only, so every answer line
+// it writes fails (a closed stdout would not do: the shell reuses the free descriptor)
+const SHELLS = ['sh', ...(existsSync('/bin/dash') ? ['/bin/dash'] : [])];
+const libClosed = (sb: string, shell: string, args: string[]) =>
+  exec(shell, [moduleScript(sb, 'docs', 'lib-closed', 'f=$1; shift; . "$f" && store_get_into "$@" 1< /dev/null\n', 'extensions'), join(sb, LIBRARY), ...args], { cwd: sb, input: '', env: { CTX_STORE_ROOT: sb } });
 
 function targets(sb: string, name: string, keys: readonly string[]): { file: string; paths: string[] } {
   const dir = join(sb, 'into', name);
@@ -109,6 +115,19 @@ for (const driver of DRIVERS) {
       expect(await lib(sb, 'store_get_into', [gone.file])).toMatchObject({ code: 0, stdout: '0\tworkspace/gone\n', stderr: '' });
       const bad = targets(sb, 'bad', ['workspace/a', 'workspace']);
       refused(await lib(sb, 'store_get_into', [bad.file]), 'store.get', 1, 'ERR_INVALID_ARGUMENT', "key 'workspace' does not match the namespace pattern '<repo>/<slug>'");
+    });
+
+    it.for([
+      ['one present key', ['workspace/a'], 'store.get'],
+      ['one absent key', ['workspace/gone'], 'store.get'],
+      ['a batch', ['workspace/a', 'workspace/gone'], 'store-pack'],
+    ] as const)('[the-engine-r19] store_get_into answering %s into an answer it cannot write refuses rc 2 with one line, never rc 0 with a short answer', async ([name, keys, label]) => {
+      const sb = fresh(keyed);
+      const t = targets(sb, name.replace(/ /g, '-'), keys);
+      for (const shell of SHELLS) {
+        const r = await libClosed(sb, shell, [t.file]);
+        expect([r.code, r.stdout, r.stderr], shell).toEqual([2, '', `${label}: error: cannot write the answer (ERR_STORAGE_WRITE)\n`]);
+      }
     });
   });
 }

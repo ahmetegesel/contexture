@@ -563,7 +563,7 @@ sm_copy() {
   printf '%s\t%s\n' "$SM_SRC" "$SM_DST" > "$SM_RUN/move" || sm_refuse 2 ERR_STORAGE_WRITE "the move's scratch folder cannot be written"
   while IFS= read -r ns; do
     [ -n "$ns" ] || continue
-    : > "$SM_RUN/written.$ns" || sm_refuse 2 ERR_STORAGE_WRITE "the move's scratch folder cannot be written"
+    { true > "$SM_RUN/written.$ns"; } 2>/dev/null || sm_refuse 2 ERR_STORAGE_WRITE "the move's scratch folder cannot be written"
   done < "$SM_WORK/ns"
   sm_all=0
   sm_m=0

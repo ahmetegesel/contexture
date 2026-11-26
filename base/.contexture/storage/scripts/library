@@ -234,12 +234,23 @@ store_lib_data() {
   return 1
 }
 
+# store_lib_answer <0|1> <key>: one answer line of store_get_into, its write status read; the
+# printf runs in a subshell, since bash keeps the bytes of a failed builtin write and flushes
+# them into the next builtin's output, which would put the answer before the refusal line
+store_lib_answer() {
+  ( printf '%s\t%s\n' "$1" "$2" ) 2>/dev/null && return 0
+  printf 'store.get: error: cannot write the answer (ERR_STORAGE_WRITE)\n' >&2
+  return 2
+}
+
 # store_get_into <targets>: the batched read into files. <targets> holds one <key> TAB
 # <path> line per key in the asked order; one store.get call answers every key (the one key
 # form for a single key), each present value lands in its path byte for byte, and one line
 # per key prints on stdout in the asked order: 1 TAB <key> for a present key, 0 TAB <key>
 # for an absent one. A refused call passes its rc and its one stderr line through with
 # nothing on stdout, and a read served from a deprecated root keeps its notice on stderr.
+# An answer line that cannot be written whole (a full disk under the caller's answer file)
+# refuses rc 2 ERR_STORAGE_WRITE with one line, so a caller never reads a short answer.
 # The scratch is <targets>.ans and <targets>.err, beside the caller's file.
 store_get_into() {
   sgi_t=$1
@@ -256,13 +267,13 @@ store_get_into() {
     sgi_rc=$?
     if [ "$sgi_rc" -eq 0 ]; then
       cat "$sgi_t.err" >&2
-      printf '1\t%s\n' "$1"
-      return 0
+      store_lib_answer 1 "$1"
+      return
     fi
     rm -f "$sgi_p"
     if [ "$sgi_rc" -eq 1 ] && [ "$(cat "$sgi_t.err")" = "store.get: error: key '$1' not found in namespace '$sgi_ns' (ERR_ENTITY_NOT_FOUND)" ]; then
-      printf '0\t%s\n' "$1"
-      return 0
+      store_lib_answer 0 "$1"
+      return
     fi
     cat "$sgi_t.err" >&2
     return "$sgi_rc"
@@ -790,7 +801,7 @@ fields_apply() {
     return 1
   fi
   fa_tmp="$4.fields.$$"
-  : > "$fa_tmp" 2>/dev/null || {
+  { true > "$fa_tmp"; } 2>/dev/null || {
     printf 'fields.apply: error: cannot write the new record (ERR_STORAGE_WRITE)\n' >&2
     return 2
   }
@@ -856,7 +867,7 @@ fields_own_into() {
     printf '%s: error: the storage core data reader is not installed (ERR_DRIVER_NOT_FOUND)\n' "$foi_l" >&2
     return 2
   }
-  { : > "$foi_d.ans" && : > "$foi_d.err"; } 2>/dev/null || {
+  { true > "$foi_d.ans" && true > "$foi_d.err"; } 2>/dev/null || {
     rm -f "$foi_d.ans" "$foi_d.err"
     printf '%s: error: cannot write the declaration file (ERR_STORAGE_WRITE)\n' "$foi_l" >&2
     return 2

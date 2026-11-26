@@ -1,21 +1,18 @@
-import { appendFileSync, cpSync, existsSync, statSync } from 'node:fs';
+import { appendFileSync, cpSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ROOT } from '../support/root';
 import { sandbox } from '../support/sandbox';
-import { kids, text, walk } from './walk';
+import { between, CONDITION, logical, QUOTED, roots, TICK } from './shell-lines';
+import { text } from './walk';
 
 // A call is the encoder at a command position, after any assignment words and a command, env, or
 // shell word. It reads its status as a direct command or the whole right side of an assignment
 // with a || after it and nothing between but redirections, the substitution's or a group's close,
 // and further && members, or as the condition of an if or a loop before its then or do; inside
 // another command's argument or in backticks never.
-const TICK = '`';
 const POSITION = String.raw`(?:^|;|&&|\|\||\||\$\(|${TICK}|(?<!\$)\((?!\()|(?<!\$)\{(?=\s)|!(?=\s)|\b(?:then|do|else|exec|if|while|until)\b)\s*(?:(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s;|&()"'${TICK}])*|command|env|sh|dash|bash)\s+)*`;
 const ASSIGNED = /(?:^|;|&&|\|\||(?<!\$)\(|(?<!\$)\{\s|!\s|\b(?:then|do|else|if|while|until)\s)\s*[A-Za-z_][A-Za-z0-9_]*=$/;
-const CONDITION = /^\s*(?:if|while|until|!)\s/;
-const COMMENT = /^[ \t]*(#|\/\/)/;
-const QUOTED = /'[^']*'|"(?:[^"\\]|\\.)*"/g;
 
 const UNIT = 'base/.contexture/modules/unit';
 const STORE = 'base/.contexture/modules/store/scripts/store';
@@ -31,32 +28,6 @@ const ALLOW: readonly [file: string, line: string, why: string][] = [
 const allowed = new Set(ALLOW.map(([file, line]) => `${file}\n${line}`));
 
 type Call = { file: string; line: string; at: number; verdict: 'read' | 'listed' | 'embedded' | 'unread' };
-
-function roots(root: string): string[] {
-  const plugins = kids(join(root, 'plugins'));
-  const files = [
-    ...walk(join(root, 'base/.contexture')),
-    ...plugins.flatMap((p) => [...walk(join(p, '.contexture')), ...walk(join(p, 'hooks'))]),
-    ...(existsSync(join(root, 'install.sh')) && statSync(join(root, 'install.sh')).isFile() ? [join(root, 'install.sh')] : []),
-  ];
-  return files.filter((f) => !f.endsWith('.md'));
-}
-
-function logical(body: string): { first: string; at: number; text: string }[] {
-  const out: { first: string; at: number; text: string }[] = [];
-  let open: { first: string; at: number; text: string } | null = null;
-  body.split('\n').forEach((line, i) => {
-    if (!open && COMMENT.test(line)) return;
-    if (open) open.text += ` ${line.replace(/\\$/, '')}`;
-    else open = { first: line, at: i + 1, text: line.replace(/\\$/, '') };
-    if (!/\\$/.test(line)) {
-      out.push(open);
-      open = null;
-    }
-  });
-  if (open) out.push(open);
-  return out;
-}
 
 function encoderNames(lines: readonly string[]): string[] {
   const names = new Set<string>();
@@ -84,13 +55,6 @@ function openSubstitution(s: string, at: number): number {
   }
   for (let i = stack.length - 1; i >= 0; i--) if (stack[i]! >= 0) return stack[i]!;
   return -1;
-}
-
-// the text between a call and what reads its status holds no list separator but a group's close,
-// no pipe, no background, and no backtick
-function between(t: string): boolean {
-  const bare = t.replace(QUOTED, '""').replace(/[0-9]*(?:[<>]&[0-9-]+|&>)/g, ' ').replace(/;\s*\}/g, ' }').replace(/&&/g, ' ');
-  return !new RegExp(`[;|&${TICK}]`).test(bare);
 }
 
 function verdict(s: string, at: number, end: number): 'read' | 'embedded' | 'unread' {

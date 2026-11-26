@@ -393,6 +393,23 @@ them at once, the `od` ending on its pipe. No driver keeps a
 change log: a module's delta is its own (the docs module's is git), and `store.changes` is
 an unknown function rc 2.
 
+A guarded scratch write empties its file with `true` (or `printf ''`) in a group whose
+stderr goes to `/dev/null`, never with a special builtin such as `:`: a special builtin whose
+own redirect cannot open its file ends a dash shell then and there, so the `||` after it never
+prints its refusal line (bash goes on), and a shell reports a failing redirect before a
+trailing `2>/dev/null` applies, so the group carries the silence. The drivers' `scratch_new`,
+the unit data script's `u_new`, the store module's `scr_new`, the configuration writer, the
+driver run's configuration save, the move engine, the codec, the field validator, and the
+behavior test's fixtures all take that form. The governance special builtin guard census
+(`tests/governance/builtin-guards.test.ts`) holds the shipped shell to it: a special builtin's
+own file redirect (a device or a descriptor dup left out) read by a `||` or `&&` with nothing
+between but redirections, a group's close, and further `&&` members, or as the condition of
+an `if`, `elif`, or loop before its `then` or `do`, reads red, a subshell's or a
+substitution's close between them standing (dash ends only the subshell, and the parent reads
+it); the configuration library's two `exec < "$CTX_PACKAGE_TTY" || exit 2` lines inside the
+asking subshells stand on an exact allow list, since dash's own exit there gives the answer
+their silent guard gives.
+
 Search answers one shape on every driver: `{"namespace","query","mode","total_matches",
 "results":[{"key","entity_type","entity_id","section","snippet","score"}]}`. `exact` is
 the record rule over the raw stored value: a line matches when the query is a substring of
@@ -872,7 +889,10 @@ is reached only through that module's `ctx` verbs (`get`, `search`). The library
   holds one `<key><TAB><path>` line per key in the asked order; one `store.get` call answers
   every key (the one key form for a single key), each present value lands in its path byte
   for byte through `store-pack unpack`, and one `1<TAB><key>` or `0<TAB><key>` line per key
-  prints on stdout; a refused call passes its rc and its one line through;
+  prints on stdout; a refused call passes its rc and its one line through; an answer line it
+  cannot write (a full disk under the caller's answer file) refuses rc 2 `ERR_STORAGE_WRITE`
+  with one line (`store.get: error: cannot write the answer`, or the codec's `store-pack:
+  error: cannot write the answer` for two or more keys), never rc 0 with a short answer;
 - `store_promote <prefix>`, the optional promotion (ask `store_has
   store.promote` first);
 - `store_require <capability>...` and `store_has <capability>`;

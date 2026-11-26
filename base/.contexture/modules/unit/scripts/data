@@ -100,13 +100,15 @@ u_store_refuse() {
 # u_new <file>...: each of this run's scratch files made empty; u_put <file> <format>
 # [<args>...]: one printf appended to such a file. Both are silent (a shell reports a
 # failing redirect before a trailing 2>/dev/null applies, so the group carries it) and
-# refuse rc 2 ERR_STORAGE_WRITE when the write fails. A command whose own stderr may carry
-# a refusal writes into a file u_new made, so its status, never a failing redirect (which
-# answers 1 and would read as absent), decides: a lost line would let a write read an
-# artifact as absent, a unit as new, or commit part of its artifacts
+# refuse rc 2 ERR_STORAGE_WRITE when the write fails; a file is emptied by true, never by
+# the special builtin colon, whose failing redirect ends a dash shell with no refusal line.
+# A command whose own stderr may carry a refusal writes into a file u_new made, so its
+# status, never a failing redirect (which answers 1 and would read as absent), decides: a
+# lost line would let a write read an artifact as absent, a unit as new, or commit part of
+# its artifacts
 u_new() {
   for un_f in "$@"; do
-    { : > "$un_f"; } 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
+    { true > "$un_f"; } 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
   done
 }
 

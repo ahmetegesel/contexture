@@ -124,10 +124,12 @@ scratch() {
 # failing redirect before a trailing 2>/dev/null applies, so the group carries it) and
 # answer nonzero when the write fails, for the caller to refuse rc 2 ERR_STORAGE_WRITE: a
 # lost line would let a batch commit part of its actions, a transaction script end without
-# its COMMIT (sqlite3 then rolls back and exits 0), or a read answer short
+# its COMMIT (sqlite3 then rolls back and exits 0), or a read answer short. A file is emptied
+# by true, never by the special builtin colon, whose failing redirect ends a dash shell before
+# the caller's refusal
 scratch_new() {
   for sw_f in "$@"; do
-    { : > "$sw_f"; } 2>/dev/null || return 1
+    { true > "$sw_f"; } 2>/dev/null || return 1
   done
 }
 
@@ -500,7 +502,7 @@ store_get_many() {
   done
   [ -n "$gm_pack" ] || refuse 2 ERR_STORAGE_READ "the storage core codec is not installed"
   scratch
-  { printf '%s\n' "$@" > "$SCRATCH/keys" && : > "$SCRATCH/present"; } 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  { printf '%s\n' "$@" > "$SCRATCH/keys" && true > "$SCRATCH/present"; } 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   if [ -f "$DB_PATH" ]; then
     db_init
     GM_NS="$gm_ns" GM_DIR="$SCRATCH" LC_ALL=C awk '

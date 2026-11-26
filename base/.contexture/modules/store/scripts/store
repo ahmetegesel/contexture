@@ -28,7 +28,9 @@ die() {
 # scr_new <file>...: each scratch file made empty; scr_put <file> <format> [<args>...]: one
 # printf appended to a scratch file. Every scratch write reads its status, so a write that
 # fails or lands short (a full disk, an unwritable file) refuses rc 2 before any store write
-# instead of handing the store a cut record, declaration, or batch, or a check a cut list:
+# instead of handing the store a cut record, declaration, or batch, or a check a cut list,
+# and a read verb (get, list, search, check) writes all of its scratch before the first byte
+# of its answer, so it refuses with nothing on stdout instead of answering short or in part:
 # each runs in a group whose redirect and command failures read as one with the shell's own
 # line silenced, and a file is emptied by true, never by the special builtin colon, whose
 # failing redirect ends a dash shell with no refusal line
@@ -96,6 +98,7 @@ reframe() {
 
 # lib_or_die <function> [args...]: one library call; a refusal re-framed, its rc the exit
 lib_or_die() {
+  scr_new "$SCR/err"
   "$@" 2> "$SCR/err"
   lod_rc=$?
   [ "$lod_rc" -eq 0 ] && return 0
@@ -356,9 +359,10 @@ compose() {
 
 # effective <stored record> <out>: the record with each absent static default filled at read
 effective() {
-  rec strip ref < "$1" > "$SCR/eff.core"
-  rec keep ref < "$1" > "$SCR/eff.refs"
-  lib_or_die fields_effective "$SCR/d.fields" "$SCR/eff.core" > "$SCR/eff.filled"
+  { rec strip ref < "$1" > "$SCR/eff.core" &&
+    rec keep ref < "$1" > "$SCR/eff.refs"; } 2>/dev/null || scr_fail
+  scr_new "$SCR/eff.filled"
+  lib_or_die fields_effective "$SCR/d.fields" "$SCR/eff.core" > "$SCR/eff.filled" || scr_fail
   compose "$SCR/eff.filled" "$SCR/eff.refs" "$2"
 }
 
@@ -377,18 +381,18 @@ retire_into() {
     cat "$SCR/ri.base" "$SCR/ri.ret" "$1" "$SCR/ri.state" > "$2"; } 2>/dev/null || scr_fail
 }
 
-# read_all <prefix>: every record under the prefix read in one batched get into $SCR/r.<n>,
-# its keys printed in order
+# read_all <prefix> <file>: every record under the prefix read in one batched get into
+# $SCR/r.<n>, each made empty first, its keys written to the file in order
 read_all() {
-  keys "$1" "$SCR/all.keys"
+  keys "$1" "$2"
   scr_new "$SCR/all.targets"
   ra_n=0
   while IFS= read -r ra_k; do
     ra_n=$((ra_n + 1))
-    printf '%s\t%s\n' "$ra_k" "$SCR/r.$ra_n" >> "$SCR/all.targets"
-  done < "$SCR/all.keys"
+    scr_new "$SCR/r.$ra_n"
+    scr_put "$SCR/all.targets" '%s\t%s\n' "$ra_k" "$SCR/r.$ra_n"
+  done < "$2"
   [ "$ra_n" -eq 0 ] || lib_or_die store_get_into "$SCR/all.targets" > /dev/null
-  cat "$SCR/all.keys"
 }
 
 # lvl: the live container names, comma separated, or none
@@ -451,7 +455,7 @@ case "$verb" in
       case "$a" in
         --json) json=1 ;;
         --dropped) dropped=1 ;;
-        --?*=*) lf=${a#--}; printf '%s\t%s\n' "$(store_lib_escape "${lf%%=*}")" "$(store_lib_escape "${lf#*=}")" >> "$SCR/filters" ;;
+        --?*=*) lf=${a#--}; scr_put "$SCR/filters" '%s\t%s\n' "$(store_lib_escape "${lf%%=*}")" "$(store_lib_escape "${lf#*=}")" ;;
         -*) die 1 ERR_INVALID_ARGUMENT "unknown flag '$(store_lib_escape "$a")' (a filter is --<field>=<value>)" ;;
         *) [ -z "$lc" ] || die 1 ERR_INVALID_ARGUMENT 'list takes one container (usage: ctx store list <container> [--<field>=<value>]... [--json])'; lc=$a ;;
       esac
@@ -471,14 +475,18 @@ case "$verb" in
           set\ *) die 1 ERR_INVALID_ARGUMENT "field '$lf': '$lv' is not one of $(filter_check "$lf" "$lv" | sed 's/^set //')" ;;
         esac
       done < "$SCR/filters"
-      read_all "$PC/" > "$SCR/keys"
+      read_all "$PC/" "$SCR/keys"
+      n=0
+      while IFS= read -r k; do
+        n=$((n + 1))
+        effective "$SCR/r.$n" "$SCR/r.$n.eff"
+      done < "$SCR/keys"
       [ "$json" = 1 ] && printf '{"container":"%s","records":[' "$PC"
       first=1
       count=0
       n=0
       while IFS= read -r k; do
         n=$((n + 1))
-        effective "$SCR/r.$n" "$SCR/r.$n.eff"
         REC_FILE=$SCR/filters REC_MODE=match awk -f "$REC_AWK" < "$SCR/r.$n.eff" || continue
         count=$((count + 1))
         id=${k#"$PC"/}
@@ -496,14 +504,7 @@ case "$verb" in
       exit 0
     fi
     [ -s "$SCR/filters" ] && die 1 ERR_INVALID_ARGUMENT 'list containers takes no field filter'
-    keys containers/ "$SCR/keys"
-    scr_new "$SCR/targets"
-    n=0
-    while IFS= read -r k; do
-      n=$((n + 1))
-      printf '%s\t%s\n' "$k" "$SCR/r.$n" >> "$SCR/targets"
-    done < "$SCR/keys"
-    [ "$n" -eq 0 ] || lib_or_die store_get_into "$SCR/targets" > /dev/null
+    read_all containers/ "$SCR/keys"
     first=1
     [ "$json" = 1 ] && printf '{"container":"containers","records":['
     count=0
@@ -666,11 +667,12 @@ case "$verb" in
     case "$sq" in *"
 "*|*"$(printf '\r')"*) die 1 ERR_INVALID_ARGUMENT 'a query holds no newline or carriage return' ;; esac
     case "$s_limit" in ''|*[!0123456789]*|0*) die 1 ERR_INVALID_ARGUMENT "--limit takes a positive whole number, not '$(store_lib_escape "$s_limit")'" ;; esac
-    lib_or_die store_modes > "$SCR/modes"
+    scr_new "$SCR/modes"
+    lib_or_die store_modes > "$SCR/modes" || scr_fail
     if ! cut -f 1 "$SCR/modes" | grep -Fqx -- "$s_mode"; then
       [ -n "${CTX_SEARCH_FANOUT:-}" ] || die 1 ERR_INVALID_ARGUMENT "mode '$(store_lib_escape "$s_mode")' cannot answer the store (it answers: $(cut -f 1 "$SCR/modes" | tr '\n' ' ' | sed 's/ $//; s/ /, /g'))"
     fi
-    read_all containers/ > "$SCR/ckeys"
+    read_all containers/ "$SCR/ckeys"
     live=""
     n=0
     while IFS= read -r k; do
@@ -689,7 +691,8 @@ case "$verb" in
       printf '%s\n' $allow | grep -Fqx -- "$s_narrow" && allow=$s_narrow || allow=""
     done
     if [ -n "$allow" ]; then
-      lib_or_die store_search "$sq" exact 0 > "$SCR/search.json"
+      scr_new "$SCR/search.json" "$SCR/search.flat"
+      lib_or_die store_search "$sq" exact 0 > "$SCR/search.json" || scr_fail
       awk -f "$CORE/json.awk" < "$SCR/search.json" > "$SCR/search.flat" || die 2 ERR_STORAGE_READ 'the storage layer answered a malformed search'
     else
       scr_new "$SCR/search.flat"
@@ -720,8 +723,9 @@ case "$verb" in
         # what the store's own storage holds beyond its records' keys, through the storage
         # layer's read only probe and its one text form: one line per root and kind, rc 1
         # when any prints, nothing and rc 0 when nothing lies beyond the keys
-        lib_or_die store_leftovers < /dev/null > "$SCR/leftovers"
-        lib_or_die store_leftovers_text "$SCR/leftovers" kinds > "$SCR/leftovers.text"
+        scr_new "$SCR/leftovers" "$SCR/leftovers.text"
+        lib_or_die store_leftovers < /dev/null > "$SCR/leftovers" || scr_fail
+        lib_or_die store_leftovers_text "$SCR/leftovers" kinds > "$SCR/leftovers.text" || scr_fail
         cat "$SCR/leftovers.text"
         [ -s "$SCR/leftovers.text" ] && exit 1
         exit 0
@@ -730,8 +734,9 @@ case "$verb" in
       # into a backup stamped for the run, or removed with --delete, the folders it empties
       # removed, under the storage layer's namespace lock (a dry run takes none and writes
       # nothing); one line per root and kind swept, then the closing line, rc 0
+      scr_new "$SCR/sweep"
       # shellcheck disable=SC2086
-      lib_or_die store_sweep $ck_dry $ck_del < /dev/null > "$SCR/sweep"
+      lib_or_die store_sweep $ck_dry $ck_del < /dev/null > "$SCR/sweep" || scr_fail
       lib_or_die store_sweep_text "$SCR/sweep" kinds
       lib_or_die store_sweep_text "$SCR/sweep" close
       exit 0
@@ -741,12 +746,14 @@ case "$verb" in
     split_path "$1"
     [ "$PC" != containers ] || die 1 ERR_INVALID_ARGUMENT 'check reads a declared container; the containers container has its fixed schema'
     live_for_read
-    read_all "$PC/" > "$SCR/keys"
+    read_all "$PC/" "$SCR/keys"
+    scr_new "$SCR/answer"
     bad=0
     n=0
     while IFS= read -r k; do
       n=$((n + 1))
-      rec strip ref < "$SCR/r.$n" > "$SCR/r.$n.core"
+      { rec strip ref < "$SCR/r.$n" > "$SCR/r.$n.core"; } 2>/dev/null || scr_fail
+      scr_new "$SCR/r.$n.check" "$SCR/err"
       fields_conforms "$SCR/d.fields" "$SCR/r.$n.core" > "$SCR/r.$n.check" 2> "$SCR/err"
       ck_rc=$?
       if [ -s "$SCR/err" ]; then
@@ -755,8 +762,9 @@ case "$verb" in
       fi
       [ "$ck_rc" -eq 0 ] && continue
       bad=1
-      sed "s|^|$k: |" "$SCR/r.$n.check"
+      { sed "s|^|$k: |" "$SCR/r.$n.check" >> "$SCR/answer"; } 2>/dev/null || scr_fail
     done < "$SCR/keys"
+    cat "$SCR/answer"
     exit "$bad"
     ;;
   *)

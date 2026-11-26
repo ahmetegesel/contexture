@@ -97,3 +97,60 @@ describe.concurrent('the store writes read the status of their own scratch write
     expect((await store(sb, ['get', 'containers/items'])).stdout).toMatch(/retired: "held"\nretired: "kept"\nstate: "dropped"\n$/);
   });
 });
+
+const READS: readonly [what: string, argv: string[], file: string, start: string][] = [
+  ['a record get whose record without its refs', ['get', 'items/held'], 'eff.core', 'what: "cu'],
+  ['a record get whose ref lines', ['get', 'items/kept'], 'eff.refs', ''],
+  ['a record get whose record with its defaults read in', ['get', 'items/held'], 'eff.filled', 'what: "cu'],
+  ['a record get whose library call error file', ['get', 'items/held'], 'err', 'store.get: error: forged (ERR_ENTITY_NOT_FOUND)\n'],
+  ['a list whose key list', ['list', 'items'], 'keys', 'items/held\n'],
+  ['a list whose first value', ['list', 'items'], 'r.1', 'what: "cu'],
+  ['a list whose second record with its defaults read in', ['list', 'items'], 'r.2.eff', 'what: "cu'],
+  ['a list of the containers whose first value', ['list', 'containers'], 'r.1', 'description: "cu'],
+  ['a search whose mode list', ['search', 'held'], 'modes', 'exact\n'],
+  ['a search whose container key list', ['search', 'held'], 'ckeys', ''],
+  ['a search whose storage layer answer', ['search', 'held'], 'search.json', '{"query":"held","rows":['],
+  ['a search whose flattened answer', ['search', 'held'], 'search.flat', ''],
+  ['a check whose key list', ['check', 'items'], 'keys', ''],
+  ['a check whose record without its refs', ['check', 'items'], 'r.1.core', 'what: "cu'],
+  ['a check whose verdict file', ['check', 'items'], 'r.1.check', ''],
+  ['a check of nonconforming records whose second record without its refs', ['check', 'loose'], 'r.2.core', ''],
+  ['a leftovers check whose probe answer', ['check', '--leftovers'], 'leftovers', ''],
+  ['a leftovers check whose text', ['check', '--leftovers'], 'leftovers.text', ''],
+  ['a leftovers sweep dry run whose report', ['check', '--leftovers', '--sweep', '--dry-run'], 'sweep', ''],
+];
+
+describe.concurrent('the store reads read the status of their own scratch writes: a failing or short write refuses rc 2, one line, no partial answer', () => {
+  let reads: () => string;
+  beforeAll(async () => {
+    reads = await snapshot('store-scratch-reads', async (sb) => {
+      await declare(sb, 'items', 'given', [...FIELDS, 'level: optional line default low']);
+      await store(sb, ['put', 'items/held', '--what=held', '--stdin=note'], 'a note long enough to fill more than one od line\n');
+      await store(sb, ['put', 'items/kept', '--what=kept', '--add-ref=file#./README.md']);
+      await declare(sb, 'loose', 'given', ['what: optional line']);
+      await store(sb, ['put', 'loose/a', '--what=a']);
+      await store(sb, ['put', 'loose/b', '--what=b']);
+      await store(sb, ['set', 'containers/loose', '--add-fields=need: required line']);
+    });
+  });
+
+  it.skipIf(ROOT_USER).for(READS)('[store-r4, store-r6] %s cannot be written whole refuses with nothing on stdout', async ([, argv, file, start]) => {
+    const sb = reads();
+    const before = storeState(sb);
+    const r = await run(sb, ['store', ...argv], { env: cut(file, start) });
+    expect([r.code, r.stdout, r.stderr]).toEqual([2, '', `store ${argv[0]}: error: ${SCRATCH[1]} (${SCRATCH[0]})\n`]);
+    expect(storeState(sb)).toBe(before);
+  });
+
+  it('[store-r4, store-r6] the same reads answer whole with nothing planted', async () => {
+    const sb = reads();
+    expect(await store(sb, ['get', 'items/kept'])).toMatchObject({ code: 0, stdout: 'what: "kept"\nlevel: "low"\nref: "file#./README.md"\n', stderr: '' });
+    const list = await store(sb, ['list', 'items']);
+    expect([list.code, list.stderr]).toEqual([0, '']);
+    expect(list.stdout.split('\n').filter(Boolean).map((l) => l.split(' | ')[0])).toEqual(['held', 'kept']);
+    expect((await store(sb, ['search', 'held'])).stdout).toContain('items/held');
+    expect(await store(sb, ['check', 'items'])).toMatchObject({ code: 0, stdout: '', stderr: '' });
+    expect(await store(sb, ['check', 'loose'])).toMatchObject({ code: 1, stdout: 'loose/a: need: required and absent\nloose/b: need: required and absent\n', stderr: '' });
+    expect(await store(sb, ['check', '--leftovers'])).toMatchObject({ code: 0, stdout: '', stderr: '' });
+  });
+});

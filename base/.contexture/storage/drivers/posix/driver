@@ -129,10 +129,12 @@ refuse() {
 # <format> [<args>...]: one printf appended to such a file. Both are silent (a shell reports a
 # failing redirect before a trailing 2>/dev/null applies, so the group carries it) and
 # answer nonzero when the write fails, for the caller to refuse rc 2 ERR_STORAGE_WRITE: a
-# lost line would let a batch commit part of its actions or a read answer short
+# lost line would let a batch commit part of its actions or a read answer short. A file is
+# emptied by true, never by the special builtin colon, whose failing redirect ends a dash
+# shell before the caller's refusal
 scratch_new() {
   for sw_f in "$@"; do
-    { : > "$sw_f"; } 2>/dev/null || return 1
+    { true > "$sw_f"; } 2>/dev/null || return 1
   done
 }
 
@@ -507,7 +509,7 @@ store_list_root() {
 # at most 32768 bytes, so however many or deep the keys, no call meets the system's
 # argument limit, whose failure would read as folders holding nothing
 store_entries() {
-  : > "$3.d" && : > "$3.f" || return 1
+  scratch_new "$3.d" "$3.f" || return 1
   [ -d "$1" ] && [ ! -h "$1" ] || return 0
   (
     CDPATH="" cd "$1" 2>/dev/null || exit 0
@@ -779,7 +781,7 @@ store_get_many() {
   [ -z "$gm_pre" ] || gm_pre="$gm_pre/"
   { printf '%s\n' "$@" > "$gm_dir/keys" \
       && store_list_asked "$STORE_WS/$SD_ROOT" "$gm_pre" "$gm_dir/keys" "$gm_dir/r" > "$gm_dir/root" \
-      && : > "$gm_dir/fallback"; } 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+      && true > "$gm_dir/fallback"; } 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   if [ -n "$SD_FALLBACK" ]; then
     { store_list_asked "$STORE_WS/$SD_FALLBACK" "$gm_pre" "$gm_dir/keys" "$gm_dir/f" > "$gm_dir/fallback"; } 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   fi
@@ -1084,7 +1086,7 @@ batch_live() {
   if [ -n "$SD_FALLBACK" ]; then
     store_entries "$STORE_WS/$SD_FALLBACK" "$bl_ops" "$bl_st/f" || return 1
   else
-    : > "$bl_st/f.d" && : > "$bl_st/f.f" || return 1
+    scratch_new "$bl_st/f.d" "$bl_st/f.f" || return 1
   fi
   bl_walk=$(BL_LIVE="$SB_LIVE" PX_SUFFIX="$SD_SUFFIX" PX_KEYPAT="$SD_KEYPAT" LC_ALL=C awk "$KR$PX_KEY"'
     function entry(l,   r, i) {

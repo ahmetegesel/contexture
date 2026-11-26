@@ -17,7 +17,8 @@
 #   store-pack unpack <answer> <targets>
 #     targets lines are <key><TAB><path> in the asked order; each present value lands in its
 #     path byte for byte, and one line per key prints: 1<TAB><key> or 0<TAB><key>. An answer
-#     that does not carry exactly the asked keys refuses rc 2.
+#     that does not carry exactly the asked keys refuses rc 2, and so do lines that cannot be
+#     printed whole (cannot write the answer, ERR_STORAGE_WRITE).
 #
 # The value string escapes the backslash, the double quote, the tab, the carriage return,
 # and the newline between lines, every other byte below 0x20 as \u00XX; bytes from 0x80
@@ -103,7 +104,7 @@ sp_pack() {
   [ $# -eq 2 ] || sp_fail 1 "pack takes the namespace and the manifest" ERR_INVALID_ARGUMENT
   pk_ns=$1; pk_man=$2
   [ -f "$pk_man" ] || sp_fail 2 "cannot read the manifest" ERR_STORAGE_READ
-  { : > "$pk_man.sizes" && : > "$pk_man.nul" && : > "$pk_man.b64"; } 2>/dev/null || sp_fail 2 "cannot write the codec's scratch" ERR_STORAGE_WRITE
+  { true > "$pk_man.sizes" && true > "$pk_man.nul" && true > "$pk_man.b64"; } 2>/dev/null || sp_fail 2 "cannot write the codec's scratch" ERR_STORAGE_WRITE
   SP_KEPT=0
   pk_run=""; pk_len=0; pk_n=0
   while IFS='	' read -r pk_k pk_p; do
@@ -178,7 +179,7 @@ sp_unpack() {
   [ $# -eq 2 ] || sp_fail 1 "unpack takes the answer and the targets" ERR_INVALID_ARGUMENT
   up_ans=$1; up_t=$2
   [ -f "$up_ans" ] && [ -f "$up_t" ] || sp_fail 2 "cannot read the answer or the targets" ERR_STORAGE_READ
-  : > "$up_t.b64" 2>/dev/null || sp_fail 2 "cannot write the codec's scratch" ERR_STORAGE_WRITE
+  { true > "$up_t.b64"; } 2>/dev/null || sp_fail 2 "cannot write the codec's scratch" ERR_STORAGE_WRITE
   UP_B64="$up_t.b64" awk -F '\t' "$SP_LIB"'
     BEGIN { ctl_init() }
     FILENAME == ARGV[1] { NT++; TK[NT] = $1; TP[NT] = substr($0, length($1) + 2); next }
@@ -235,7 +236,7 @@ sp_unpack() {
       printf '%s' "$up_v" | base64 "$up_flag" > "$up_p" 2>/dev/null || { rm -f "$up_t.b64" "$up_t.status"; sp_fail 2 "cannot write the batched values" ERR_STORAGE_WRITE; }
     done < "$up_t.b64"
   fi
-  cat "$up_t.status"
+  { cat "$up_t.status"; } 2>/dev/null || { rm -f "$up_t.b64" "$up_t.status"; sp_fail 2 "cannot write the answer" ERR_STORAGE_WRITE; }
   rm -f "$up_t.b64" "$up_t.status"
 }
 

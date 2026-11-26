@@ -531,7 +531,7 @@ cfg_write_locked() {
     fi
 
     cwl_tmp="$cwl_ctx/config.tmp.$cwl_pid"
-    : > "$cwl_tmp" 2>/dev/null || {
+    { true > "$cwl_tmp"; } 2>/dev/null || {
       cwl_tmp=""
       printf 'config: error: cannot stage the workspace configuration (ERR_STORAGE_WRITE)\n' >&2
       exit 2
@@ -2286,7 +2286,7 @@ dl_conf_save() {
   if [ -f "$DL_CONF" ]; then
     cp -p "$DL_CONF" "$DL_RUN/config.saved" 2>/dev/null || return 2
   fi
-  : > "$DL_RUN/config.keys" || return 2
+  { true > "$DL_RUN/config.keys"; } 2>/dev/null || return 2
   DL_CONF_SAVED=1
   dl_conf_mark
 }
