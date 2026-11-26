@@ -208,6 +208,38 @@ describe.concurrent('a driver package install: a hangup or termination during a 
   });
 });
 
+describe.concurrent('a driver package install past its check, and under the engine', () => {
+  it('[the-engine-r17, the-engine-r22] past the check a failing package install hook only warns: rc 0, the package line written, and ctx package list reads no drift', SLOW, async () => {
+    const sb = sandbox();
+    await seed(sb);
+    const p = twinPkg(sb);
+    put(join(p, 'hooks/install'), '#!/bin/sh\necho "the twin package install hook fails" >&2\nexit 1\n', 0o755);
+    const r = await install(sb, p, '--delete-old');
+    expect(r.code, r.stderr).toBe(0);
+    expect(r.stderr).toContain("package-install: warning: the 'twin-pkg' package's install hook failed (rc 1); the record already reads from the 'twin' driver, so the install stands: install twin-pkg again to run the hook\n");
+    expect(r.stdout).toMatch(/; the record reads from the 'twin' driver\n$/);
+    expect(conf(sb)).toMatch(/^package\.twin-pkg: /m);
+    const list = await ctx(sb, ['package', 'list']);
+    expect(list.stdout).toMatch(/^package list: 1 declared, 1 installed, 0 drift$/m);
+  });
+
+  it('[the-engine-r17, the-engine-r22] a termination sent to the engine alone reaches the installer, which unwinds before the engine exits 143, leaving no process', SLOW, async () => {
+    const sb = sandbox();
+    await seed(sb);
+    const p = twinPkg(sb);
+    seam(sb, 'slow-batch');
+    const before = tree(sb);
+    const run = launch('./.contexture/ctx', ['package', 'install', p, '--backup-old'], { cwd: sb, input: null, timeout: 600_000 });
+    const held = await waitFor(join(sb, '.contexture/tmp/twin-batch.pid'));
+    run.signal('SIGTERM');
+    const r = await run.result;
+    expect(r.code, r.stderr).toBe(143);
+    expect(r.stderr).toContain('package-install: stopped by a signal during the copy');
+    expect(alive(held)).toBe(false);
+    await unchanged(sb, before);
+  });
+});
+
 describe.concurrent('a driver package uninstall moves the record back into posix', () => {
   it('[the-engine-r17, the-engine-r22] the configured driver\'s record moves back byte equal, its storage backed up by the finish hook into the run\'s backup, its setting and driver line gone', SLOW, async () => {
     const sb = sandbox();
@@ -401,6 +433,33 @@ describe.concurrent('crash recovery from the move state', () => {
     expect(await keys(sb, 'posix', 'unit')).toEqual([]);
     expect(runs(sb)).toEqual([]);
     expect(await moveState(sb)).toBe('free');
+  });
+
+  it('[the-engine-r17, the-engine-r-mvf01] a crash during the check whose check no longer passes at the next run, the driver having taken a write, is rolled forward from a fresh posix scan into the stopped run\'s backup, kept whatever the answer, and the uninstall then moves the record back', SLOW, async () => {
+    const sb = sandbox();
+    await seed(sb);
+    const p = twinPkg(sb);
+    seam(sb, 'slow-check');
+    const run = launch('sh', ['.contexture/package-install', p], { cwd: sb, input: null, group: true, env: { CTX_ROOT: sb, CTX_PACKAGE_OLD: 'delete' }, timeout: 600_000 });
+    await waitFor(join(sb, '.contexture/tmp/twin-scan.pid'));
+    run.signal('SIGKILL');
+    await run.result;
+    rmSync(join(sb, '.contexture/twin-seams'), { recursive: true });
+    const oldCopy = await scan(sb, 'posix', 'unit');
+    expect((await ctx(sb, ['unit', 'record', 'demo', '--what=written after the crash'])).code).toBe(0);
+    const again = await install(sb, p, '--delete-old');
+    expect(again.code, again.stderr).toBe(0);
+    const stamp = /^package-install: warning: a run of 'twin-pkg' stopped after its switch, and its check run again no longer passes \(.*\), so the 'twin' driver took writes after the stop: the old posix copy was saved from a fresh scan of posix into the backup stamped ([0-9]{8}-[0-9]{6}-[0-9]+), kept whatever the answer, then retired$/m.exec(again.stderr)?.[1];
+    expect(stamp, again.stderr).toBeDefined();
+    expect(again.stdout).toMatch(/^package-install: finished what a stopped run of 'twin-pkg' left after its verify: retired 4 keys in \d+ namespaces, backup stamped [0-9-]+; the driver's finish ran\n/m);
+    expect(readFileSync(join(sb, `.contexture/backups/move-${stamp}/unit/scan`), 'utf8')).toBe(oldCopy);
+    expect(await keys(sb, 'posix', 'unit')).toEqual([]);
+    expect(runs(sb)).toEqual([]);
+    expect(await moveState(sb)).toBe('free');
+    const twinScan = await scan(sb, 'twin', 'unit');
+    const back = await uninstall(sb, 'twin-pkg', '--delete-old');
+    expect(back.code, back.stderr).toBe(0);
+    expect(await scan(sb, 'posix', 'unit')).toBe(twinScan);
   });
 
   it.each([

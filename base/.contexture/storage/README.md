@@ -551,7 +551,7 @@ store-move preflight <source> <target>      every check, nothing written
 store-move copy <source> <target>           the preflight, then the copy and its verify per namespace
 store-move check <source>                   after the storage.driver switch: the source against the configured driver
 store-move unwind <target>                  deletes the keys this run wrote that the target still lists
-store-move retire <source> <backup|delete>  after a passed check: the old copy backed up or not, then deleted
+store-move retire <source> <backup|delete> [<stamp>] [--rescan]  after a passed check: the old copy backed up or not, then deleted
 ```
 
 Every command first refuses rc 1 `ERR_INVALID_ARGUMENT` while a `CTX_STORAGE_` variable
@@ -610,7 +610,12 @@ the backup may already hold the run's other parts, such as a format change's
 `@<driver>/` folder of the driver's own storage, and a rerun in the same run folder writes
 the namespace folders again; without it the retire makes a fresh stamp), then deletes the keys each dump names through `store-clear keys --driver=<source>` (delete
 only batches, which pass the freeze toward the source with the token) and requires
-`store-clear count` to read 0. The output names the backup by its stamp alone. A saved dump
+`store-clear count` to read 0. A trailing `--rescan`, with `backup` alone, serves a run
+whose check can no longer pass because the configured driver took writes after a crash:
+it needs only the run's copy from the source, takes the source's fresh scans in place of
+the check's dumps, and reuses a namespace's `scan` the stamp's backup already holds, so a
+rerun after a stopped retire never replaces the old copy's backup with what that retire
+left. The output names the backup by its stamp alone. A saved dump
 restores by one batch of puts built from it as the copy builds its payload:
 
 ```sh

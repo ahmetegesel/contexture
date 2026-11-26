@@ -25,12 +25,16 @@
 #   store-move unwind <target>
 #       deletes the keys this run wrote that the target still lists; refused once the run
 #       holds a passed check, since the configured driver then holds the record
-#   store-move retire <source> <backup|delete> [<stamp>]
+#   store-move retire <source> <backup|delete> [<stamp>] [--rescan]
 #       after a passed check: the check's source dumps saved into a stamped move backup on
 #       backup, then the records the dumps name deleted from the source; a given stamp
 #       (YYYYmmdd-HHMMSS-<pid>, the caller's run stamp) names the backup, which may already
 #       hold the run's other parts and is written again on a rerun, so one run keeps one
-#       backup and a retire that stopped finishes when run again in the same run folder
+#       backup and a retire that stopped finishes when run again in the same run folder;
+#       --rescan (backup only) serves a run whose check can no longer pass, the configured
+#       driver having taken writes since: the source's fresh scans stand in for the check's
+#       dumps, a namespace whose scan the stamp's backup already holds taking that scan, so
+#       a rerun never replaces the old copy's backup by what a stopped retire left
 #
 # Output: one line per namespace on stdout and one summary line. A refusal is one stderr
 # line, store-move <command>: error: <message> (<CODE>), with the keys, counts, or the
@@ -57,6 +61,7 @@ SM_SRC=""
 SM_DST=""
 SM_ANSWER=""
 SM_STAMP=""
+SM_RESCAN=0
 
 sm_clean() {
   [ -z "$SM_WORK" ] || rm -rf "$SM_WORK"
@@ -113,7 +118,11 @@ case "$SM_CMD" in
   retire)
     shift
     SM_LABEL="store-move retire"
-    [ $# -eq 2 ] || [ $# -eq 3 ] || sm_args "<source> <backup|delete> [<stamp>]"
+    case "$#:${3:-}:${4:-}" in
+      3:--rescan:) SM_RESCAN=1; set -- "$1" "$2" ;;
+      4:*:--rescan) SM_RESCAN=1; set -- "$1" "$2" "$3" ;;
+    esac
+    [ $# -eq 2 ] || [ $# -eq 3 ] || sm_args "<source> <backup|delete> [<stamp>] [--rescan]"
     SM_SRC=$1
     SM_ANSWER=$2
     SM_STAMP=${3:-}
@@ -121,6 +130,8 @@ case "$SM_CMD" in
       backup|delete) ;;
       *) sm_refuse 1 ERR_INVALID_ARGUMENT "the answer is backup or delete, not '$SM_ANSWER'" ;;
     esac
+    [ "$SM_RESCAN" -eq 0 ] || [ "$SM_ANSWER" = backup ] \
+      || sm_refuse 1 ERR_INVALID_ARGUMENT "--rescan retires a source no passed check covers, so it keeps a backup: the answer is backup"
     if [ $# -eq 3 ]; then
       case "$SM_STAMP" in
         [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]-[1-9]*)
@@ -684,11 +695,29 @@ sm_unwind() {
 
 sm_retire() {
   sm_driver "$SM_SRC"
-  [ "$(sm_state checked)" = "$SM_SRC" ] \
-    || sm_refuse 1 ERR_INVALID_ARGUMENT "this run holds no passed check of the source '$SM_SRC'; run store-move check first"
+  if [ "$SM_RESCAN" -eq 1 ]; then
+    [ "$(sm_state move | cut -f 1)" = "$SM_SRC" ] \
+      || sm_refuse 1 ERR_INVALID_ARGUMENT "this run holds no copy from '$SM_SRC'; run store-move copy in the same run first"
+  else
+    [ "$(sm_state checked)" = "$SM_SRC" ] \
+      || sm_refuse 1 ERR_INVALID_ARGUMENT "this run holds no passed check of the source '$SM_SRC'; run store-move check first"
+  fi
   ! sm_configured "$SM_SRC" \
     || sm_refuse 1 ERR_INVALID_ARGUMENT "the configured driver is still the source '$SM_SRC', so its records stay"
   sm_namespaces
+  if [ "$SM_RESCAN" -eq 1 ]; then
+    rm -f "$SM_RUN"/checked.* "$SM_RUN/checked"
+    while IFS= read -r ns; do
+      [ -n "$ns" ] || continue
+      if [ -n "$SM_STAMP" ] && [ -f "$SM_WS/.contexture/backups/move-$SM_STAMP/$ns/scan" ]; then
+        cp "$SM_WS/.contexture/backups/move-$SM_STAMP/$ns/scan" "$SM_RUN/checked.$ns" \
+          || sm_refuse 2 ERR_STORAGE_WRITE "the move's scratch folder cannot be written"
+      else
+        sm_call /dev/null "$SM_RUN/checked.$ns" "$SM_SRC" store.scan "$ns" \
+          || sm_relay $? "$SM_WORK/err" ERR_STORAGE_READ "the source's namespace '$ns' cannot be scanned"
+      fi
+    done < "$SM_WORK/ns"
+  fi
   while IFS= read -r ns; do
     [ -n "$ns" ] || continue
     [ -f "$SM_RUN/checked.$ns" ] \

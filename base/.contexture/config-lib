@@ -2428,7 +2428,9 @@ dl_stale() {
 # dl_kept: each stopped run's folder (its pid gone): an unfinished check, old copy step, or
 # finish of a move into the configured driver is finished under a freeze, with this run's
 # answer and the stopped run's stamp, a check the stop cut short run again in the stopped
-# run's folder before its old copy step; any other such folder is removed
+# run's folder before its old copy step; when it no longer passes (the driver took writes
+# after the stop), posix is retired from a fresh scan of itself into the stamped backup,
+# kept whatever the answer, with a warning; any other such folder is removed
 dl_kept() {
   for dlk_d in "$DL_WS"/.contexture/tmp/driver-run.*; do
     [ -d "$dlk_d" ] || continue
@@ -2453,23 +2455,29 @@ dl_kept_finish() {
     dl_count posix "$DL_SCR/kept.counts" || { dl_err "the namespaces cannot be listed, so a stopped run's old copy step cannot be finished"; return 2; }
     dl_ask "$DL_SCR/kept.counts" "a stopped run of '$dkf_pkg' left the old posix copy of the record it moved into '$dkf_drv'" || return $?
     dl_take posix "$dkf_drv" || { dl_err "a stopped run's old copy step cannot be finished: the freeze cannot be taken ($(dl_first "$DL_SCR/take.err"))"; return 2; }
+    dkf_why=""
     if grep -qx check "$1/pending"; then
-      if ! dl_move "$1/in" check posix; then
-        dl_release
-        dl_err "a run of '$dkf_pkg' stopped after its switch, before its check passed, and the check run again does not pass ($(dl_first "$DL_SCR/move.err")), so its old posix copy stays; its run state stays for the next driver package run"
-        return 2
+      if dl_move "$1/in" check posix; then
+        grep -vx check "$1/pending" > "$1/pending.new"; mv -f "$1/pending.new" "$1/pending"
+        dkf_said="its check passed again"
+      else
+        dkf_why=$(dl_first "$DL_SCR/move.err")
       fi
-      grep -vx check "$1/pending" > "$1/pending.new"; mv -f "$1/pending.new" "$1/pending"
-      dkf_said="its check passed again"
     fi
-    if ! dl_move "$1/in" retire posix "${DL_ANSWER:-backup}" "$dkf_stamp"; then
+    if [ -n "$dkf_why" ]; then
+      dl_move "$1/in" retire posix backup "$dkf_stamp" --rescan
+    else
+      dl_move "$1/in" retire posix "${DL_ANSWER:-backup}" "$dkf_stamp"
+    fi || {
       dl_release
       dl_err "a stopped run's old copy step cannot be finished ($(dl_first "$DL_SCR/move.err")); its run state stays for the next driver package run"
       return 2
-    fi
+    }
     dl_release
     dkf_said="${dkf_said:+$dkf_said; }$(sed -n '$p' "$DL_SCR/move.out")"
-    grep -vx retire "$1/pending" > "$1/pending.new"; mv -f "$1/pending.new" "$1/pending"
+    grep -vx -e check -e retire "$1/pending" > "$1/pending.new"; mv -f "$1/pending.new" "$1/pending"
+    [ -z "$dkf_why" ] \
+      || dl_err "warning: a run of '$dkf_pkg' stopped after its switch, and its check run again no longer passes ($dkf_why), so the '$dkf_drv' driver took writes after the stop: the old posix copy was saved from a fresh scan of posix into the backup stamped $dkf_stamp, kept whatever the answer, then retired"
   fi
   if grep -qx finish "$1/pending"; then
     dl_hook "$DL_WS/.contexture/extensions/storage/drivers/$dkf_drv" finish "$dkf_ver" in || {

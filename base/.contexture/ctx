@@ -1821,7 +1821,7 @@ bare: ctx package install with no package installs every package the workspace c
 an install writes its package.<name> line (the source as given, a path inside the workspace relative to its root, and every alias the record holds), and an uninstall removes it
 --as=<module>=<alias> (repeatable, one per module): installs that module of the package under the alias, its folder, laws, lifecycle scripts, namespace, and storage root taking the alias (a root its data file declares applies only under its own name), recorded so a re-install without the flag keeps it; a module name, or a storage root another installed module resolves to, that collides refuses naming --as, and the installer never picks a name itself
 an install runs only on the human's explicit go at the act; this verb checks no go: the gate binds the act, never the doorway
-exit codes: 0 installed or updated (for a driver package the move verified; an old copy step or driver finish that then fails only warns, naming how to finish it); 1 a refusal (a usage error, a malformed name, no such package, a collision, a missing answer); 2 an environment or I/O failure (a missing installer, a read-only extension root, a failed lifecycle action or recompose, a driver run that failed and was unwound); 129, 130, 143 a driver run stopped by a hangup, interrupt, or termination and unwound
+exit codes: 0 installed or updated (for a driver package the move verified; an old copy step, driver finish, package install hook, or recompose that then fails only warns, naming how to finish it); 1 a refusal (a usage error, a malformed name, no such package, a collision, a missing answer); 2 an environment or I/O failure (a missing installer, a read-only extension root, a failed lifecycle action or recompose, a driver run that failed and was unwound); 129, 130, 143 a driver run stopped by a hangup, interrupt, or termination and unwound (one the engine receives is relayed to the run, whose unwind it waits for)
 EOF
       ;;
     uninstall)
@@ -1834,7 +1834,7 @@ the data answer: a module of the package that declares data and holds a key need
 --keep-data, --delete-data: the answer given ahead; with neither, a terminal is asked once, and a run with no terminal (an agent's, or any run under ctx run) refuses naming each namespace with its key count and both flags, so the agent relays the question to the human and never picks one; either flag on a package holding no data changes nothing
 kept data whose package is not installed: --delete-data deletes it by the package's name, --keep-data leaves it; ctx package list names each kept namespace
 an uninstall runs only on the human's explicit go at the act; this verb checks no go: the gate binds the act, never the doorway
-exit codes: 0 removed; 1 a refusal (a usage error, a malformed name, a package not installed, both data flags, both old copy flags, no answer); 2 an environment or I/O failure (a missing uninstaller, a read-only root, a failed lifecycle action, delete, or recompose, a driver's move back that failed and was unwound, or a driver finish that failed after the move, the package then kept installed and not configured); 129, 130, 143 a driver run stopped by a hangup, interrupt, or termination and unwound
+exit codes: 0 removed; 1 a refusal (a usage error, a malformed name, a package not installed, both data flags, both old copy flags, no answer); 2 an environment or I/O failure (a missing uninstaller, a read-only root, a failed lifecycle action, delete, or recompose, a driver's move back that failed and was unwound, or a driver finish that failed after the move, the package then kept installed and not configured); 129, 130, 143 a driver run stopped by a hangup, interrupt, or termination and unwound (one the engine receives is relayed to the run, whose unwind it waits for)
 EOF
       ;;
     list)
@@ -2035,16 +2035,61 @@ package_run_probe() {
 # CTX_PACKAGE_OLD and an install the driver settings (one <key>=<value> line per
 # --driver-config) as CTX_PACKAGE_DRIVER_CONFIG
 package_run() {
+  ( package_run_exec "$@" )
+}
+
+# package_run_exec: package_run's body, which replaces the process it runs in by the script
+package_run_exec() {
   pr_old=${pk_old:-}
   pr_old=${pr_old#--}
-  ( cd "$root" || exit 2
-    CTX_ROOT=$root
-    CTX_PACKAGE_AS=$3
-    CTX_PACKAGE_DATA=${4:-}
-    CTX_PACKAGE_OLD=${pr_old%-old}
-    CTX_PACKAGE_DRIVER_CONFIG=${pk_dcfg:-}
-    export CTX_ROOT CTX_PACKAGE_AS CTX_PACKAGE_DATA CTX_PACKAGE_OLD CTX_PACKAGE_DRIVER_CONFIG
-    exec sh "$dir/package-$1" "$2" )
+  cd "$root" || exit 2
+  CTX_ROOT=$root
+  CTX_PACKAGE_AS=$3
+  CTX_PACKAGE_DATA=${4:-}
+  CTX_PACKAGE_OLD=${pr_old%-old}
+  CTX_PACKAGE_DRIVER_CONFIG=${pk_dcfg:-}
+  export CTX_ROOT CTX_PACKAGE_AS CTX_PACKAGE_DATA CTX_PACKAGE_OLD CTX_PACKAGE_DRIVER_CONFIG
+  exec sh "$dir/package-$1" "$2"
+}
+
+# package_is_driver <install|uninstall> <package root or name>: rc 0 when the run moves a
+# record: an install's manifest declares kind driver, an uninstall's install record does
+package_is_driver() {
+  if [ "$1" = install ]; then
+    [ -f "$2/manifest" ] && package_file_parse "$2/manifest" 2>/dev/null && [ "$pf_kind" = driver ]
+  else
+    awk '$1 == "kind" && NF == 2 { k = $2; exit } END { exit(k == "driver" ? 0 : 1) }' "$dir/extensions/.state/${2##*/}.files" 2>/dev/null
+  fi
+}
+
+# package_exec <install|uninstall> <package root or name> <as pairs> [<data answer>]:
+# package_run, held for a driver package's run: the script runs in the background with the
+# engine's stdin, a hangup, interrupt, or termination of the engine is relayed to it as TERM
+# (a background child ignores an interrupt), and the engine waits for its unwind and exits
+# 129, 130, or 143 itself; a feature package's script runs in the foreground, as before
+package_exec() {
+  package_is_driver "$1" "$2" || { package_run "$@"; return; }
+  pe_sig=""
+  pe_new=0
+  trap 'pe_sig=129; pe_new=1' HUP
+  trap 'pe_sig=130; pe_new=1' INT
+  trap 'pe_sig=143; pe_new=1' TERM
+  exec 9<&0
+  package_run_exec "$@" <&9 9<&- &
+  pe_pid=$!
+  exec 9<&-
+  pe_rc=0
+  while kill -0 "$pe_pid" 2>/dev/null; do
+    if [ "$pe_new" -eq 1 ]; then
+      pe_new=0
+      kill -TERM "$pe_pid" 2>/dev/null
+    fi
+    wait "$pe_pid"
+    pe_rc=$?
+  done
+  trap - HUP INT TERM
+  [ -z "$pe_sig" ] || exit "$pe_sig"
+  return "$pe_rc"
 }
 
 # package_declared_install: the bare install, every declared package not yet installed, each
@@ -2104,7 +2149,7 @@ EOF
   pdi_tab=$(printf '\t')
   while IFS="$pdi_tab" read -r pdi_name pdi_root pdi_as; do
     [ -n "$pdi_name" ] || continue
-    package_run install "$pdi_root" "$pdi_as"
+    package_exec install "$pdi_root" "$pdi_as"
     pdi_rc=$?
     if [ "$pdi_rc" -ne 0 ]; then
       ctx_err "package install: the declared package '$pdi_name' did not install (rc $pdi_rc); the packages before it stay installed"
@@ -2781,7 +2826,7 @@ package_builtin() {
   pk_was=0
   [ -f "$dir/extensions/.state/$pk_name.files" ] && pk_was=1
   pk_data=${pk_data#--}
-  package_run "$pk_verb" "$pk_arg" "$pk_as" "${pk_data%-data}"
+  package_exec "$pk_verb" "$pk_arg" "$pk_as" "${pk_data%-data}"
   pk_rc=$?
   [ "$pk_rc" -eq 0 ] || exit "$pk_rc"
   # the declaration follows the act: an install writes its package.<name> line (the source as

@@ -70,7 +70,8 @@
 # runs the driver's prepare hook, and moves every namespace into the driver under the storage
 # moving freeze (preflight, the take, copy, the storage.driver switch, check); any failure or
 # signal through the check unwinds it all, rc 2 (or 129, 130, 143); past the check the old
-# copy step, the release, and the driver's finish hook only warn when they fail. A reinstall of
+# copy step, the release, the driver's finish hook, the package's install hook, and the
+# compose only warn when they fail, rc 0, so the engine writes the package line. A reinstall of
 # the configured driver at the recorded format is a plain update guarded by a dump compare; at
 # another format the record moves out through posix and back in. The shared steps are the
 # configuration library's driver run section.
@@ -1220,13 +1221,21 @@ done < "$scratch/inames"
 if [ -f "$pkg_root/hooks/install" ]; then
   ( cd "$ws_root" && CTX_ROOT=$ws_root CTX_PACKAGE_ROOT=$pkg_root CTX_BIN=$ctx_bin CTX_PACKAGE_NAME=$pkg_name CTX_PACKAGE_VERSION=$pkg_version LC_ALL=C export CTX_ROOT CTX_PACKAGE_ROOT CTX_BIN CTX_PACKAGE_NAME CTX_PACKAGE_VERSION LC_ALL && if [ -x "$pkg_root/hooks/install" ]; then exec "$pkg_root/hooks/install" < /dev/null; else exec sh "$pkg_root/hooks/install" < /dev/null; fi )
   _hr=$?
-  [ "$_hr" -eq 0 ] || die 2 "the '$pkg_name' package's install hook failed (rc $_hr); the overlay and its record are in place"
+  if [ "$_hr" -ne 0 ]; then
+    [ "$pkg_kind" = driver ] || die 2 "the '$pkg_name' package's install hook failed (rc $_hr); the overlay and its record are in place"
+    err "warning: the '$pkg_name' package's install hook failed (rc $_hr); the record already reads from the '$pkg_driver' driver, so the install stands: install $pkg_name again to run the hook"
+  fi
 fi
 
 # the law layer: every package version and law fragment feeds the generated layer's
 # sources hash, so recompose through ctx compose after the record lands and the hooks
-# run; a boot then reads the set this install just changed.
-"$ctx_bin" compose || die 2 "the law layer did not recompose; run .contexture/ctx compose and fix what it names (the overlay and its record are in place)"
+# run; a boot then reads the set this install just changed. Past a driver package's check
+# a failure only warns, so the engine still writes the package line of the driver the
+# record reads from.
+if ! "$ctx_bin" compose; then
+  [ "$pkg_kind" = driver ] || die 2 "the law layer did not recompose; run .contexture/ctx compose and fix what it names (the overlay and its record are in place)"
+  err "warning: the law layer did not recompose; the record already reads from the '$pkg_driver' driver, so the install stands: run .contexture/ctx compose and fix what it names"
+fi
 
 while read -r _km _kn; do
   if [ "$_km" = "$_kn" ]; then
