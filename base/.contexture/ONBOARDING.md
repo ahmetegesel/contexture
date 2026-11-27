@@ -13,7 +13,7 @@
   2. ASSESS: inventory topology, instruction surfaces, harnesses, and live catalog packages; derive the installation plan
   3. PROPOSE: present the derived plan with a single confirmation pause per active mode (`guided` or `familiar`); the human confirms, amends, or discusses; no workspace configuration write before the verdict
   4. EXECUTE: configure, migrate, install confirmed packages, swap the staged loader if preserved, and symlink strictly per the confirmed plan, running the default rhythm; drift halts and re-confirms
-  5. VERIFY: run verification queries against the live record (plus `ctx docs gate` when `docs-discipline` is installed in git), clean up ephemeral adoption files, close `adopt-contexture`, and deliver the mode closing (`guided` orientation plus optional Q&A offer, or `familiar` terse receipt) before starting a fresh session
+  5. VERIFY: run verification queries against the live record (plus `ctx docs gate` when `docs-discipline` is installed in git and its corpus holds a doc), clean up ephemeral adoption files, close `adopt-contexture`, and deliver the mode closing (`guided` orientation plus optional Q&A offer, or `familiar` terse receipt) before starting a fresh session
 
 @isolate
   1. confirm `.contexture/ctx` exists and is executable FIRST; once `.contexture/ctx` is verified (and `AGENTS.generated.md` is read), every shell command runs through `.contexture/ctx run` (`@laws#compact-streams`)
@@ -134,7 +134,7 @@
   1. complete all execution tasks (`.contexture/ctx unit task complete`), land durable findings (`.contexture/ctx unit finding add`), and record the closing event on `adopt-contexture` FIRST (with settled prose, never `--ref` to ephemeral onboarding files), strictly before running `ctx unit load` and `ctx unit audit`
   2. verify the law layer and workspace configuration: `.contexture/ctx compose --check`, run `.contexture/ctx config load` to confirm effective workspace configuration, and confirm root `AGENTS.md` is now the contexture loader with no leftover `.contexture/tmp/AGENTS.loader.md`
   3. run boot load and audit: `.contexture/ctx unit load adopt-contexture` (read every page the map reports) and `.contexture/ctx unit audit adopt-contexture` (must exit 0); make zero record writes (no tasks, findings, or journal entries) after that `ctx unit load` (if any check flags a gap, fix it and re-run `ctx unit load` and `ctx unit audit`)
-  4. when `docs-discipline` is installed inside a git repository, run `.contexture/ctx docs gate`
+  4. when `docs-discipline` is installed inside a git repository, run `.contexture/ctx docs gate` once its corpus holds a doc: a fresh install writes no corpus doc (the docs discipline rides the docs module's laws and rhythms), and over an empty corpus the gate, like `.contexture/ctx docs query --index`, refuses rc 1 naming the empty corpus; when the adoption wrote no doc, skip the gate and leave the first doc to the `docs-authoring` rhythm
   5. before `.contexture/ctx unit close adopt-contexture`, run `.contexture/ctx run git status` and `.contexture/ctx run git diff` when in a git repository (else summarize changed files) and review them alongside the adoption record with the human
 
 @close
