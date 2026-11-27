@@ -506,7 +506,7 @@ store_get_many() {
   if [ -f "$DB_PATH" ]; then
     db_init
     GM_NS="$gm_ns" GM_DIR="$SCRATCH" LC_ALL=C awk '
-      function q(s,   n, p, i, o) { n = split(s, p, "'\''"); o = p[1]; for (i = 2; i <= n; i++) o = o "'\'''\''" p[i]; return "'\''" o "'\''" }
+      function q(s,   n, p, i, o) { n = split(s, p, /'\''/); o = p[1]; for (i = 2; i <= n; i++) o = o "'\'''\''" p[i]; return "'\''" o "'\''" }
       { printf "SELECT %d, writefile(%s, value) FROM store WHERE namespace = %s AND key = %s;\n", NR, q(ENVIRON["GM_DIR"] "/value." NR), q(ENVIRON["GM_NS"]), q($0) }
     ' "$SCRATCH/keys" > "$SCRATCH/read.sql" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
     sq -bail -separator '	' "$DB_PATH" < "$SCRATCH/read.sql" > "$SCRATCH/present" 2>/dev/null \

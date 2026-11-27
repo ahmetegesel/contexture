@@ -1079,7 +1079,7 @@ batch_parse() {
 batch_live() {
   bl_st=$STORE_BATCH_STAGE
   bl_ops=$(LC_ALL=C awk -F '\t' '{
-      n = split($3, s, "/"); f = "."
+      n = split($3, s, /\//); f = "."
       for (i = 1; i < n; i++) { f = f "/" s[i]; if (!(f in seen)) { seen[f] = 1; print f "/." } }
     }' "$bl_st/man") || return 1
   store_entries "$STORE_WS/$SD_ROOT" "$bl_ops" "$bl_st/r" || return 1
@@ -1099,7 +1099,7 @@ batch_live() {
     function valid(t, p,   n, s, i, f) {
       if (p == "") return 1
       if ((t SUBSEP p) in OK) return OK[t, p]
-      n = split(p, s, "/"); f = ""; OK[t, p] = 0
+      n = split(p, s, /\//); f = ""; OK[t, p] = 0
       for (i = 1; i <= n; i++) {
         if (!((t SUBSEP f SUBSEP s[i]) in D)) return 0
         f = (i == 1 ? s[1] : f "/" s[i])
@@ -1109,7 +1109,7 @@ batch_live() {
     function spell(f, r) { if (!((f SUBSEP r) in SP)) { SP[f, r] = 1; NS[f]++ } }
     BEGIN { px_init(); live = ENVIRON["BL_LIVE"]; printf "" > live }
     FILENAME == ARGV[1] {
-      split($0, a, "\t"); n = split(a[3], s, "/"); r = ""
+      split($0, a, /\t/); n = split(a[3], s, /\//); r = ""
       for (i = 1; i <= n; i++) { r = (i == 1 ? s[1] : r "/" s[i]); AF[tolower(r)] = 1; spell(tolower(r), r) }
       next
     }
@@ -1135,7 +1135,7 @@ batch_live() {
       for (f in NS) if (NS[f] > 1) { print "sort"; break }
       for (i = 1; i <= cn; i++) { split(C[i], x, SUBSEP); if (NS[x[3]] > 1) W[x[1] SUBSEP x[2]] = 1 }
       for (w in W) {
-        split(w, x, SUBSEP); n = split(x[2], s, "/"); r = ""; top = 1
+        split(w, x, SUBSEP); n = split(x[2], s, /\//); r = ""; top = 1
         for (i = 1; i < n && top; i++) { r = (i == 1 ? s[1] : r "/" s[i]); if ((x[1] SUBSEP r) in W) top = 0 }
         if (top) printf "%s\t%s\n", x[1], x[2]
       }

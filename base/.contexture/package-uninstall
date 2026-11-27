@@ -152,7 +152,7 @@ if [ "$installed" -eq 1 ]; then
   awk '
     $1 == "module" && NF == 3 { orig[$2] = $3; next }
     $1 == "file" {
-      n = split($4, a, "/")
+      n = split($4, a, /\//)
       if (n == 5 && a[1] == ".contexture" && a[2] == "extensions" && a[3] == "modules" && a[5] == "data") d[a[4]] = 1
     }
     END { for (m in d) print m " " ((m in orig) ? orig[m] : m) " installed" }' "$state_file" | LC_ALL=C sort |

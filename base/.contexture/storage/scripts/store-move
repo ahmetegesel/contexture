@@ -345,7 +345,7 @@ sm_kept() {
 SM_PRE_AWK='
 function isdoc(key,   n, ks, j, i, ok) {
   if (ndp == 0) return 1
-  n = split(key, ks, "/")
+  n = split(key, ks, /\//)
   for (j = 1; j <= ndp; j++) {
     if (DM[j]) { if (n < DN[j]) continue } else if (n != DN[j]) continue
     ok = 1
@@ -365,7 +365,7 @@ BEGIN {
   for (j = 1; j <= nd0; j++) {
     if (D0[j] == "") continue
     ndp++
-    DN[ndp] = split(D0[j], T, "/")
+    DN[ndp] = split(D0[j], T, /\//)
     for (i = 1; i <= DN[ndp]; i++) DS[ndp, i] = T[i]
     DM[ndp] = (T[DN[ndp]] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
   }
@@ -377,7 +377,7 @@ $0 == "" { next }
 SM_LO_AWK='
 {
   p = index($0, ":"); path = substr($0, 1, p - 1); v = substr($0, p + 1)
-  n = split(path, a, ".")
+  n = split(path, a, /\./)
   if (n == 4 && a[2] == "kinds" && (a[1] == "root" || a[1] == "fallback")) {
     if (!(a[3] in seen)) { seen[a[3]] = 1; order[++k] = a[3] }
     if (a[4] == "count") C[a[3]] += v; else if (a[4] == "bytes") B[a[3]] += v
