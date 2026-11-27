@@ -179,6 +179,22 @@ describe.concurrent('ctx unit transfer through the data function unit.transfer',
     expect((await ok(moved, 'session.audit', [T])).clean).toBe(true);
   });
 
+  it('[the-record-r-xfer1, the-record-r-9rk9q] a live KNOWLEDGE-flagged entry moves: the pointer, written outside entry.record, closes the original superseded, and the copy keeps the flag live, so the harvest moves with it', async () => {
+    const sb = fresh(sb0);
+    const flag = `${DATE}-event-1790000106`;
+    answer(await rec(sb, S, 1790000106, 'a flagged entry awaiting its harvest', { with: payload().kv('knowledge', 'true') }), 'entry.record');
+    const r = answer(await transfer(sb, [S, T], move(payload().kl('entries', flag))), 'unit.transfer');
+    expect(r.entries).toEqual([flag]);
+    expect(text(sb, S, 'journal')).toContain(`  CLOSES: ${flag} (superseded: moved to unit ${T})\n`);
+    const journal = text(sb, T, 'journal');
+    const copy = journal.slice(journal.indexOf(`@entry ${flag}\n`)).split('\n\n')[0]!;
+    expect(copy).toContain('\n  KNOWLEDGE: true');
+    expect(copy).toContain(`\n  REF: "unit#${S}/entry/${flag}"`);
+    expect((await ok(sb, 'session.audit', [S])).clean).toBe(true);
+    const target = await ok(sb, 'session.audit', [T]);
+    expect(target.findings.map((f: { code: string; slug: string }) => [f.code, f.slug])).toEqual([['UNHARVESTED_KNOWLEDGE', flag]]);
+  });
+
   it('[the-record-r-xfer1] a held pointer slug takes a suffix as ctx unit record does, and a move with no entry carries no closer line', async () => {
     const sb = fresh(sb0);
     answer(await rec(sb, S, 1790000200, 'holds the pointer slug'), 'entry.record');
