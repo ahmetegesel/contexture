@@ -41,6 +41,8 @@ scratch	base/.contexture/config-lib	dlr_t	assigned $DL_WS/.contexture/tmp
 scratch	base/.contexture/ctx	SC_ROOT	assigned $root/.contexture/tmp/verb.$$.search-$search_n.io
 scratch	base/.contexture/ctx	compact_tmpdir	assigned ${TMPDIR:-/tmp}
 scratch	base/.contexture/ctx	ctx_root_tmp	assigned $root/.contexture/tmp
+scratch	base/.contexture/ctx	hh_io	assigned $root/.contexture/tmp/verb.$$.help.io
+scratch	base/.contexture/ctx	hh_scratch	assigned $root/.contexture/tmp/verb.$$.help
 scratch	base/.contexture/ctx	pr_out	assigned $(mktemp $pr_tmp_dir/pkg-probe.$$.XXXXXX 2>/dev/null)
 scratch	base/.contexture/ctx	pr_tmp_dir	assigned $root/.contexture/tmp
 scratch	base/.contexture/ctx	sc_scratch	assigned $root/.contexture/tmp/verb.$$.search-$search_n
@@ -70,6 +72,7 @@ scratch	base/.contexture/modules/unit/scripts/data	RS_OUT	assigned $2
 scratch	base/.contexture/modules/unit/scripts/data	UQ_DIR	assigned $U_SCR
 scratch	base/.contexture/modules/unit/scripts/data	U_ART	assigned $U_SCR/art.$U_NART
 scratch	base/.contexture/modules/unit/scripts/data	U_LOCK	assigned $U_LT
+scratch	base/.contexture/modules/unit/scripts/data	U_LOCK2	assigned $U_LOCK
 scratch	base/.contexture/modules/unit/scripts/data	U_LT	assigned $u_tmp/locks/unit/$1.lock
 scratch	base/.contexture/modules/unit/scripts/data	U_SCR	assigned $(mktemp -d $us_tmp/unit.XXXXXX 2>/dev/null)
 scratch	base/.contexture/modules/unit/scripts/data	U_STAGE	assigned $U_SCR/stage
@@ -194,6 +197,7 @@ scratch	plugins/docs-discipline/.contexture/extensions/modules/docs/scripts/docs
 scratch	plugins/docs-discipline/.contexture/extensions/modules/docs/scripts/docs-io.sh	DOCS_PAYLOAD	assigned $DOCS_SCRATCH/payload
 scratch	plugins/docs-discipline/.contexture/extensions/modules/docs/scripts/docs-io.sh	DOCS_SCRATCH	assigned $(mktemp -d $ds_base/docs-io.XXXXXX 2>/dev/null)
 scratch	plugins/docs-discipline/.contexture/extensions/modules/docs/scripts/docs-io.sh	DOCS_SHEBANG_LIST	assigned $DOCS_SCRATCH/shebangs
+scratch	plugins/docs-discipline/.contexture/extensions/modules/docs/scripts/docs-io.sh	DOCS_UNIVERSE_LIST	assigned $DOCS_SCRATCH/universe
 scratch	plugins/docs-discipline/.contexture/extensions/modules/docs/scripts/docs-io.sh	DOCS_UNREAD	assigned $DOCS_SCRATCH/unread
 scratch	plugins/docs-discipline/.contexture/extensions/modules/docs/scripts/docs-io.sh	UNREAD	assigned ${DOCS_UNREAD}
 scratch	plugins/docs-discipline/.contexture/extensions/modules/docs/scripts/docs-io.sh	dd_new	assigned $DOCS_SCRATCH/new
@@ -246,6 +250,7 @@ operand	base/.contexture/modules/unit/scripts/data	u_mig_residual:2	u_mig_residu
 operand	base/.contexture/modules/unit/scripts/data	u_mig_rewrite:2	u_mig_rewrite writes its residual list into the data script scratch folder its caller names
 operand	base/.contexture/modules/unit/scripts/data	u_new:@	u_new empties the data script scratch files its caller names
 operand	base/.contexture/modules/unit/scripts/data	u_put:1	u_put writes the data script scratch file its caller names
+operand	base/.contexture/modules/unit/scripts/data	u_rt_rows:3	u_rt_rows appends the referrer rows into the data script scratch file its caller names
 operand	base/.contexture/modules/unit/scripts/data	u_sweep_call:1	u_sweep_call writes the sweep answer into the data script scratch file its caller names
 operand	base/.contexture/modules/unit/scripts/data	u_sweep_twice:1	u_sweep_twice writes the sweep answer into the data script scratch file its caller names
 operand	base/.contexture/modules/unit/scripts/migrate	mg_sweep_items:1	mg_sweep_items writes the sweep items into the migrate scratch file its caller names
@@ -287,6 +292,7 @@ operand	base/.contexture/storage/scripts/store-pack	sp_pack:2	sp_pack writes the
 operand	base/.contexture/storage/scripts/store-pack	sp_run:3	sp_run writes a call's answer beside the scratch path its caller names
 operand	base/.contexture/storage/scripts/store-pack	sp_unpack:2	sp_unpack reads the targets file its caller names and writes beside it
 operand	install.sh	download_file:2	download_file writes the download into the file its caller names, the release archive in the install stage
+operand	plugins/docs-discipline/.contexture/extensions/modules/docs/scripts/docs-io.sh	docs_delta_decode:2	docs_delta_decode writes the left-out spellings into the docs scratch list its caller names, the docs scratch unread list by default
 operand	plugins/docs-discipline/.contexture/extensions/modules/docs/scripts/docs-io.sh	docs_engine:5	docs_engine writes the edit engine's answer into the docs scratch file its caller names
 operand	plugins/docs-discipline/.contexture/extensions/modules/docs/scripts/docs-io.sh	docs_read_doc:3	docs_read_doc writes the document into the docs scratch file its caller names
 operand	plugins/storage-sqlite/.contexture/extensions/storage/drivers/sqlite/driver	batch_decode:2	batch_decode writes a decoded batch value into the driver scratch file its caller names
