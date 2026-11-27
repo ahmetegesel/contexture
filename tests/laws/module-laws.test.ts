@@ -77,4 +77,15 @@ describe.concurrent('the module law fragments', () => {
     expect(queries[0]).toContain('named looks: ctx unit entry closure, ctx unit list --repo=<repo>, ctx unit refs-to (');
     expect(queries[0]).not.toMatch(/ctx unit list --repo(?!=<repo>)/);
   });
+
+  it('[the-record-r-9rk9q, the-record-r-xfer1] names the ctx unit transfer pointer as the one exemption from the harvest verdict rule in the unit laws\' liveness clause, so the law never contradicts a moved original closing superseded', () => {
+    const liveness = readFileSync(UNIT_LAWS, 'utf8').split('\n').filter((l) => l.startsWith('  liveness :: '));
+    expect(liveness).toHaveLength(1);
+    const rule = 'a live KNOWLEDGE-flagged entry closes only harvested (the closing entry REFs the finding it landed, unit#<unit>/finding/<NAME>) or discarded, and the record verb refuses any other verdict on it';
+    expect(liveness[0]).toContain(rule);
+    const after = liveness[0]!.slice(liveness[0]!.indexOf(rule) + rule.length);
+    expect(after).toMatch(/^; the one exemption is the ctx unit transfer pointer, /);
+    for (const part of ['closes a moved original superseded', 'the copy keeps its KNOWLEDGE: true flag live', 'the harvest moves with the copy']) expect(after).toContain(part);
+    expect(liveness[0]).not.toMatch(/ - |—|–|\.contexture\//);
+  });
 });
