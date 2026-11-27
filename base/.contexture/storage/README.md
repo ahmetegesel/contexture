@@ -404,11 +404,15 @@ behavior test's fixtures all take that form. The governance special builtin guar
 (`tests/governance/builtin-guards.test.ts`) holds the shipped shell to it: a special builtin's
 own file redirect (a device or a descriptor dup left out) read by a `||` or `&&` with nothing
 between but redirections, a group's close, and further `&&` members, or as the condition of
-an `if`, `elif`, or loop before its `then` or `do`, reads red, a subshell's or a
-substitution's close between them standing (dash ends only the subshell, and the parent reads
-it); the configuration library's two `exec < "$CTX_PACKAGE_TTY" || exit 2` lines inside the
-asking subshells stand on an exact allow list, since dash's own exit there gives the answer
-their silent guard gives.
+an `if`, `elif`, or loop before its `then` or `do`, reads red, a case arm's command after its
+pattern, a redirect with no blank after the builtin, a clobber, and a file redirect after a
+descriptor dup included, a subshell's or a substitution's close between them standing (dash
+ends only the subshell, and the parent reads it); the configuration library's two
+`exec < "$CTX_PACKAGE_TTY" || exit 2` lines inside the asking subshells stand on an exact
+allow list, since dash's own exit there gives the answer their silent guard gives. It reads
+logical lines, so its static limit is a reader on a later line than the builtin: a multi line
+group whose close and `||` sit below it reads green, and such a guard keeps to the one line
+form.
 
 Search answers one shape on every driver: `{"namespace","query","mode","total_matches",
 "results":[{"key","entity_type","entity_id","section","snippet","score"}]}`. `exact` is
@@ -428,7 +432,8 @@ per entity; a module with no schema falls back to the generic raw value. The sea
 is registered by the driver, never declared by a module: the descriptor's `search_modes`
 is a list of `{name, description}` objects, `exact` alone at contract 4, `driver-resolver
 modes` prints the registry one `name<TAB>description` line per mode, and the library's
-`store_modes` answers it (any argument refuses). Every driver refuses any other mode
+`store_modes` answers it (any argument refuses, and a registry it cannot write whole refuses
+rc 2 `ERR_STORAGE_WRITE`, `cannot write the mode list`). Every driver refuses any other mode
 naming its registry, `exact`. Posix declares the optional tokens `store` and
 `store.promote`; the resolver refuses any optional token outside `store` and
 `store.promote`.
@@ -884,7 +889,8 @@ is reached only through that module's `ctx` verbs (`get`, `search`). The library
 - `store_list [<prefix>]`, `store_get <key>...`, `store_put <key>`, `store_delete <key>`,
   `store_batch`, `store_scan`, `store_search <query> <mode> [<limit>]`, each over the
   caller's namespace;
-- `store_modes`, the mode registry, `exact` alone (any argument refuses);
+- `store_modes`, the mode registry, `exact` alone (any argument refuses, a registry it
+  cannot write whole rc 2 `ERR_STORAGE_WRITE`);
 - `store_get_into <targets>`, the batched read into files: the targets file
   holds one `<key><TAB><path>` line per key in the asked order; one `store.get` call answers
   every key (the one key form for a single key), each present value lands in its path byte

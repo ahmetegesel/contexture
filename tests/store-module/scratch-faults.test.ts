@@ -118,6 +118,29 @@ const READS: readonly [what: string, argv: string[], file: string, start: string
   ['a leftovers check whose probe answer', ['check', '--leftovers'], 'leftovers', ''],
   ['a leftovers check whose text', ['check', '--leftovers'], 'leftovers.text', ''],
   ['a leftovers sweep dry run whose report', ['check', '--leftovers', '--sweep', '--dry-run'], 'sweep', ''],
+  ['a record get whose fetched record', ['get', 'items/held'], 'rec', 'what: "cu'],
+  ['a record get whose fetched declaration', ['get', 'items/held'], 'd.rec', 'description: "cu'],
+  ['a record get whose fetch error file', ['get', 'items/held'], 'fetch.err', ''],
+  ['a list whose batched read answer', ['list', 'items'], 'all.targets.ans', ''],
+  ['a list whose batched read error file', ['list', 'items'], 'all.targets.err', ''],
+];
+
+const REAL_AWK = spawnSync('sh', ['-c', 'command -v awk'], { encoding: 'utf8' }).stdout.trim();
+
+// full: the nth awk run of one kind writes under a zero file size limit with SIGXFSZ ignored, so
+// every byte it writes into a file that opened fails, its error file included, as a full disk
+// fails it
+const full = (kind: string, nth = 1): Record<string, string> =>
+  pathPlant('awk', `m=0\n${kind}\nif [ "$m" = 1 ]; then\n  c="\${0%/*}/count"; n=$(cat "$c" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$c"\n  if [ "$n" = ${nth} ]; then trap '' XFSZ; ulimit -f 0; exec '${REAL_AWK}' "$@"; fi\nfi\nexec '${REAL_AWK}' "$@"`);
+const VALIDATOR = (mode: string) => `[ "\${SF_MODE:-}" = ${mode} ] && m=1`;
+const FLATTENER = 'case " $* " in *json.awk*) m=1 ;; esac';
+
+const FULL: readonly [what: string, argv: string[], kind: string, nth: number][] = [
+  ['a check of nonconforming records whose first verdict', ['check', 'loose'], VALIDATOR('conforms'), 1],
+  ['a record get whose record with its defaults read in', ['get', 'items/held'], VALIDATOR('effective'), 1],
+  ['a list whose second record with its defaults read in', ['list', 'items'], VALIDATOR('effective'), 2],
+  ['a list whose flattened key listing', ['list', 'items'], FLATTENER, 1],
+  ['a search whose flattened answer', ['search', 'held'], FLATTENER, 2],
 ];
 
 describe.concurrent('the store reads read the status of their own scratch writes: a failing or short write refuses rc 2, one line, no partial answer', () => {
@@ -138,6 +161,14 @@ describe.concurrent('the store reads read the status of their own scratch writes
     const sb = reads();
     const before = storeState(sb);
     const r = await run(sb, ['store', ...argv], { env: cut(file, start) });
+    expect([r.code, r.stdout, r.stderr]).toEqual([2, '', `store ${argv[0]}: error: ${SCRATCH[1]} (${SCRATCH[0]})\n`]);
+    expect(storeState(sb)).toBe(before);
+  });
+
+  it.for(FULL)('[store-r4, store-r6] %s written onto a full disk refuses with nothing on stdout, never a partial answer', async ([, argv, kind, nth]) => {
+    const sb = reads();
+    const before = storeState(sb);
+    const r = await run(sb, ['store', ...argv], { env: full(kind, nth) });
     expect([r.code, r.stdout, r.stderr]).toEqual([2, '', `store ${argv[0]}: error: ${SCRATCH[1]} (${SCRATCH[0]})\n`]);
     expect(storeState(sb)).toBe(before);
   });

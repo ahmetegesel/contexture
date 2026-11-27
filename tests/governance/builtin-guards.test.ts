@@ -12,13 +12,16 @@ import { text } from './walk';
 // of that form loses its refusal line (bash continues, so only dash shows it). A redirect is
 // guarded when the || or && that reads it follows with nothing between but redirections, a
 // group's close, and further && members, or when it is the condition of an if, elif, or loop
-// before its then or do; a subshell's or a substitution's close between them reads it in the
-// parent, which the exit never reaches, so it stands. A redirect into a null, std, or tty device
+// before its then or do, the reader on the same logical line (a group whose close and reader sit
+// on a later line is beyond this line reader); a subshell's or a substitution's close between
+// them reads it in the parent, which the exit never reaches, so it stands. A case arm's command
+// after its pattern is at a command position, and a clobber's | or a dup's & stays with its
+// redirect. A redirect into a null, std, or tty device
 // or a descriptor dup never fails to open and is left out. Every guarded one is a remainder but
 // the exact allow list's, whose guard gives the answer the exit gives.
 const SPECIAL = String.raw`:|\.|break|continue|eval|exec|exit|export|readonly|return|set|shift|times|trap|unset`;
-const POSITION = String.raw`(?:^|;|&&|\|\||\||\$\(|${TICK}|(?<!\$)\((?!\()|(?<!\$)\{(?=\s)|!(?=\s)|\b(?:then|do|else|if|elif|while|until)\b)\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*`;
-const BUILTIN = new RegExp(`${POSITION}(${SPECIAL})(?=[\\s;)${TICK}]|$)`, 'g');
+const POSITION = String.raw`(?:^|;|&&|\|\||\||\$\(|${TICK}|(?<!\$)\((?!\()|(?:^|;;|\bin)\s*\(?[^\s();&]+\)|(?<!\$)\{(?=\s)|!(?=\s)|\b(?:then|do|else|if|elif|while|until)\b)\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*`;
+const BUILTIN = new RegExp(`${POSITION}(${SPECIAL})(?=[\\s;)<>${TICK}]|$)`, 'g');
 const REDIRECT = /(?<![<>&0-9])[0-9]*(?:>>|>\||<>|>(?!&)|<(?![<&]))\s*(\S+)/g;
 const DEVICE = /^\/dev\/(?:null|stdin|stdout|stderr|tty|fd\/[0-9]+)$/;
 const KEYWORD = /(?:^|[\s;])(?:if|elif|while|until|!)\s/g;
@@ -36,7 +39,8 @@ type Redirect = { file: string; line: string; at: number; builtin: string; verdi
 const mask = (s: string): string => s.replace(QUOTED, (q) => `${q[0]}${'x'.repeat(q.length - 2)}${q[q.length - 1]}`).replace(/(^|\s)#.*$/, '$1');
 
 // end: where the command starting at <from> stops: a list separator, a pipe, a background, or a
-// close at its own depth, a substitution inside it skipped whole
+// close at its own depth, a substitution inside it skipped whole, the | of a clobber and the &
+// of a descriptor dup belonging to their redirect
 function end(s: string, from: number): number {
   let depth = 0;
   for (let i = from; i < s.length; i++) {
@@ -49,7 +53,8 @@ function end(s: string, from: number): number {
     else if (c === ')') {
       if (depth === 0) return i;
       depth--;
-    } else if (depth === 0 && (c === ';' || c === '&' || c === '|')) return i;
+    } else if (depth === 0 && (c === '|' || c === '&') && (s[i - 1] === '>' || s[i - 1] === '<')) continue;
+    else if (depth === 0 && (c === ';' || c === '&' || c === '|')) return i;
   }
   return s.length;
 }
@@ -141,6 +146,10 @@ describe.concurrent('the special builtin guard census: no guard reads the redire
     ['an eval redirect read by ||', 'eval "printf x" > "$SCR/x" || die 2 ERR_STORAGE_WRITE x'],
     ['an exec redirect read by ||', 'exec 3> "$SCR/x" || die 2 ERR_STORAGE_WRITE x'],
     ['a guard inside a substitution', 'v=$( { : > "$SCR/x"; } 2>/dev/null || die 2 ERR_STORAGE_WRITE x)'],
+    ['a colon truncation with no blank before its redirect', ':>"$SCR/x" || die 2 ERR_STORAGE_WRITE x'],
+    ['a colon truncation in a case arm after its pattern', 'case "$a" in x) : > "$SCR/x" || die 2 ERR_STORAGE_WRITE x ;; esac'],
+    ['a colon clobber read by ||', ': >| "$SCR/x" || die 2 ERR_STORAGE_WRITE x'],
+    ['a colon whose file redirect follows a descriptor dup', ': 2>&1 > "$SCR/x" || die 2 ERR_STORAGE_WRITE x'],
   ])('[the-record-r10] %s planted in a module reads red', (_name, line) => {
     const rest = remainder(census(plantedTree([line])).redirects);
     expect(rest).toHaveLength(1);
@@ -157,6 +166,8 @@ describe.concurrent('the special builtin guard census: no guard reads the redire
     ['a descriptor close', 'exec 3>&- || die 2 ERR_STORAGE_WRITE x'],
     ['a colon expanding a default', ': "${X:=y}" || die 2 ERR_STORAGE_WRITE x'],
     ['a set whose argument holds a redirect in a substitution', 'set -- $(printf x > "$SCR/x") || die 2 ERR_STORAGE_WRITE x'],
+    ['a true truncation in a case arm', 'case "$a" in x) true > "$SCR/x" || die 2 ERR_STORAGE_WRITE x ;; esac'],
+    ['a colon expanding a default in a case arm', 'case "$a" in x) : "${X:=y}" || die 2 ERR_STORAGE_WRITE x ;; esac'],
   ])('[the-record-r10] a planted line that guards no special builtin redirect adds no remainder: %s', (_name, line) => {
     const r = census(plantedTree([line]));
     expect(remainder(r.redirects)).toEqual([]);

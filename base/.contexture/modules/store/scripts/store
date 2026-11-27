@@ -89,11 +89,19 @@ minting: required line one-of given|generated
 fields: optional line list'
 { printf '%s\n' "$CONTAINERS_DECL" > "$SCR/containers.decl"; } 2>/dev/null || scr_fail
 
-# reframe: the library's one refusal line in $SCR/err printed under the verb's name
+# reframe <rc>: the library's one refusal line in $SCR/err printed under the verb's name, the
+# verb ending with the rc; a failed call whose error file holds no refusal line (left empty, or
+# holding a tool's or the shell's own diagnostic, as a full disk or a scratch file that cannot
+# open leaves it) failed a scratch write of its own, so the verb refuses as one
 reframe() {
   rf_line=$(sed -n 1p "$SCR/err")
+  case "$rf_line" in
+    *': error: '*|*': ERROR: '*) ;;
+    *) scr_fail ;;
+  esac
   rf_msg=${rf_line#*: error: }
   printf '%s: error: %s\n' "$FN" "$rf_msg" >&2
+  exit "$1"
 }
 
 # lib_or_die <function> [args...]: one library call; a refusal re-framed, its rc the exit
@@ -102,8 +110,7 @@ lib_or_die() {
   "$@" 2> "$SCR/err"
   lod_rc=$?
   [ "$lod_rc" -eq 0 ] && return 0
-  reframe
-  exit "$lod_rc"
+  reframe "$lod_rc"
 }
 
 # rec <mode> [<arg>]: the record reader over stdin
@@ -132,7 +139,7 @@ lower() {
 # answer always holds one line, so an empty one is a lost write, never an absent key
 fetch() {
   { printf '%s\t%s\n' "$1" "$2" > "$SCR/fetch"; } 2>/dev/null || scr_fail
-  scr_new "$SCR/fetch.out"
+  scr_new "$2" "$SCR/fetch.out"
   lib_or_die store_get_into "$SCR/fetch" > "$SCR/fetch.out" || scr_fail
   [ -s "$SCR/fetch.out" ] || scr_fail
   case $(cat "$SCR/fetch.out") in
@@ -141,12 +148,22 @@ fetch() {
   return 1
 }
 
+# flat <answer> <file> <message>: the storage layer's answer flattened into the file by the core
+# flattener; an answer it refuses as malformed (its own one line) refuses rc 2 ERR_STORAGE_READ
+# with the message, and any other failure is the flattened file's write, a scratch write
+flat() {
+  scr_new "$2" "$SCR/flat.err"
+  { awk -f "$CORE/json.awk" < "$1" > "$2" 2> "$SCR/flat.err"; } 2>/dev/null && return 0
+  grep -q '^json\.awk: error: ' "$SCR/flat.err" && die 2 ERR_STORAGE_READ "$3"
+  scr_fail
+}
+
 # keys <prefix> <file>: every stored key under the prefix written to the file, one per line,
 # bytewise; a listing that cannot be read whole refuses, never a short list
 keys() {
-  scr_new "$SCR/list.json" "$SCR/list.flat"
+  scr_new "$SCR/list.json"
   lib_or_die store_list "$1" > "$SCR/list.json" || scr_fail
-  { awk -f "$CORE/json.awk" < "$SCR/list.json" > "$SCR/list.flat"; } 2>/dev/null || die 2 ERR_STORAGE_READ 'cannot read the key listing whole'
+  flat "$SCR/list.json" "$SCR/list.flat" 'cannot read the key listing whole'
   { sed -n 's/^keys\.[0-9][0-9]*=//p' "$SCR/list.flat" > "$2"; } 2>/dev/null || scr_fail
 }
 
@@ -691,9 +708,9 @@ case "$verb" in
       printf '%s\n' $allow | grep -Fqx -- "$s_narrow" && allow=$s_narrow || allow=""
     done
     if [ -n "$allow" ]; then
-      scr_new "$SCR/search.json" "$SCR/search.flat"
+      scr_new "$SCR/search.json"
       lib_or_die store_search "$sq" exact 0 > "$SCR/search.json" || scr_fail
-      awk -f "$CORE/json.awk" < "$SCR/search.json" > "$SCR/search.flat" || die 2 ERR_STORAGE_READ 'the storage layer answered a malformed search'
+      flat "$SCR/search.json" "$SCR/search.flat" 'the storage layer answered a malformed search'
     else
       scr_new "$SCR/search.flat"
     fi
@@ -756,11 +773,12 @@ case "$verb" in
       scr_new "$SCR/r.$n.check" "$SCR/err"
       fields_conforms "$SCR/d.fields" "$SCR/r.$n.core" > "$SCR/r.$n.check" 2> "$SCR/err"
       ck_rc=$?
-      if [ -s "$SCR/err" ]; then
-        reframe
-        exit "$ck_rc"
-      fi
-      [ "$ck_rc" -eq 0 ] && continue
+      [ -s "$SCR/err" ] && reframe "$ck_rc"
+      case "$ck_rc" in
+        0) continue ;;
+        1) [ -s "$SCR/r.$n.check" ] || scr_fail ;;
+        *) scr_fail ;;
+      esac
       bad=1
       { sed "s|^|$k: |" "$SCR/r.$n.check" >> "$SCR/answer"; } 2>/dev/null || scr_fail
     done < "$SCR/keys"

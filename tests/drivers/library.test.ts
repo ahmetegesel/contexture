@@ -41,6 +41,15 @@ for (const driver of DRIVERS) {
       for (const args of [['--own'], ['libprobe']]) refused(await own(sb, 'store_modes', args), 'store.modes', 1, 'ERR_INVALID_ARGUMENT', 'store.modes takes no argument');
     });
 
+    it('[the-engine-r19] store_modes answering into a stdout open for reading only refuses rc 2 with one line, never rc 0 with a short registry', async () => {
+      const sb = fresh(snap);
+      const script = moduleScript(sb, 'libprobe', 'modes-closed', 'f=$1; . "$f" && store_modes 1< /dev/null\n');
+      for (const shell of SHELLS) {
+        const r = await exec(shell, [script, join(sb, LIBRARY)], { cwd: sb, input: '', env: { CTX_STORE_ROOT: sb } });
+        expect([r.code, r.stdout, r.stderr], shell).toEqual([2, '', 'store.modes: error: cannot write the mode list (ERR_STORAGE_WRITE)\n']);
+      }
+    });
+
     it('[the-engine-r-b3r6t] store_promote reaches the driver\'s optional promotion through the core resolver', async () => {
       const r = await own(fresh(snap), 'store_promote', ['x/']);
       if (driver === 'posix') expect(answer(r, 'store.promote')).toEqual({ namespace: 'libprobe', prefix: 'x/', state: 'none' });

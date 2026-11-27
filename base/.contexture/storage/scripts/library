@@ -1051,13 +1051,17 @@ store_search() {
 # store_modes: the search mode registry, one name TAB description line per mode in the
 # configured driver's order, the modes being registered by the driver's descriptor and
 # never declared by a module; contract 4 registers exact alone. Any argument refuses rc 1
-# ERR_INVALID_ARGUMENT, a missing resolver rc 2.
+# ERR_INVALID_ARGUMENT, a missing resolver rc 2, and a registry it cannot write whole rc 2
+# ERR_STORAGE_WRITE (cannot write the mode list), its printf in a subshell as
+# store_lib_answer's, so a short list never answers.
 store_modes() {
   if [ $# -gt 0 ]; then
     printf 'store.modes: error: store.modes takes no argument (ERR_INVALID_ARGUMENT)\n' >&2
     return 1
   fi
   sm_reg=$(store_lib_call store.modes modes < /dev/null) || return $?
-  [ -z "$sm_reg" ] || printf '%s\n' "$sm_reg"
-  return 0
+  [ -n "$sm_reg" ] || return 0
+  ( printf '%s\n' "$sm_reg" ) 2>/dev/null && return 0
+  printf 'store.modes: error: cannot write the mode list (ERR_STORAGE_WRITE)\n' >&2
+  return 2
 }
