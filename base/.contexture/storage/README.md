@@ -468,7 +468,9 @@ Help mode writes nothing: while `CTX_HELP=1` (the engine sets it for a verb's he
 whole process tree), the resolver refuses `store.put`, `store.delete`, `store.batch`,
 `store.promote`, and `storage.sweep`, in the direct and the `exec` form, rc 1 with its one
 line `driver-resolver: ERROR: <function> refused in help mode: help writes nothing
-(ERR_INVALID_ARGUMENT)`, before the driver runs; every read passes. A write that never reaches
+(ERR_INVALID_ARGUMENT)`, before the driver runs; every read passes. It refuses ahead of the
+storage moving freeze and the override rule, so a help mode write meets this line even while a
+move holds the freeze, one carrying the move's token or an override included. A write that never reaches
 the resolver, a direct file write or a configuration write through `ctx store config set` or
 `unset` and the other configuration verbs, is bound by the help mode contract alone.
 

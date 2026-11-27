@@ -249,6 +249,25 @@ describe('the resolver', { concurrent: true }, () => {
     expect(landed.stdout).toContain('help mode probe');
   });
 
+  it("[the-engine-r-helpm, the-engine-r-mvf01] help mode refuses ahead of the storage moving freeze and the override rule: under a live holder's marker a help mode put refuses with the help line, the move's own token and an override included, and lands nothing; null check: outside help mode the same marker refuses ERR_STORAGE_LOCKED and the holder's own put lands", async () => {
+    const sb = fresh(posix);
+    const help = 'driver-resolver: ERROR: store.put refused in help mode: help writes nothing (ERR_INVALID_ARGUMENT)\n';
+    const release = holdMove(sb, 'posix', 'live', 'posix');
+    try {
+      for (const env of [{ CTX_HELP: '1' }, { CTX_HELP: '1', ...moveToken() }, { CTX_HELP: '1', CTX_STORAGE_DRIVER: 'nosuch' }]) {
+        const r = await rsv(sb, ['store.put', 'unit', 'unit/probe/x'], 'frozen help probe\n', env);
+        expect([r.code, r.stdout, r.stderr], JSON.stringify(env)).toEqual([1, '', help]);
+      }
+      const frozen = await rsv(sb, ['store.put', 'unit', 'unit/probe/x'], 'frozen probe\n');
+      expect([frozen.code, frozen.stdout, frozen.stderr]).toEqual([2, '', 'store.put: error: storage is being moved to another driver; retry after the move ends (ERR_STORAGE_LOCKED)\n']);
+      expect((await rsv(sb, ['store.get', 'unit', 'unit/probe/x'])).stdout).not.toContain('probe');
+      answer(await rsv(sb, ['store.put', 'unit', 'unit/probe/x'], 'holder probe\n', moveToken()), 'store.put');
+    } finally {
+      release();
+    }
+    expect((await rsv(sb, ['store.get', 'unit', 'unit/probe/x'])).stdout).toContain('holder probe');
+  });
+
   describe('the two places and the name precedence', () => {
     const resolved = async (sb: string, args: string[], env: Record<string, string> = {}) => {
       const r = await rsv(sb, ['resolve', ...args], '', env);
