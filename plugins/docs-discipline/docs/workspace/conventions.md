@@ -132,7 +132,7 @@
 
 @rule docs/fixed-pitfalls
   directive: must
-  statement: "A fixed pitfall is removed (the doc describes current truth); the id retires, never recycled; a behavior change born of the fix lands as a contract @rule; a new pitfall only for a genuinely new surprise, new id; references re-point via a fresh journal entry recording the resolution (append-only; under the files driver git history holds the removed text)."
+  statement: "A fixed pitfall is removed (the doc describes current truth); the id retires, never recycled; a behavior change born of the fix lands as a contract @rule; a new pitfall only for a genuinely new surprise, new id; references re-point via a fresh journal entry recording the resolution (append-only; the resolution's journal entry is the surviving reference)."
   status: followed
   prevalence: universal
   layer: workspace

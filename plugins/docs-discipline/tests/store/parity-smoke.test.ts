@@ -32,7 +32,7 @@ describe.skipIf(!sqliteAvailable())('the read verbs on the sqlite store answer w
     expect([r.code, r.stdout, r.stderr]).toEqual([0, '', '']);
   });
 
-  it('S1 [docs-module-r13, docs-module-r15] the check runs the git path as under the files driver: a riding workspace doc freshens by the blanket', async () => {
+  it('S1 [docs-module-r13, docs-module-r15] the check runs the git path as under posix: a riding workspace doc freshens by the blanket', async () => {
     const delta = 'M\tprojects/demo-orders/src/order/validate.ts\nM\tdocs/workspace/system-map.md\n';
     expect(expected('check/11-workspace-doc-rides.txt')).toContain('FRESH (BLANKET): demo-orders > order-flow');
     const r = await docs(fresh(corpus), ['check', 'demo-orders', 'demo-web', 'workspace'], { input: delta });

@@ -295,8 +295,8 @@ it walk below runs every one of these.
 - Drift: the `docs-drift` rhythm: sync the checkout to the current base first
   (fetch; a branch comes up to date with main), declare the affected units as
   `@task` entries in `backlog.md`, pipe the status-prefixed code delta from git
-  with the corpus half (the corpus paths of the same git delta under the files
-  driver with a tracked corpus, else the flow's own list of updated docs, every
+  with the corpus half (the corpus paths of the same git delta under posix
+  with a tracked corpus, else the flow's own list of updated docs, every
   store driver included) through the check, update each
   affected doc through the write verbs in the same change, re-verify with
   `ctx docs gate`.

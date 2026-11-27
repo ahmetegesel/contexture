@@ -1,7 +1,7 @@
 #!/bin/sh
 # summary: remove a whole doc from the corpus
 # usage: ctx docs remove <repo> <slug> [--dry-run]
-# help: the only way to delete a doc under a store driver (its files are not the corpus); under the files driver it removes the doc's file
+# help: the only way to delete a doc under a store driver (its files are not the corpus); under posix it removes the doc's file
 # help: --dry-run prints the verb's line and the doc it would delete, whole, then writes nothing
 # help: exit codes: 0 removed or the dry run printed; 1 no such doc, a malformed key, or an unknown flag; 2 a storage driver failure or a driver without a corpus
 # help: example: ctx docs remove workspace retired-unit --dry-run

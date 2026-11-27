@@ -603,7 +603,7 @@ docs_delta_unread() {
 
 # docs_corpus_root: DOCS_CORPUS_ROOT, the workspace relative folder the storage core declares
 # for this module's own namespace (its row of store_roots; a fallback row after it is not
-# read), the folder where git sees the corpus when a files driver keeps it as files; docs at
+# read), the folder where git sees the corpus when posix keeps it as files; docs at
 # the default declaration, so every translation below is the identity there. rc 2 with the
 # library's line when the storage core cannot list the roots or name the own namespace, as
 # the record file guard refuses, never a guessed folder

@@ -16,7 +16,7 @@ export const TESTS = join(PLUGIN, 'tests');
 export const WRITE = join(TESTS, 'write');
 export const SAMPLE = join(TESTS, 'sample');
 export const STAGED_SCRIPTS = '.contexture/extensions/modules/docs/scripts';
-// the folder the module's data file declares for the corpus under the files driver
+// the folder the module's data file declares for the corpus under posix
 export const CORPUS = /^root: (.+)$/m.exec(readFileSync(join(MODULE, 'data'), 'utf8'))?.[1] ?? 'docs';
 const IN_DRAWER = CORPUS.startsWith('.contexture/');
 

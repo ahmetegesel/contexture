@@ -35,7 +35,7 @@ MUST docs/greppable-evidence (universal, workspace)
   good: evidence: 'OrderController.ListOrders'
 
 MUST docs/fixed-pitfalls (universal, workspace)
-  A fixed pitfall is removed (the doc describes current truth); the id retires, never recycled; a behavior change born of the fix lands as a contract @rule; a new pitfall only for a genuinely new surprise, new id; references re-point via a fresh journal entry recording the resolution (append-only; under the files driver git history holds the removed text).
+  A fixed pitfall is removed (the doc describes current truth); the id retires, never recycled; a behavior change born of the fix lands as a contract @rule; a new pitfall only for a genuinely new surprise, new id; references re-point via a fresh journal entry recording the resolution (append-only; the resolution's journal entry is the surviving reference).
   evidence: .contexture/extensions/modules/docs/scripts/docs-audit.awk
   anti: Reclassifying a fixed bug as a gotcha to preserve its journal anchor.
   good: Remove the fixed pitfall with ctx docs pitfall <id> --remove (the id retires), land the behavior as a contract @rule, and re-point refs from a fresh journal entry.
