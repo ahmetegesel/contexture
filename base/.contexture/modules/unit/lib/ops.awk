@@ -853,7 +853,7 @@ function f_lane_get(   l, a, k) {
   answer("}")
 }
 
-# ---- the transfer (unit.transfer, outside the record's 35 operations) ----
+# ---- the transfer (unit.transfer, outside the record's operations) ----
 # xf_list(key, arr, re, what): a selector list of the payload into arr, each value matching
 # re, a value given twice kept once in its first place; returns the count
 function xf_list(key, arr, re, what,   n, i, A, m, SEEN) {

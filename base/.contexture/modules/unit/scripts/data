@@ -1124,7 +1124,7 @@ u_rt_rows() {
     || u_refuse 2 ERR_STORAGE_READ "cannot read the refs of unit '$1'"
 }
 
-# u_unit_transfer [--dry-run] <source> <target>: outside the record's 35 operations, the move
+# u_unit_transfer [--dry-run] <source> <target>: outside the record's operations, the move
 # of the open tasks, findings, and open journal entries the payload selects from the source
 # to the target in one write (lib/ops.awk f_unit_transfer). Both units are held; the
 # referrers of the source in every other active unit are read first, lock free (u_rt_rows,

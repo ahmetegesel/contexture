@@ -95,7 +95,7 @@ describe.concurrent('the engine against the data script on the same fresh snapsh
   it.for([
     ['an unstarted lane, landing', 'T16', 0],
     ['a started lane, refusing', 'T37', 1],
-  ] as const)('lane.create replace, a mode of lane.create outside the 35 rows, over %s: the same answer and the same landed artifacts', async ([, from, code]) => {
+  ] as const)('lane.create replace, a mode of lane.create outside the OPS rows, over %s: the same answer and the same landed artifacts', async ([, from, code]) => {
     const op: Op = ['lane.create', [TUNIT, 'lane-worker', 'replace'], '# a replaced differential recipe\n'];
     const { engine, script, engineStore, scriptStore } = await both(op, op[2], from);
     expect(script.code, `lane.create replace through the data script [${script.stderr}]`).toBe(code);
