@@ -247,6 +247,24 @@ describe.concurrent("the adoption procedure's gitignore guidance", () => {
   });
 });
 
+describe.concurrent("the corpus root move's adoption steps against the docs install hook", () => {
+  const hook = (): string => text(join(ROOT, 'plugins/docs-discipline/.contexture/extensions/modules/docs/install'));
+  const paragraph = (lead: string): string => guide().split('\n').find((l) => l.startsWith(lead)) ?? '';
+
+  it("[plugins-r2] the docs-discipline update step quotes only what the guard prints: each quoted phrase is the hook's own text", () => {
+    const step = paragraph('4. Update `docs-discipline` (step 8): ');
+    expect(step).not.toBe('');
+    const phrases = step.split('`').filter((s, i) => i % 2 === 1 && s.includes(' ')).map((s) => s.split(' (')[0]!);
+    expect(phrases.length).toBeGreaterThan(0);
+    for (const p of phrases) expect(hook(), p).toContain(p);
+  });
+
+  it('[plugins-r2] the seed retirement paragraph says the hook it drops returns as the root move guard the plugin ships', () => {
+    expect(hook()).toContain('corpus root move guard');
+    expect(paragraph('Updating past the retirement of the docs conventions seed')).toContain('root move guard');
+  });
+});
+
 describe.concurrent('the git package onboarding facts', () => {
   const readme = (): string => text(join(ROOT, 'plugins/git/README.md'));
   const needs = (): string => text(join(ROOT, 'plugins/docs-discipline/README.md'));
