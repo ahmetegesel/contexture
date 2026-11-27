@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { sandbox } from '@support/sandbox';
@@ -39,6 +39,24 @@ describe.skipIf(!sqliteFts5)('the docs walk', { concurrent: true }, () => {
     expect(r.code, r.stderr).toBe(0);
     expect(r.stdout.split('\n')).toContain('  DOCS: 2');
     expect(sqlite(join(repo, 'graph.db'), "SELECT file FROM indexed_files ORDER BY file;").trim().split('\n')).toEqual(['README.md', 'guide/intro.md']);
+  });
+
+  it.skipIf(process.getuid?.() === 0)('[ast-doc-graph-r2] an unreadable folder under an excluded path never stops the walk: the drawer\'s scratch and node_modules are pruned, never entered', async () => {
+    const repo = sandbox('walk-locked');
+    writeFileSync(join(repo, 'README.md'), '@doc structural readme\n  repo: workspace\n  description: "readme probe"\n  sources: [src/**]\n  keywords: [readme]\n');
+    const locked = ['.contexture/tmp/locked', 'node_modules/locked'].map((rel) => join(repo, rel));
+    for (const dir of locked) {
+      mkdirSync(join(dir, 'inner'), { recursive: true });
+      chmodSync(dir, 0o000);
+    }
+    try {
+      const r = await astDocIndex(repo, ['--clean']);
+      expect(r.code, r.stderr).toBe(0);
+      expect(r.stderr).not.toContain('Permission denied');
+      expect(r.stdout.split('\n')).toContain('  DOCS: 1');
+    } finally {
+      for (const dir of locked) chmodSync(dir, 0o755);
+    }
   });
 
   it.skipIf(!compilerApi()).each<[string, (repo: string) => void]>([

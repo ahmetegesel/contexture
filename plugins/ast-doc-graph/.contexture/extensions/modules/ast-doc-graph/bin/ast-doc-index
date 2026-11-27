@@ -18,13 +18,14 @@ for component in "$EXTRACT_TS" "$EXTRACT_DOCS" "$INDEX_GRAPH" "$SCHEMA_SQL"; do
   fi
 done
 
-# scan_find <root> <find expression...>: find runs from inside the root, so the exclusion
-# patterns match paths within the repository, never the folders the repository sits in;
-# each path prints with the root in front
+# scan_find <root> <find expression...>: find runs from inside the root, so an excluded
+# folder name matches a folder within the repository, never one the repository sits in; the
+# expression ends with an explicit -print, so a pruned folder itself never prints; each path
+# prints with the root in front
 scan_find() {
   local root="$1"
   shift
-  (cd "$root" && find . "$@") | while IFS= read -r f; do
+  (cd "$root" && find . "$@" -print) | while IFS= read -r f; do
     printf '%s/%s\n' "$root" "${f#./}"
   done
 }
@@ -307,19 +308,12 @@ DOCS_JSONL="$CACHE_DIR/docs.jsonl"
 RULES_JSONL="$CACHE_DIR/rules.jsonl"
 PITFALLS_JSONL="$CACHE_DIR/pitfalls.jsonl"
 
+# the excluded folders, pruned ahead of a walk's expression, so find never enters one (an
+# unreadable folder under the drawer's scratch or node_modules cannot stop the walk)
 EXCLUDES=(
-  ! -path "*/node_modules/*"
-  ! -path "*/dist/*"
-  ! -path "*/build/*"
-  ! -path "*/archive/*"
-  ! -path "*/.git/*"
-  ! -path "*/.contexture/*"
-  ! -path "*/.work/*"
-  ! -path "*/.idea/*"
-  ! -path "*/tests/*"
-  ! -path "*/test/*"
-  ! -path "*/__tests__/*"
-  ! -path "*/.worktrees/*"
+  \( -type d \( -name node_modules -o -name dist -o -name build -o -name archive -o -name .git
+  -o -name .contexture -o -name .work -o -name .idea -o -name tests -o -name test
+  -o -name __tests__ -o -name .worktrees \) \) -prune -o
 )
 TS_SOURCES=(
   -type f \( -name "*.ts" -o -name "*.tsx" \)
@@ -343,8 +337,8 @@ if [[ "$DELTA" == true ]]; then
   DISCOVERED_LIST="$CACHE_DIR/discovered_files.txt"
   RECONCILED_LIST="$CACHE_DIR/reconciled_files.txt"
   {
-    scan_find "$SCAN_DIR" "${TS_SOURCES[@]}" "${EXCLUDES[@]}"
-    docs_find -type f -name "*.md" "${EXCLUDES[@]}"
+    scan_find "$SCAN_DIR" "${EXCLUDES[@]}" "${TS_SOURCES[@]}"
+    docs_find "${EXCLUDES[@]}" -type f -name "*.md"
   } > "$DISCOVERED_LIST"
   RECONCILE_FLAGS=(--db "$DB_PATH" --project-root "$REPO_ROOT" --schema "$SCHEMA_SQL" --reconcile "$DISCOVERED_LIST")
   [[ -z "$SRC_DIR" ]] || RECONCILE_FLAGS+=(--src-root "$SCAN_DIR")
@@ -392,8 +386,8 @@ if [[ "$DELTA" == true ]]; then
       fi
     done
   else
-    { scan_find "$SCAN_DIR" "${TS_SOURCES[@]}" "${EXCLUDES[@]}" -newer "$DB_PATH" 2>/dev/null || true
-      docs_find -type f -name "*.md" "${EXCLUDES[@]}" -newer "$DB_PATH" 2>/dev/null || true
+    { scan_find "$SCAN_DIR" "${EXCLUDES[@]}" "${TS_SOURCES[@]}" -newer "$DB_PATH" 2>/dev/null || true
+      docs_find "${EXCLUDES[@]}" -type f -name "*.md" -newer "$DB_PATH" 2>/dev/null || true
     } | while IFS= read -r f; do
       printf '%s\n' "${f#"$REPO_ROOT"/}"
     done >> "$DIRTY_LIST"
@@ -479,10 +473,10 @@ fi
 # Step 1: Discover the TypeScript sources and the markdown files of the docs walk, the
 # repository root walked outside the exclusion folders when it holds no docs folder
 TS_FILE_LIST="$CACHE_DIR/ts_files.txt"
-scan_find "$SCAN_DIR" "${TS_SOURCES[@]}" "${EXCLUDES[@]}" | sort > "$TS_FILE_LIST"
+scan_find "$SCAN_DIR" "${EXCLUDES[@]}" "${TS_SOURCES[@]}" | sort > "$TS_FILE_LIST"
 MD_FILE_LIST="$CACHE_DIR/md_files.txt"
 DOCS_WALK=(-type f -name "*.md")
-[[ "$DOCS_SCAN_DIR" != "$REPO_ROOT" ]] || DOCS_WALK+=("${EXCLUDES[@]}")
+[[ "$DOCS_SCAN_DIR" != "$REPO_ROOT" ]] || DOCS_WALK=("${EXCLUDES[@]}" "${DOCS_WALK[@]}")
 docs_find "${DOCS_WALK[@]}" | sort > "$MD_FILE_LIST"
 
 TS_COUNT="$(wc -l < "$TS_FILE_LIST" | tr -d ' ')"

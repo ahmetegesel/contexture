@@ -75,7 +75,10 @@ runs `find` from inside the scanned root, so the exclusion folders
 (`node_modules`, `.contexture`, `tests`, `.worktrees`, and the rest) match
 paths within the repository and never the folders the repository itself sits
 in: a repository under a `tests/` or `.worktrees/` folder indexes like any
-other. A full index hands the loader both discovery lists (`--file-list`), so
+other. The full index and the delta scan prune those folders, never entering
+one, so an unreadable folder under the drawer's scratch or `node_modules`
+cannot stop them; the query's freshness check filters their paths and reads
+past such a folder. A full index hands the loader both discovery lists (`--file-list`), so
 `indexed_files` holds every file it discovered, and its repository and scan
 roots (`--project-root`, `--src-root`), which the loader writes as the one
 row of `graph_meta`; every delta first asks the loader, read only
