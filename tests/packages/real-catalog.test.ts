@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { ctx } from '../support/ctx';
+import { ctx, ctxIn } from '../support/ctx';
 import { exec } from '../support/exec';
 import { compose, count, layer, layerBytes, lineOf } from '../support/laws';
 import { catalogCopy, extPath, install, isExec, out, uninstall } from '../support/packages';
@@ -33,6 +33,8 @@ describe.concurrent('the real catalog installs by catalog name through ctx packa
     expect(sd.slice(0, 4)).toEqual(['docs', '.contexture/docs', '.md', '<repo>/<slug>']);
     expect(sd[4]).toBe(join(realpathSync(sb), '.contexture/extensions/modules/docs/data'));
     expect((await ctx(sb, 'docs', 'query', 'workspace', 'conventions')).code).toBe(1);
+    const written = await ctxIn(sb, readFileSync(join(ROOT, 'plugins/docs-discipline/tests/sample/docs/workspace/conventions.md'), 'utf8'), 'docs', 'write', 'workspace', 'conventions');
+    expect(written.code, written.stderr).toBe(0);
     const starter = catalogCopy(sb, 'starter-rhythms');
     expect((await install(sb, starter)).code).toBe(0);
     expect(existsSync(extPath(sb, 'rhythms/work.md'))).toBe(true);

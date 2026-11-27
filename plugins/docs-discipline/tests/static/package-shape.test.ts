@@ -14,9 +14,8 @@ describe('the docs-discipline package shape', () => {
     expect(existsSync(join(MODULE, 'scripts/doc.grammar'))).toBe(true);
   });
 
-  it('[plugins-r2, modules-r13] ships the uninstall part hook executable and no install part hook', () => {
-    expect(() => accessSync(join(MODULE, 'uninstall'), constants.X_OK)).not.toThrow();
-    expect(existsSync(join(MODULE, 'install'))).toBe(false);
+  it('[plugins-r2, modules-r13] ships the uninstall part hook and the install part hook, the root move guard, executable', () => {
+    for (const hook of ['uninstall', 'install']) expect(() => accessSync(join(MODULE, hook), constants.X_OK)).not.toThrow();
   });
 
   it.each(['task-landing', 'load-end'])('[plugins-r2, modules-r5] ships the %s handler executable', (hook) => {

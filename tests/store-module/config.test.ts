@@ -57,7 +57,7 @@ describe.concurrent('ctx store config', () => {
       expect(section).toMatch(new RegExp(`^ {2}ctx store config ${s}( |$)`, 'm'));
       for (const flag of ['--help', '-h']) expect((await run(sb, ['store', 'config', s, flag])).stdout).toBe(section);
     }
-    expect((await run(sb, ['store', 'help', 'config', 'set'])).stdout).toContain('validates storage driver selection');
+    expect((await run(sb, ['store', 'help', 'config', 'set'])).stdout).toContain('the driver belongs to the driver package lifecycle');
     expect((await run(sb, ['store', 'config'])).stdout).not.toMatch(/^ {2}help /m);
     for (const args of [['store', 'config', 'help'], ['store', 'config', 'help', '--help'], ['store', 'help', 'config', 'help']]) {
       const r = await run(sb, args);

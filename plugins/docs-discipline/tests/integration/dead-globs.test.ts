@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { sandbox } from '@support/sandbox';
 import { fresh, seed } from '@support/snapshot';
-import { addModule, docs } from '../support/corpus';
+import { addModule, CORPUS, docs } from '../support/corpus';
 import { check } from '../support/engines';
 import { git, gitCommit, gitInit } from '../support/git';
 
@@ -158,7 +158,7 @@ describe('the check verb judges a glob that claimed a deleted path against the w
     rmSync(join(sb, 'lib/a.sh'));
     const planted = join(sandbox('globs-inherited'), 'universe');
     writeFileSync(planted, 'listed\t.\npath\tlib/zzz.sh\n');
-    const engine = await check(sb, 'D\tlib/a.sh\n', { files: ['docs/workspace/libs.md'], universe: planted });
+    const engine = await check(sb, 'D\tlib/a.sh\n', { files: [join(CORPUS, 'workspace/libs.md')], universe: planted });
     expect(engine.code, engine.stdout + engine.stderr).toBe(0);
     const r = await checkWs(sb, 'D\tlib/a.sh\n', { DOCS_UNIVERSE_LIST: planted });
     expect(r.code, r.stdout + r.stderr).toBe(1);
