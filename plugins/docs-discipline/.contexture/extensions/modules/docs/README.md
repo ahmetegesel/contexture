@@ -2,12 +2,12 @@
 
 The docs module ships with the docs-discipline plugin. The package install
 overlays this directory at `<workspace>/.contexture/extensions/modules/docs/`;
-the engine discovers its eighteen verbs. This page is the off-path maintainer
+the engine discovers its seventeen verbs. This page is the off-path maintainer
 map: it is not linked from the workspace's boot, laws, or help.
 
 ## Layout
 
-The folder is the standard module folder (`docs/modules.md`): `module` carries the summary, the version, and the description block the compose reads; `laws` carries the docs laws, its layout clauses, its boot clause, and its close clause; `data` is the storage declaration; `uninstall` is the optional part hook (it leaves the store data), and the module ships no install hook, so an install writes no corpus doc; `scripts/` holds the verbs, their private engines, and the private grammar asset `doc.grammar`; `hooks/` holds the two handler files the unit module's points run: `task-landing` nudges a task that starts, `load-end` nudges the unit's in-progress tasks; both call `ctx docs nudge` and carry no block mode; this README is off-path.
+The folder is the standard module folder (`docs/modules.md`): `module` carries the summary, the version, and the description block the compose reads; `laws` carries the docs laws, its layout clauses, its boot clause, and its close clause; `data` is the storage declaration; `install` and `uninstall` are the optional part hooks (install writes no corpus doc and, a temporary guard of the one time root move, refuses while the corpus is empty and a corpus written at the old root still sits in the repository's docs folder; uninstall claims nothing about the corpus, which the core uninstaller keeps or deletes on the human's answer); `scripts/` holds the verbs, their private engines, and the private grammar asset `doc.grammar`; `hooks/` holds the two handler files the unit module's points run: `task-landing` nudges a task that starts, `load-end` nudges the unit's in-progress tasks; both call `ctx docs nudge` and carry no block mode; this README is off-path.
 
 | verb | engine |
 |---|---|
@@ -18,7 +18,6 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
 | `search` | `scripts/docs-entity.awk` over the materialized corpus (or one repo's docs), behind the grammar asset; the arguments parse in `docs-io.sh` (`docs_search`) |
 | `nudge` | `scripts/docs-nudge.awk` |
 | `gate` | self-contained; uses `scripts/docs-audit.awk`, and `scripts/docs-check.awk` behind `scripts/docs-glob.awk` |
-| `changes` | none: the corpus half of a delta from the storage layer's change log, computed in `docs-io.sh` |
 | `new`, `write`, `header`, `rule`, `pitfall`, `entry`, `section`, `replace`, `ids` | `scripts/docs-edit.awk` (the edit), then `scripts/docs-audit.awk` (the grammar check) |
 | `remove` | none: `store.delete` through `docs-io.sh` (`--dry-run` prints the stored doc whole and writes nothing) |
 | (every verb) | `scripts/docs-io.sh`, sourced: the one door to the corpus |
@@ -81,11 +80,31 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   every gate form (the default, `--since`, `--stdin`, and `--drift`) stage
   their delta this way, and the governed set's shebang list is drawn from the
   same staged file before the engine runs. `docs_since_rev`
-  resolves a `--since=<rev>` base for the gate and `ctx docs changes` alike
-  (rc 1 for an unknown revision or a root outside a repository with a
-  commit), and `docs_corpus_untracked` counts the corpus docs the root's
-  repository does not track (`git ls-files`, ignored or not) under the files
-  driver.
+  resolves a `--since=<rev>` base for the gate (rc 1 for an unknown revision or
+  a root outside a repository with a commit), and `docs_corpus_untracked`
+  counts the corpus docs the root's repository does not track at the corpus's
+  declared folder (`git ls-files`, ignored or not; every doc a store driver
+  holds, since no file lives there).
+- The declared folder: `docs_corpus_root` reads the module's own row of the
+  storage library's `store_roots` (the own namespace from `store_namespace`)
+  into `DOCS_CORPUS_ROOT`, `.contexture/docs` at the shipped declaration
+  (the drawer, beside the other modules' data) and the namespace under an
+  alias install, and refuses rc 2 with the library's line
+  when the roots cannot be listed (a module data file the core cannot read)
+  or no row names the namespace, never a guessed folder. `DOCS_CORPUS_AWK`
+  holds the one translation pair, `logical()` (a path under the declared
+  folder to its logical address `docs/<repo>/<slug>.md`) and `corpus()` (a
+  git path under the declared folder naming a doc), which
+  `docs_untracked_half` and `docs_corpus_untracked` share; `check` and the
+  gate pass the folder to the engine as `-v corpus_root=`, and
+  `claimant_is_tracked` probes git for a claimant at that folder. Both git
+  calls pass the folder as a literal pathspec (`:(literal)`), the probe inside
+  single quotes, so a folder holding glob characters, a quote, or a dollar sign
+  reaches git as its own bytes; both translation functions first read a path
+  git quoted for a double quote in it (`git_path()`, since git quotes one even
+  under `core.quotePath=false`) as its bytes, so the tracked count and the
+  untracked half see every doc under such a folder. At `docs` every
+  translation is the identity.
 - The quoted paths: every gate git call runs with `core.quotePath=false`, so a
   non-ASCII path arrives as its bytes. `docs_delta_decode` (under `LC_ALL=C`)
   decodes every path git still quotes (a `"..."` field: octal escapes, an
@@ -127,9 +146,8 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   never `awk -v`; the whole new doc on stdout, the note or the refusal on
   stderr, rc 1 on a refusal); the result audited by `docs-audit.awk` over its
   repo in a scratch copy of the corpus made from one store pass (errors name
-  `docs/<repo>/<slug>.md`); then `store.put` with `--op=<verb>` and
-  `--head=<the workspace git HEAD>` (the module's own existence check covers
-  what the retired create flag did). A result equal to the stored doc writes
+  `docs/<repo>/<slug>.md`); then `store.put` of the key alone, no stamp (the
+  module's own existence check covers what the retired create flag did). A result equal to the stored doc writes
   nothing. `replace` and
   `ids` run the edit over every doc of their scope first, check the counts
   (replace: the total must equal `--count`), audit every touched repo, then
@@ -159,25 +177,22 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
 - A bare `check` or `nudge` refuses loudly instead of reading standard input
   as an empty corpus; a bare `audit` reads the whole corpus through the
   driver.
-- The delta source: a driver declaring `store.changelog` (a store) records
-  every doc write with the workspace git HEAD, so the corpus half of a delta
-  comes from the store (`ctx docs changes`: the rows stamped with the current
-  HEAD, or with `--since=<rev>` every commit from `<rev>` to HEAD, the
-  boundary's leading dash stripped, one net status line per doc) while the
-  code half stays on git. `check` and `gate` pick the mode by `driver-resolver
-  has store.changelog`, never by the driver's name, and run the check engine
-  with `-v delta_source=log`: the blanket is off (a doc refreshes only the code
-  its own sources name) and the trackedness probe is off (every claimant can
-  ride the delta, so `UNTRACKED CLAIMANT` never fires). Under the files driver
-  the engine runs as before (`delta_source` unset is git). The gate's store
-  mode drops the workspace root's `docs/<repo>/<slug>.md` paths from the git
-  half (those files are not the corpus) and appends `ctx docs changes`, so a
-  commit empties both halves together; a HEAD move that is not a commit (a
-  checkout, a reset) leaves the old rows outside the window, recovered by
-  `ctx docs changes --since=<the previous HEAD>` piped with the git delta into
-  the check (or by `ctx docs gate --since=<the previous HEAD>`); `--drift`
-  prints a deferral notice (drift over a shared storage layer is undesigned) and
-  checks the incoming code delta alone.
+- The delta source: git, under every driver. No driver keeps a change log
+  (the storage contract describes posix exactly), so `check` and every gate
+  form read the delta from git, and a store driver, which keeps no corpus
+  file, reads every claimant untracked: a changed governed file whose
+  claimants are all untracked reports `UNTRACKED CLAIMANT` and the
+  process-owned clean, its reconciliation the docs-drift flow's, exactly as
+  posix with an untracked corpus. The retired `ctx docs changes` verb meets the
+  engine's unknown verb refusal.
+- Split by source: in the deltas the gate builds from git (the default form,
+  `--since`, `--drift`) a doc rides only at its path under the declared
+  folder, so a tracked adopter file at a doc's logical address elsewhere is an
+  ordinary file; in a caller's list (the check verb's stdin, `gate --stdin`)
+  the logical spelling rides too, since agents and people name docs by their
+  logical address. The engine takes the source as `-v logical_rides=1`
+  (callers' lists) or none (git's halves); at `docs` the two spellings
+  coincide.
 - The gate's delta: the default form reads the working tree (the workspace
   root's `git diff`, `git diff --cached`, and untracked files, plus each child
   repository's), so a clean tree hands the check an empty delta and proves
@@ -186,11 +201,10 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   proves a committed range: the root's half becomes `git diff --name-status
   <rev>` (from `<rev>` to the working tree, rename lines as git prints them)
   plus the untracked files, the child repositories keep their working delta
-  (a notice names them), and under a store the corpus half is `ctx docs
-  changes --since=<rev>`. Under the files driver git carries the corpus half
-  only where the workspace tracks the corpus; an untracked corpus rides no
+  (a notice names them). Git carries the corpus half only where the workspace
+  tracks the corpus at its declared folder; an untracked corpus rides no
   delta, whether git ignores it (the corpus-untracked law's posture) or not,
-  since `docs_untracked_half` leaves the corpus docs (`docs/<repo>/<slug>.md`)
+  since `docs_untracked_half` leaves the corpus docs under the declared folder
   out of the root's untracked files; every governed file's claimants then read
   untracked and the check reports `UNTRACKED CLAIMANT` with a process-owned
   clean, and under `--since` a notice names that limit (the corpus docs `git
@@ -249,16 +263,16 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   one `DEAD SOURCE` line per doc and glob and counts once. The prefilter
   `source_prefix` (in `docs-glob.awk`) never rejects a path the glob rule
   accepts. `--drift` sets `GATE_DRIFT` and skips the test with a notice.
-- The doc touch: a corpus doc rides a delta only at its logical address,
-  `docs/<repo>/<slug>.md` at the start of a delta path (the workspace root's
-  corpus under the files driver, the `ctx docs changes` lines under a store).
+- The doc touch: a corpus doc rides a delta at the start of a delta path, at
+  its path under the declared folder, or at its logical address
+  `docs/<repo>/<slug>.md` in a caller's list.
   A path that merely ends in that shape (a test sample, a child repository's
   own guides under its `projects/<repo>/` or `<repo>/` prefix) is code to the check, never a doc touch: it freshens no
   claimant and triggers no blanket.
 - What a clean verdict cannot see: coverage is glob membership over the
   header sources, so a broad glob (`plugins/**`, `tests/**`) covers every path
-  under it and the check never names the glob that matched; and under the
-  files driver a riding doc whose slug is `architecture` or `overview`
+  under it and the check never names the glob that matched; and under
+  posix a riding doc whose slug is `architecture` or `overview`
   freshens every claimed file of its repo, and any riding doc of the
   workspace repo freshens every claimed file of every repo; the slug and the
   repo decide, never the doc kind. Both print `FRESH (BLANKET)` and an
@@ -283,7 +297,9 @@ core drawer or the base mirror), never by a relative climb from the module
 folder, so the docs module works under the modules root and the extension root
 alike; the grammar asset is the one path resolved beside the module. The gate's git
 aggregation reads from that root; the corpus reads go through the driver
-(under the files driver the corpus is `<root>/docs/<repo>/<slug>.md`).
+(under posix the corpus is `<root>/.contexture/docs/<repo>/<slug>.md`, the
+docs namespace's declared root; the repository's own `docs/` folder belongs to
+people and is never read as the corpus).
 `DOCS_PRODUCT_REPOS_DIR` (default `projects/`) selects the multi-repo product
 directory, read by `docs_children` for the gate's scans and the check's dead
 glob universe alike.
@@ -296,7 +312,16 @@ glob universe alike.
 - The docs discipline's own rules ride the module's `laws` (the output rules)
   and the two rhythms (the authoring and drift procedures); the module seeds
   no conventions doc, and a workspace that keeps rules of its own writes them
-  through `ctx docs new` and `ctx docs rule`.
+  through `ctx docs new` and `ctx docs rule` (under posix a doc lands under
+  `.contexture/docs/<repo>/`).
+- The install hook is the one time root move guard alone: under posix, when the
+  corpus is empty while a corpus doc written at the old root (a
+  `docs/<repo>/<slug>.md` whose first line is the `@doc` line naming its own
+  slug) still sits in the repository's docs folder, it exits rc 1 naming those
+  repos and `docs/adoption.md` (Updating), so the installer stops rc 2 with the
+  overlay and its record in place; the same install after the move passes. The
+  guard reads the corpus only through `ctx docs query --index`, never runs under
+  a store driver, and leaves with the idea `retire-docs-root-move-guard`.
 - The plugin's `tests/sample/` corpus is reference data only: five fictional
   docs (a workspace conventions doc among them, which the rule cases read)
   plus a demo backlog used by the nudge walk and the tests. It is never copied
@@ -310,8 +335,8 @@ The plugin's tests are the vitest project `docs-discipline` in
 harness). Every test stages a sandbox under the workspace's `.contexture/tmp/`
 from the shipped copies alone: the runtime, the unit and lane modules, and the
 storage core from `base/`, this module (its grammar asset riding inside it)
-from the plugin, and on fts5 the storage-fts5 plugin's driver copy with
-`storage.driver: fts5`; the engines run under the system awk. The logic runs
+from the plugin, and on sqlite the storage-sqlite plugin's driver copy with
+`storage.driver: sqlite`; the engines run under the system awk. The logic runs
 once, on posix. `unit/` drives each engine alone over files: `docs-edit.awk`
 against the `tests/write/` goldens (every success byte for byte, every
 refusal) and the opaque ids under a fixed seed (the draw, the draw again past
@@ -328,8 +353,9 @@ argument a child repository's exact source over a workspace glob and a
 workspace doc's exact child path over the child's glob, and a workspace doc
 reading a `workspace/` path as given, as the check reads it UNCOVERED),
 `docs-check.awk` over the gate
-matrix's eight scenarios, the twelve capture deltas, both delta sources,
-the doc touch at the logical address alone, and the governed set over a
+matrix's eight scenarios, the twelve capture deltas, the git delta's blanket
+and untracked claimant, the doc touch at the start of a delta path under the
+declared folder and in a caller's list, and the governed set over a
 planted shebang list (the shebang script, the `.awk` engine, the plain file,
 the exclusions first, a claimed script's `STALE DOC`, a deleted path listed
 exactly, after a broader glob of the same doc too, the folder and `<dir>/`
@@ -387,15 +413,32 @@ inside an enclosing repository that ignores it read unlisted, a custom
 product folder the check and the gate share, a nested repository's `<dir>/`
 line, and the gate's default, `--since`, `--stdin`, notice, and `--drift`
 skip, an inherited list reaching neither `--drift` nor the matrix). `fault/` configures a planted driver that declares no store, so
-every read verb refuses rc 2 naming the capability. `store/` keeps the cases
-where the fts5 driver adds value: the corpus written through `ctx docs write`
-with the docs folder removed and read back unchanged through `ctx docs write
---replace --dry-run`, one change-log row with its op and the workspace HEAD
-per write, the `ctx docs changes` window, the gate's store mode (with
-`--since` reading FRESH or STALE over a commit the plain gate reads empty), and a parity
-smoke of the read verbs against the engines' expected output; it skips when
-sqlite3 lacks FTS5. Needs: POSIX awk and sh, `base/` beside `plugins/`, git,
-and for `store/` sqlite3 with FTS5.
+every read verb refuses rc 2 naming the capability. `integration/corpus-root.test.ts` installs the module plainly, its
+corpus in the drawer, and under an alias, its corpus under `kb`, each: a
+tracked corpus's STALE and FRESH, an untracked corpus's process-owned clean,
+the check over a stdin delta naming a doc by its path there and by its logical
+address, an untracked doc beside a tracked claimant, the `--since` untracked
+count, an adopter file at a doc's logical address read as an ordinary file in
+the gate's git halves, and the store roots refusal under the gate and the
+check; a declared folder holding a dollar sign and glob brackets reaching
+git as its own bytes; and one holding a double quote, which git quotes in the
+paths it lists, keeping the `--since` count and the untracked half true. `integration/root-move.test.ts` proves the drawer root
+beside an adopter's own docs folder (a tracked guide and nested pages never
+read as docs, keys, or strays) and the one time move with its install hook
+guard: an update before the move refused with the overlay in place and the old
+place untouched, the move then the same install passing with
+the index and every projection equal, the move first keeping every doc byte,
+the move form refusing an existing target, a fresh install beside pages that
+are no corpus docs passing and seeding nothing, two planted repos named, and a
+store driver never refusing. `store/` keeps the
+cases on the sqlite driver: the corpus written through `ctx docs write` with the
+docs folder removed and read back unchanged through `ctx docs write --replace
+--dry-run`, the gate on the git path (a code change alone reading `UNTRACKED
+CLAIMANT` and the process-owned clean with the same lines posix prints, a doc
+written through the store never riding, the `--since` notice, `--stdin`), and a
+parity smoke of the read verbs against the engines' expected output; it skips when
+sqlite3 3.44 or later is absent. Needs: POSIX awk and sh, `base/` beside `plugins/`, git,
+and for `store/` sqlite3 3.44 or later.
 
 ## The gate's matrix
 

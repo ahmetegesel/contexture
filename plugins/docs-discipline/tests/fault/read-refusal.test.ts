@@ -5,7 +5,7 @@ import { driverPath } from '@support/driver';
 import { fresh } from '@support/snapshot';
 import { docs, stageSeed } from '../support/corpus';
 
-const CARD = '{"driver":"planted","version":"3.0.0","contract":"3","store":[],"search_modes":[{"name":"exact","description":"the exact rule"}],"optional":[]}';
+const CARD = '{"driver":"planted","version":"4.0.0","contract":"4","store":[],"search_modes":[{"name":"exact","description":"the exact rule"}],"optional":[]}';
 
 function plantStoreless(sb: string): void {
   const dir = join(sb, '.contexture/extensions/storage/drivers/planted');

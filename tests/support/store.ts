@@ -7,15 +7,10 @@ import { seed } from './snapshot';
 import type { Driver } from './stage';
 import { answer, b64 } from './wire';
 
-export type Action = { action: 'put'; key: string; value: Buffer | string; head?: string } | { action: 'delete'; key: string; head?: string };
+export type Action = { action: 'put'; key: string; value: Buffer | string } | { action: 'delete'; key: string };
 
 export function batchPayload(actions: readonly Action[]): string {
-  return actions
-    .map((a) => {
-      const head = a.head === undefined ? '' : `head=${a.head}\n`;
-      return a.action === 'put' ? `action=put\nkey=${a.key}\n${head}value_b64=${b64(a.value)}\n` : `action=delete\nkey=${a.key}\n${head}`;
-    })
-    .join('');
+  return actions.map((a) => (a.action === 'put' ? `action=put\nkey=${a.key}\nvalue_b64=${b64(a.value)}\n` : `action=delete\nkey=${a.key}\n`)).join('');
 }
 
 export function store(sb: string, driver: Driver, env: Record<string, string> = {}) {
@@ -26,7 +21,6 @@ export function store(sb: string, driver: Driver, env: Record<string, string> = 
     del: (ns: string, key: string, ...flags: string[]): Promise<Run> => op('store.delete', [ns, key, ...flags]),
     list: (...args: string[]): Promise<Run> => op('store.list', args),
     scan: (...args: string[]): Promise<Run> => op('store.scan', args),
-    changes: (...args: string[]): Promise<Run> => op('store.changes', args),
     batch: (ns: string, actions: readonly Action[] | string): Promise<Run> =>
       op('store.batch', [ns], typeof actions === 'string' ? actions : batchPayload(actions)),
     search: (ns: string, mode: string, limit: string, input: string): Promise<Run> => op('store.search', [ns, mode, limit], input),
@@ -39,8 +33,8 @@ export const DOCS_KEYS: [string, Buffer][] = [
   ['workspace/a', Buffer.from('a\n')],
   ['workspace/aa', Buffer.from('aa\n')],
   ['workspace/binary', Buffer.from([0x61, 0x00, 0x62, 0xff])],
-  ['workspace/q"uote', Buffer.from('quote\n')],
-  ['workspace/türkçe', Buffer.from('turkce\n')],
+  ['workspace/q.uote', Buffer.from('quote\n')],
+  ['workspace/u_n-1', Buffer.from('turkce\n')],
 ];
 
 export const listAnswer = (ns: string, keys: readonly string[]) => `${JSON.stringify({ namespace: ns, keys })}\n`;

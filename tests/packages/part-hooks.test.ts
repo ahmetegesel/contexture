@@ -1,7 +1,8 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { addFile, addModule, extPath, installPkg, newPkg, recordPath, uninstall, writeManifest } from '../support/packages';
+import { addFile, addModule, extPath, install, installPkg, newPkg, recordPath, uninstall, writeManifest } from '../support/packages';
+import { twinPkg } from '../support/twin';
 import { chmodPlant, ROOT_USER } from '../support/plants';
 import { stage } from '../support/stage';
 import { put } from '../support/tree';
@@ -105,14 +106,13 @@ describe.concurrent('package-install and package-uninstall: package-level lifecy
     ]);
   });
 
-  it('[modules-r13, the-engine-r22] driver package hooks/install and non-executable hooks/uninstall work cleanly', async () => {
+  it('[modules-r13, the-engine-r22] driver package hooks/install and non-executable hooks/uninstall work cleanly', { timeout: 900_000 }, async () => {
     const sb = sandbox();
-    const p = newPkg(sb, 'pkgdrv');
-    addFile(p, 'storage/drivers/drv/driver', '#!/bin/sh\nexit 0', 0o755);
+    const p = twinPkg(sb, { name: 'pkgdrv', driver: 'drv', version: '2.0.0' });
     put(join(p, 'hooks/install'), '#!/bin/sh\nprintf "drv-install %s\\n" "$CTX_PACKAGE_NAME" > "$CTX_ROOT/drv.log"\n', 0o644);
     put(join(p, 'hooks/uninstall'), '#!/bin/sh\nprintf "drv-uninstall %s\\n" "$CTX_PACKAGE_NAME" >> "$CTX_ROOT/drv.log"\n', 0o644);
 
-    expect((await installPkg(sb, p, '2.0.0')).code).toBe(0);
+    expect((await install(sb, p)).code).toBe(0);
     expect(existsSync(extPath(sb, '.state/pkgdrv.uninstall'))).toBe(true);
     expect((await uninstall(sb, 'pkgdrv')).code).toBe(0);
     expect(readFileSync(join(sb, 'drv.log'), 'utf8')).toBe('drv-install pkgdrv\ndrv-uninstall pkgdrv\n');

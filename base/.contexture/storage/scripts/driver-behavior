@@ -1,0 +1,515 @@
+#!/bin/sh
+# driver-behavior: the storage core's private differential driver behavior test (no summary
+# line, so discovery ignores it and it is never a verb). It stages two scratch workspaces in
+# one work root under the drawer's scratch folder, the reference with the core posix driver
+# and the candidate with the driver part it is given as its configured driver at the
+# extension tier, runs one fixed step set through each workspace's own resolver under a
+# cleared environment, and compares every step: the exit code, the stdout bytes, and the
+# stderr shape. posix is the reference, so no answer is kept here; each step carries only its
+# intent (hold or refuse), and a reference that contradicts one proves nothing.
+#
+# Usage: driver-behavior <driver part> [--all]
+#   <driver part>  storage/drivers/<name> as a package ships it: a folder holding an
+#                  executable driver, or the executable itself, its base name the driver name
+#   --all          every differing step's line before the answer
+# The answer, one stdout line naming no path:
+#   driver behavior: same: <name> answers the <n> steps as posix does         rc 0
+#   driver behavior: differs at step <id> (<title>): <what differed>           rc 1
+#   driver behavior: cannot run: <reason>                                      rc 2
+# A bad argument refuses rc 1 with one stderr line. A hangup, interrupt, or termination stops
+# both sides and each call in flight, removes the work root, and exits 129, 130, or 143.
+
+set -u
+LC_ALL=C
+export LC_ALL
+
+bh_bad() {
+  printf 'driver-behavior: error: %s (ERR_INVALID_ARGUMENT)\n' "$1" >&2
+  exit 1
+}
+
+BH_PART_NEED="takes one driver part: a folder holding an executable driver, or the executable itself"
+BH_ALL=0
+BH_PART=""
+BH_SEEN=0
+for bh_a in "$@"; do
+  case "$bh_a" in
+    --all) BH_ALL=1 ;;
+    -*) bh_bad "unknown option '$bh_a'" ;;
+    *)
+      [ "$BH_SEEN" -eq 0 ] || bh_bad "$BH_PART_NEED"
+      BH_SEEN=1
+      BH_PART=$bh_a
+      ;;
+  esac
+done
+
+while :; do
+  case "$BH_PART" in
+    */) BH_PART=${BH_PART%/} ;;
+    *) break ;;
+  esac
+done
+[ -n "$BH_PART" ] || bh_bad "$BH_PART_NEED"
+case "$BH_PART" in
+  */*) bh_pd=${BH_PART%/*}; BH_NAME=${BH_PART##*/} ;;
+  *) bh_pd=.; BH_NAME=$BH_PART ;;
+esac
+[ -n "$bh_pd" ] || bh_pd=/
+case "$BH_NAME" in
+  .*|*[!A-Za-z0-9._-]*) bh_bad "the driver part's name is not a driver name (letters, digits, dot, underscore, dash, not opening with a dot)" ;;
+  posix) bh_bad "the driver part takes the reference driver's name, posix" ;;
+esac
+bh_pd=$(CDPATH='' cd -- "$bh_pd" 2>/dev/null && pwd) || bh_bad "$BH_PART_NEED"
+BH_CAND=$bh_pd/$BH_NAME
+if [ -d "$BH_CAND" ]; then
+  [ -f "$BH_CAND/driver" ] && [ -x "$BH_CAND/driver" ] || bh_bad "$BH_PART_NEED"
+  BH_FORM=$BH_NAME/driver
+elif [ -f "$BH_CAND" ] && [ -x "$BH_CAND" ]; then
+  BH_FORM=$BH_NAME
+else
+  bh_bad "$BH_PART_NEED"
+fi
+
+bh_cannot() {
+  printf 'driver behavior: cannot run: %s\n' "$1"
+  exit 2
+}
+
+case "$0" in */*) BH_HOME=${0%/*} ;; *) BH_HOME=. ;; esac
+BH_HOME=$(CDPATH='' cd -- "$BH_HOME" 2>/dev/null && pwd) || bh_cannot "the storage core cannot be found"
+BH_STORAGE=${BH_HOME%/*}
+BH_DRAWER=${BH_STORAGE%/*}
+[ -x "$BH_HOME/driver-resolver" ] && [ -x "$BH_HOME/store-b64" ] && [ -f "$BH_DRAWER/config-lib" ] \
+  || bh_cannot "the storage core or the configuration library is not installed"
+
+BH_TMP=$BH_DRAWER/tmp
+BH_TMP_MADE=0
+BH_WORK=""
+BH_PA=""
+BH_PB=""
+BH_FORKING=""
+
+bh_clean() {
+  [ -z "$BH_WORK" ] || rm -rf "$BH_WORK"
+  BH_WORK=""
+  [ "$BH_TMP_MADE" -eq 0 ] || rmdir "$BH_TMP" 2>/dev/null
+  BH_TMP_MADE=0
+  return 0
+}
+
+# bh_reap <pid>: wait for the job until it is gone; a wait a trapped signal interrupts
+# answers past 128 while the job still runs
+bh_reap() {
+  while :; do
+    wait "$1"
+    [ $? -gt 128 ] && kill -0 "$1" 2>/dev/null && continue
+    return 0
+  done
+}
+
+bh_stop() {
+  bs_pids="$BH_PA $BH_PB"
+  if [ -n "$BH_FORKING" ]; then
+    set +u
+    bs_pids="$bs_pids $!"
+    set -u
+  fi
+  for bs_p in $bs_pids; do kill -TERM "$bs_p" 2>/dev/null; done
+  for bs_p in $bs_pids; do bh_reap "$bs_p" 2>/dev/null; done
+  BH_PA=""
+  BH_PB=""
+  BH_FORKING=""
+  bh_clean
+  trap - EXIT
+  exit "$1"
+}
+
+trap 'bh_clean' EXIT
+trap 'bh_stop 129' HUP
+trap 'bh_stop 130' INT
+trap 'bh_stop 143' TERM
+
+if [ ! -d "$BH_TMP" ]; then
+  mkdir "$BH_TMP" 2>/dev/null && BH_TMP_MADE=1
+fi
+BH_WORK=$(mktemp -d "$BH_TMP/bt.XXXXXX" 2>/dev/null) || BH_WORK=""
+[ -n "$BH_WORK" ] && [ -d "$BH_WORK" ] || bh_cannot "the drawer's scratch folder cannot hold the work root"
+BH_FX=$BH_WORK/x
+BH_A=$BH_WORK/a
+BH_B=$BH_WORK/b
+BH_OA=$BH_WORK/oa
+BH_OB=$BH_WORK/ob
+BH_STEPS=$BH_WORK/steps
+BH_SFX=.sfx0123456789abcdefghijklmnopqrstuvwxyzABCDEFGH
+
+bh_put() { printf 'action=put\nkey=%s\nvalue_b64=%s\n' "$1" "$2"; }
+bh_del() { for bd_k in "$@"; do printf 'action=delete\nkey=%s\n' "$bd_k"; done; }
+
+# bh_fixtures: every step's stdin, made once with printf octal escapes and read by both
+# sides; the value at the cap is 16777216 bytes holding every byte value, a newline every
+# 65281 bytes, so no line reaches 64 KiB
+bh_fixtures() {
+  mkdir "$BH_FX" || return 1
+  { true > "$BH_FX/none" && true > "$BH_FX/empty" && printf 'one\n' > "$BH_FX/one" && printf 'two' > "$BH_FX/two" \
+    && printf 'three\n' > "$BH_FX/three" && printf 'a\000b\000' > "$BH_FX/nul" \
+    && printf '\377\376\200\300\257\355\240\200x' > "$BH_FX/bad"; } 2>/dev/null || return 1
+  bf_fmt=$(awk 'BEGIN { for (i = 0; i < 256; i++) printf "\\%03o", i }') || return 1
+  # shellcheck disable=SC2059
+  printf "$bf_fmt" > "$BH_FX/all" || return 1
+  bf_fmt=$(awk 'BEGIN { for (i = 0; i < 256; i++) if (i != 10) printf "\\%03o", i }') || return 1
+  # shellcheck disable=SC2059
+  printf "$bf_fmt" > "$BH_FX/f" || return 1
+  bf_n=0
+  while [ "$bf_n" -lt 8 ]; do
+    cat "$BH_FX/f" "$BH_FX/f" > "$BH_FX/g" && mv "$BH_FX/g" "$BH_FX/f" || return 1
+    bf_n=$((bf_n + 1))
+  done
+  { cat "$BH_FX/f" && printf '\n'; } > "$BH_FX/u" || return 1
+  bf_n=0
+  while [ "$bf_n" -lt 8 ]; do
+    cat "$BH_FX/u" "$BH_FX/u" > "$BH_FX/g" && mv "$BH_FX/g" "$BH_FX/u" || return 1
+    bf_n=$((bf_n + 1))
+  done
+  dd if="$BH_FX/f" of="$BH_FX/t" bs=65024 count=1 2>/dev/null || return 1
+  cat "$BH_FX/all" "$BH_FX/u" "$BH_FX/t" > "$BH_FX/big" || return 1
+  rm -f "$BH_FX/f" "$BH_FX/u" "$BH_FX/t"
+  bf_n=$(wc -c < "$BH_FX/big") || return 1
+  [ "${bf_n##* }" = 16777216 ] || return 1
+  { printf 'alpha\nneedle one\n' > "$BH_FX/s1" && printf 'NEEDLE caps\n' > "$BH_FX/s2" \
+    && printf '# needle heading\nno match\n' > "$BH_FX/s3" && printf 'query=needle\n' > "$BH_FX/q"; } || return 1
+  b_one=$("$BH_HOME/store-b64" "$BH_FX/one") && b_two=$("$BH_HOME/store-b64" "$BH_FX/two") \
+    && b_three=$("$BH_HOME/store-b64" "$BH_FX/three") && b_nul=$("$BH_HOME/store-b64" "$BH_FX/nul") \
+    && b_bad=$("$BH_HOME/store-b64" "$BH_FX/bad") || return 1
+  { bh_put b/1 "$b_one" && bh_put b/2 "$b_two" && bh_del b/1 && bh_put b/1 "$b_three"; } > "$BH_FX/b01" || return 1
+  { bh_put c/1 "$b_one" && bh_put c/2 "$b_two" && bh_del c/9; } > "$BH_FX/b04" || return 1
+  { bh_put d/Q "$b_one" && bh_put d/q "$b_two"; } > "$BH_FX/b06" || return 1
+  { bh_put e/1 "$b_one" && bh_del e/1; } > "$BH_FX/b08" || return 1
+  { bh_put g/nul "$b_nul" && bh_put g/bad "$b_bad" && bh_put g/empty ""; } > "$BH_FX/b10" || return 1
+  { bh_put h/1 "$b_one" && bh_put h/2 '***'; } > "$BH_FX/b14" || return 1
+  { bh_put i/1 "$b_one" && printf 'head=none\n'; } > "$BH_FX/b16" || return 1
+  { bh_put j/1 "$b_one" && bh_put j/1 "$b_two"; } > "$BH_FX/b18" || return 1
+  { bh_put u/1 "$b_one" && bh_put T/gamma "$b_two"; } > "$BH_FX/t06" || return 1
+  { bh_put v/1 "$b_one" && bh_put V/2 "$b_two"; } > "$BH_FX/t08" || return 1
+  bh_del a/all a/bad a/empty a/nul b/1 b/2 g/bad g/empty g/nul j/1 k0/0123456789 k1/abcdefghijklmnopqrstuvwxyz \
+    k2/ABCDEFGHIJKLMNOPQRSTUVWXYZ k3/x.y_z-w s/1 s/2 s/3 t/Alpha > "$BH_FX/x04" || return 1
+  bh_del o o-a o.a o/a o0 oB o_a oa "$BH_S200" "$BH_K512" "$BH_D512" > "$BH_FX/x05" || return 1
+}
+
+# bh_steps: the fixed step set, one line each: id|intent|compare|stdin|title|the resolver call;
+# @lock and @unlock plant and remove a live namespace lock in each side's drawer
+bh_steps() {
+  {
+    printf '%s\n' \
+      'k01|hold|card|none|the card through the resolver check|check' \
+      'h01|hold|health|none|health of the empty store|storage.health flat' \
+      'l01|hold|full|none|list of the empty store|store.list flat' \
+      'c00|hold|full|none|scan of the empty store|store.scan flat' \
+      'g00|refuse|full|none|get of an absent key|store.get flat a/none' \
+      'p01|hold|full|one|put a value|store.put flat a/k1' \
+      'g01|hold|full|none|get the value|store.get flat a/k1' \
+      'p02|hold|full|two|overwrite with a value without a final newline|store.put flat a/k1' \
+      'g02|hold|full|none|get the overwritten value|store.get flat a/k1' \
+      'p03|hold|full|empty|put an empty value|store.put flat a/empty' \
+      'g03|hold|full|none|get the empty value|store.get flat a/empty' \
+      'p04|hold|full|nul|put a value holding NUL bytes|store.put flat a/nul' \
+      'g04|hold|full|none|get the value holding NUL bytes|store.get flat a/nul' \
+      'p05|hold|full|bad|put a value of invalid UTF-8|store.put flat a/bad' \
+      'g05|hold|full|none|get the value of invalid UTF-8|store.get flat a/bad' \
+      'p06|hold|full|all|put every byte value|store.put flat a/all' \
+      'g06|hold|full|none|get every byte value|store.get flat a/all' \
+      'h02|hold|health|none|health of a store holding keys|storage.health flat' \
+      'p07|hold|full|one|put a key of digits with a leading digit|store.put flat k0/0123456789' \
+      'p08|hold|full|one|put a key of every lower case letter|store.put flat k1/abcdefghijklmnopqrstuvwxyz' \
+      'p09|hold|full|one|put a key of every upper case letter|store.put flat k2/ABCDEFGHIJKLMNOPQRSTUVWXYZ' \
+      'p10|hold|full|one|put a key holding dot, underscore, and dash|store.put flat k3/x.y_z-w' \
+      'q01|hold|full|one|put the order key o|store.put deep o' \
+      'q02|hold|full|one|put the order key o-a|store.put deep o-a' \
+      'q03|hold|full|one|put the order key o.a|store.put deep o.a' \
+      'q04|hold|full|one|put the order key o/a, a key below another key|store.put deep o/a' \
+      'q05|hold|full|one|put the order key o0|store.put deep o0' \
+      'q06|hold|full|one|put the order key oB|store.put deep oB' \
+      'q07|hold|full|one|put the order key o_a|store.put deep o_a' \
+      'q08|hold|full|one|put the order key oa|store.put deep oa' \
+      'l02|hold|full|none|list order across dash, dot, slash, digit, upper case, underscore, lower case|store.list deep' \
+      'l03|hold|full|none|list a prefix ending mid segment|store.list deep o' \
+      'l04|hold|full|none|list a prefix ending on a slash|store.list deep o/' \
+      'l05|hold|full|none|list a prefix ending on a dot|store.list deep o.' \
+      'l06|hold|full|none|list a prefix ending on an underscore, a literal|store.list deep o_' \
+      'l07|hold|full|none|list a prefix in the other case, nothing|store.list deep O' \
+      'l08|hold|full|none|list a prefix ending on a dash|store.list deep o-' \
+      'l09|hold|full|none|list a prefix naming a whole key|store.list deep oa'
+    printf '%s\n' \
+      "p20|hold|full|one|put a 200 byte final segment|store.put deep $BH_S200" \
+      "g20|hold|full|none|get the 200 byte final segment|store.get deep $BH_S200" \
+      "p21|hold|full|two|put a 512 byte key of three segments|store.put deep $BH_K512" \
+      "g21|hold|full|none|get the 512 byte key of three segments|store.get deep $BH_K512" \
+      "l10|hold|full|none|list below the 200 byte segment|store.list deep $BH_S200/" \
+      "p22|hold|full|three|put a 512 byte key of 256 segments|store.put deep $BH_D512" \
+      "g22|hold|full|none|get the 512 byte key of 256 segments|store.get deep $BH_D512"
+    printf '%s\n' \
+      'l11|hold|full|none|list below the deep folders|store.list deep d/d/' \
+      't01|hold|full|one|put a mixed case key|store.put flat t/Alpha' \
+      't02|refuse|full|two|put a case twin of the whole key|store.put flat t/alpha' \
+      't03|refuse|full|none|get the key in another case|store.get flat t/ALPHA' \
+      't04|refuse|full|two|put a key whose leading segment is a case twin|store.put flat T/beta' \
+      't05|hold|full|none|get the stored spelling|store.get flat t/Alpha' \
+      't06|refuse|full|t06|batch putting a case twin of a stored leading segment|store.batch flat' \
+      't07|hold|full|none|list after the refused twin batch|store.list flat u/' \
+      't08|refuse|full|t08|batch putting two case twins|store.batch flat' \
+      't09|hold|full|none|list after the batch of two twins|store.list flat v/' \
+      'b01|hold|full|b01|batch in order, a key put, deleted, and put again|store.batch flat' \
+      'b02|hold|full|none|get the key put again in the batch|store.get flat b/1' \
+      'b03|hold|full|none|get the other key of the batch|store.get flat b/2' \
+      'b04|refuse|full|b04|batch whose third action fails|store.batch flat' \
+      'b05|hold|full|none|list after the batch whose third action failed|store.list flat c/' \
+      'b06|refuse|full|b06|batch holding a case twin|store.batch flat' \
+      'b07|hold|full|none|list after the batch holding a case twin|store.list flat d/' \
+      'b08|hold|full|b08|batch putting and deleting one key|store.batch flat' \
+      'b09|refuse|full|none|get the key the batch deleted|store.get flat e/1' \
+      'b10|hold|full|b10|batch of NUL, invalid UTF-8, and empty values|store.batch flat' \
+      'b11|hold|full|none|get the batch value holding NUL bytes|store.get flat g/nul' \
+      'b12|hold|full|none|get the batch value of invalid UTF-8|store.get flat g/bad' \
+      'b13|hold|full|none|get the empty batch value|store.get flat g/empty' \
+      'b14|refuse|full|b14|batch holding a malformed base64 value|store.batch flat' \
+      'b15|hold|full|none|list after the batch holding a malformed value|store.list flat h/' \
+      'b16|refuse|full|b16|batch holding an unknown payload line|store.batch flat' \
+      'b17|hold|full|none|list after the batch holding an unknown line|store.list flat i/' \
+      'b18|hold|full|b18|batch putting one key twice|store.batch flat' \
+      'b19|hold|full|none|get the key the batch put twice|store.get flat j/1' \
+      'm01|hold|full|none|batched get: present, empty, NUL, invalid UTF-8, missing, repeated, in order|store.get flat a/k1 a/empty a/nul a/bad a/none a/k1 g/bad' \
+      's01|hold|full|s1|put the first search value|store.put flat s/1' \
+      's02|hold|full|s2|put the upper case search value|store.put flat s/2' \
+      's03|hold|full|s3|put the search value matching only on a hash line|store.put flat s/3' \
+      's04|hold|full|q|exact search, case insensitive, never on a hash line|store.search flat exact 20' \
+      's05|hold|full|q|exact search with its limit after the walk|store.search flat exact 1' \
+      's06|refuse|full|q|ranked search mode refused|store.search flat hybrid 5' \
+      'c01|hold|full|none|scan of the flat namespace|store.scan flat' \
+      'c02|hold|full|none|scan of the deep namespace|store.scan deep' \
+      'r01|refuse|full|one|put a key outside the pattern|store.put flat x' \
+      'r02|refuse|full|none|list an undeclared namespace|store.list nosuch' \
+      'r03|refuse|full|none|an unknown function|store.nosuch flat' \
+      'r04|refuse|full|one|put with an extra argument|store.put flat a/k9 extra' \
+      'r05|refuse|full|none|get with no key|store.get flat' \
+      '@lock|flat' \
+      'h03|hold|health|none|health while a writer holds the namespace lock|storage.health flat' \
+      '@unlock|flat' \
+      'v01|hold|full|big|put the 16 MiB value|store.put flat z/big' \
+      'v02|hold|full|none|get the 16 MiB value|store.get flat z/big' \
+      'v03|hold|full|none|delete the 16 MiB value|store.delete flat z/big' \
+      'x01|hold|full|none|delete a key|store.delete flat a/k1' \
+      'x02|refuse|full|none|delete the deleted key again|store.delete flat a/k1' \
+      'x03|refuse|full|none|get the deleted key|store.get flat a/k1' \
+      'x04|hold|full|x04|batch deleting every flat key the run wrote|store.batch flat' \
+      'x05|hold|full|x05|batch deleting every deep key the run wrote|store.batch deep' \
+      'x06|hold|full|none|list the flat namespace, empty|store.list flat' \
+      'x07|hold|full|none|list the deep namespace, empty|store.list deep' \
+      'h04|hold|health|none|health after the deletes|storage.health flat'
+  } > "$BH_STEPS"
+}
+
+# bh_stage <root> [<candidate>]: a scratch workspace holding a copy of the storage core and
+# the configuration library and the two synthetic namespaces; a candidate is copied to the
+# extension tier and named as the workspace's configured driver
+bh_stage() {
+  mkdir "$1" "$1/.contexture" "$1/.contexture/tmp" "$1/.contexture/modules" \
+    "$1/.contexture/modules/flat" "$1/.contexture/modules/deep" || return 1
+  cp -R "$BH_STORAGE" "$1/.contexture/storage" || return 1
+  cp "$BH_DRAWER/config-lib" "$1/.contexture/config-lib" || return 1
+  printf 'key: <a>/<b>\n' > "$1/.contexture/modules/flat/data" || return 1
+  printf 'key: <p...>\nsuffix: %s\n' "$BH_SFX" > "$1/.contexture/modules/deep/data" || return 1
+  [ $# -eq 2 ] || return 0
+  mkdir -p "$1/.contexture/extensions/storage/drivers" || return 1
+  cp -R "$2" "$1/.contexture/extensions/storage/drivers/$BH_NAME" || return 1
+  printf 'storage.driver: %s\n' "$BH_NAME" > "$1/.contexture/config"
+}
+
+# bh_call <root> <command> [<args>...]: the root's own resolver from the root, with only PATH,
+# HOME, USER, TZ, the C locale, and a TMPDIR, a CTX_ROOT, and a CTX_SCRATCH_ROOT inside the root
+bh_call() {
+  bc_root=$1
+  shift
+  cd "$bc_root" || exit 2
+  exec env -i PATH="${PATH:-/usr/bin:/bin}" ${HOME+"HOME=$HOME"} ${USER+"USER=$USER"} ${TZ+"TZ=$TZ"} LC_ALL=C \
+    TMPDIR="$bc_root/.contexture/tmp" CTX_ROOT="$bc_root" CTX_SCRATCH_ROOT="$bc_root/.contexture/tmp/v" \
+    "$bc_root/.contexture/storage/scripts/driver-resolver" "$@"
+}
+
+bh_lock() {
+  BL_DIR="$1/.contexture/tmp/locks/store-$2.lock"
+  mkdir -p "$BL_DIR" && printf '%s\n' "$$" > "$BL_DIR/pid"
+}
+
+bh_side_stop() {
+  if [ -n "$BD_BUSY" ]; then
+    set +u
+    bd_p=$!
+    set -u
+    if [ -n "$bd_p" ] && [ "$bd_p" != "$BD_LAST" ]; then
+      kill -TERM "$bd_p" 2>/dev/null
+      bh_reap "$bd_p"
+    fi
+  fi
+  exit "$1"
+}
+
+# bh_side <root> <out folder>: every step through the root's resolver, one call at a time in
+# the background under the wait builtin, so a signal stops the call in flight and waits for it
+bh_side() {
+  trap - EXIT
+  BD_BUSY=""
+  BD_LAST=""
+  trap 'bh_side_stop 129' HUP
+  trap 'bh_side_stop 130' INT
+  trap 'bh_side_stop 143' TERM
+  set -f
+  bd_root=$1
+  bd_out=$2
+  mkdir "$bd_out" || exit 2
+  while IFS='|' read -r bd_id bd_intent bd_mode bd_in bd_title bd_call; do
+    case "$bd_id" in
+      @lock) bh_lock "$bd_root" "$bd_intent" || exit 2; continue ;;
+      @unlock) rm -rf "$BL_DIR" || exit 2; continue ;;
+    esac
+    BD_BUSY=1
+    bh_call "$bd_root" $bd_call < "$BH_FX/$bd_in" > "$bd_out/$bd_id.out" 2> "$bd_out/$bd_id.err" &
+    wait "$!"
+    bd_rc=$? BD_BUSY="" BD_LAST=$!
+    printf '%s\n' "$bd_rc" > "$bd_out/$bd_id.rc" || exit 2
+  done < "$BH_STEPS"
+  exit 0
+}
+
+# bh_shape <stderr file>: SH_N lines, SH_C the code in the last parentheses ending the first
+# line, SH_F the function before its ': error: ' (the resolver's own line before ': ERROR: ')
+bh_shape() {
+  sh_s=$(awk '
+    NR == 1 { l = $0 }
+    END {
+      f = ""; c = ""
+      i = index(l, ": error: ")
+      if (!i) i = index(l, ": ERROR: ")
+      if (i) f = substr(l, 1, i - 1)
+      if (match(l, /\([A-Z][A-Z0-9_]*\)$/)) c = substr(l, RSTART + 1, RLENGTH - 2)
+      printf "%d;%s;%s", NR, c, f
+    }' "$1")
+  SH_N=${sh_s%%;*}
+  sh_s=${sh_s#*;}
+  SH_C=${sh_s%%;*}
+  SH_F=${sh_s#*;}
+}
+
+# bh_health <stdout file>: the health and store fields of a health answer in its shape, one
+# stdout line holding exactly the four keys driver, health, detail, and store in that order
+# (the driver and detail values free); an empty answer reads its fields as none, and any
+# other answer outside the shape reads as such
+bh_health() {
+  awk '
+    function lit(s) { if (substr(t, p, length(s)) != s) ok = 0; p += length(s) }
+    function word(   q) { q = p; while (substr(t, p, 1) ~ /[a-z]/) p++; return substr(t, q, p - q) }
+    function str(   c) {
+      while (p <= length(t)) {
+        c = substr(t, p, 1)
+        if (c == "\\") p += 2
+        else if (c == "\"") { p++; return }
+        else p++
+      }
+      ok = 0
+    }
+    { t = t $0 }
+    END {
+      if (NR == 0) { printf "health none, store none"; exit }
+      ok = (NR == 1); p = 1
+      lit("{\"driver\":\""); str()
+      lit(",\"health\":\""); h = word(); lit("\"")
+      lit(",\"detail\":\""); str()
+      lit(",\"store\":\""); s = word(); lit("\"}")
+      if (!ok || p != length(t) + 1 || h == "" || s == "") printf "an answer outside the health shape"
+      else printf "health %s, store %s", h, s
+    }' "$1"
+}
+
+bh_bytes() {
+  bb_n=$(wc -c < "$1") || bb_n=0
+  printf '%s' "${bb_n##* }"
+}
+
+BH_S200=$(awk 'BEGIN { a = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ._-"; for (i = 0; i < 200; i++) s = s substr(a, i % 65 + 1, 1); print s }')
+BH_K512=$BH_S200/$BH_S200/$(printf '%s' "$BH_S200" | awk '{ print substr($0, 1, 110) }')
+BH_D512=$(awk 'BEGIN { for (i = 0; i < 255; i++) s = s "d/"; print s "dd" }')
+
+bh_fixtures || bh_cannot "the step fixtures cannot be made"
+bh_steps || bh_cannot "the step set cannot be written"
+{ bh_stage "$BH_A" && bh_stage "$BH_B" "$BH_CAND"; } 2>/dev/null || bh_cannot "the scratch workspaces cannot be staged"
+bh_res=$( (bh_call "$BH_B" resolve) < /dev/null 2>/dev/null) || bh_res=""
+[ "$bh_res" = "$BH_B/.contexture/extensions/storage/drivers/$BH_FORM" ] \
+  || bh_cannot "the candidate does not resolve as its scratch workspace's configured driver"
+
+BH_FORKING=1
+bh_side "$BH_A" "$BH_OA" 2>/dev/null &
+BH_PA=$!
+bh_side "$BH_B" "$BH_OB" 2>/dev/null &
+BH_PB=$!
+BH_FORKING=""
+wait "$BH_PA"
+bh_ra=$? BH_PA=""
+wait "$BH_PB"
+bh_rb=$? BH_PB=""
+[ "$bh_ra" -eq 0 ] && [ "$bh_rb" -eq 0 ] || bh_cannot "a scratch workspace could not run its steps"
+
+BH_NL='
+'
+BH_N=0
+BH_FIRST=""
+BH_LINES=""
+while IFS='|' read -r c_id c_intent c_mode c_in c_title c_call; do
+  case "$c_id" in @*) continue ;; esac
+  BH_N=$((BH_N + 1))
+  c_at="step $c_id ($c_title)"
+  { read -r c_ra < "$BH_OA/$c_id.rc" && read -r c_rb < "$BH_OB/$c_id.rc"; } 2>/dev/null \
+    || bh_cannot "a scratch workspace did not answer $c_at"
+  case "$c_intent" in
+    hold) [ "$c_ra" = 0 ] || bh_cannot "posix refused $c_at, which it must hold; nothing is proven" ;;
+    refuse) [ "$c_ra" != 0 ] || bh_cannot "posix held $c_at, which it must refuse; nothing is proven" ;;
+  esac
+  bh_shape "$BH_OA/$c_id.err"
+  c_na=$SH_N c_ca=$SH_C c_fa=$SH_F
+  if [ "$c_ra" = 0 ]; then
+    [ "$c_na" = 0 ] || bh_cannot "posix wrote to stderr while it held $c_at; nothing is proven"
+  elif [ "$c_na" != 1 ] || [ -z "$c_ca" ] || [ -z "$c_fa" ]; then
+    bh_cannot "posix refused $c_at without one line naming its function and code; nothing is proven"
+  fi
+  [ -z "$BH_FIRST" ] || [ "$BH_ALL" -eq 1 ] || continue
+  c_what=""
+  if [ "$c_ra" != "$c_rb" ]; then
+    c_what="exit code $c_ra on posix, $c_rb on $BH_NAME"
+  elif [ "$c_mode" = full ] && ! cmp -s "$BH_OA/$c_id.out" "$BH_OB/$c_id.out"; then
+    c_what="stdout differs, $(bh_bytes "$BH_OA/$c_id.out") bytes on posix, $(bh_bytes "$BH_OB/$c_id.out") on $BH_NAME"
+  elif [ "$c_mode" = health ] && c_ha=$(bh_health "$BH_OA/$c_id.out") && c_hb=$(bh_health "$BH_OB/$c_id.out") && [ "$c_ha" != "$c_hb" ]; then
+    c_what="$c_ha on posix, $c_hb on $BH_NAME"
+  else
+    bh_shape "$BH_OB/$c_id.err"
+    if [ "$c_na" != "$SH_N" ]; then
+      c_what="stderr lines, $c_na on posix, $SH_N on $BH_NAME"
+    elif [ "$c_fa" != "$SH_F" ]; then
+      case "$SH_F" in
+        ""|*[!A-Za-z0-9._-]*) SH_F="another function" ;;
+      esac
+      c_what="the refusal names $c_fa on posix, $SH_F on $BH_NAME"
+    elif [ "$c_ca" != "$SH_C" ]; then
+      c_what="the refusal code is $c_ca on posix, ${SH_C:-none} on $BH_NAME"
+    fi
+  fi
+  [ -n "$c_what" ] || continue
+  c_line="driver behavior: differs at $c_at: $c_what"
+  [ -n "$BH_FIRST" ] || BH_FIRST=$c_line
+  [ "$BH_ALL" -eq 0 ] || BH_LINES=$BH_LINES$c_line$BH_NL
+done < "$BH_STEPS"
+
+if [ -z "$BH_FIRST" ]; then
+  printf 'driver behavior: same: %s answers the %s steps as posix does\n' "$BH_NAME" "$BH_N"
+  exit 0
+fi
+printf '%s' "$BH_LINES"
+printf '%s\n' "$BH_FIRST"
+exit 1

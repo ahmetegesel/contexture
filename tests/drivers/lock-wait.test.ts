@@ -5,7 +5,7 @@ import { data } from '../support/data';
 import { driverOp } from '../support/driver';
 import { lockPath, namespaceLock, unitLock } from '../support/drawer';
 import { holdLock, sleepShim } from '../support/locks';
-import { DRIVERS, fts5Available, stage } from '../support/stage';
+import { DRIVERS, sqliteAvailable, stage } from '../support/stage';
 import { answer, payload, refused } from '../support/wire';
 
 const WAIT_S = 60;
@@ -56,7 +56,7 @@ describe.concurrent('the unit lock wait', () => {
 
 describe.concurrent('the namespace lock wait', () => {
   for (const driver of DRIVERS) {
-    describe.skipIf(driver === 'fts5' && !fts5Available())(driver, () => {
+    describe.skipIf(driver === 'sqlite' && !sqliteAvailable())(driver, () => {
       it(`[the-engine-r18] a live holder refuses store.put ERR_STORAGE_LOCKED after its ${WAIT_S} s wait, in seconds under the sleep shim, and nothing lands`, async () => {
         const sb = stage(driver);
         const release = holdLock(sb, namespaceLock('unit'), 'live');
@@ -86,7 +86,7 @@ describe.concurrent('the namespace lock wait', () => {
 
 describe.concurrent('the unit locks and the namespace locks never share a folder, whatever the unit is named', () => {
   for (const driver of DRIVERS) {
-    describe.skipIf(driver === 'fts5' && !fts5Available())(driver, () => {
+    describe.skipIf(driver === 'sqlite' && !sqliteAvailable())(driver, () => {
       it('[the-engine-r18] a unit named store-unit bootstraps and takes writes like any other, and leaves no lock behind', async () => {
         const sb = stage(driver);
         const shim = sleepShim();

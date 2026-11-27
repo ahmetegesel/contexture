@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ctx } from '../support/ctx';
 import { exec } from '../support/exec';
-import { addFile, addModule, extPath, installPkg, isExec, newPkg, out, recordText, uninstall } from '../support/packages';
+import { addFile, addModule, extPath, install, installPkg, isExec, newPkg, out, recordText, uninstall } from '../support/packages';
+import { twinPkg } from '../support/twin';
 import { stage } from '../support/stage';
 import { put } from '../support/tree';
 
@@ -36,11 +37,10 @@ describe.concurrent('package-install into discovery: the engine, the resolver, a
     expect((await ctx(sb, 'help')).stdout).toContain('the shaped fixture module');
   });
 
-  it('[the-engine-r19, the-engine-r23] a driver package resolves by its name from the extension root and never lists as a module', async () => {
+  it('[the-engine-r19, the-engine-r23] a driver package resolves by its name from the extension root and never lists as a module', { timeout: 900_000 }, async () => {
     const sb = sandbox();
-    const p = newPkg(sb, 'shape-driver');
-    addFile(p, 'storage/drivers/shapedrv/driver', '#!/bin/sh\nexit 0', 0o755);
-    expect((await installPkg(sb, p)).code).toBe(0);
+    const p = twinPkg(sb, { name: 'shape-driver', driver: 'shapedrv' });
+    expect((await install(sb, p)).code).toBe(0);
     expect(out(await resolve(sb, 'shapedrv'))).toBe(join(realpathSync(sb), '.contexture/extensions/storage/drivers/shapedrv/driver'));
     expect((await ctx(sb, 'help', '--all')).stdout).not.toContain('shapedrv');
   });
@@ -76,11 +76,10 @@ describe.concurrent('package-install into discovery: the engine, the resolver, a
     expect((await ctx(sb, 'rhythm', 'list')).stdout).toBe(`${SELECT}\n`);
   });
 
-  it('[the-engine-r19, the-engine-r22, the-engine-r23] a driver package lands executable, resolves from the extension root, records its kind and name, stays unlisted, and uninstalls', async () => {
+  it('[the-engine-r19, the-engine-r22, the-engine-r23] a driver package lands executable, resolves from the extension root, records its kind and name, stays unlisted, and uninstalls', { timeout: 900_000 }, async () => {
     const sb = sandbox();
-    const p = newPkg(sb, 'pkgdrv');
-    addFile(p, 'storage/drivers/fakedrv/driver', '#!/bin/sh\nexit 0', 0o755);
-    expect((await installPkg(sb, p)).code).toBe(0);
+    const p = twinPkg(sb, { name: 'pkgdrv', driver: 'fakedrv' });
+    expect((await install(sb, p)).code).toBe(0);
     expect(isExec(extPath(sb, 'storage/drivers/fakedrv/driver'))).toBe(true);
     expect(out(await resolve(sb, 'fakedrv'))).toBe(join(realpathSync(sb), '.contexture/extensions/storage/drivers/fakedrv/driver'));
     const rec = recordText(sb, 'pkgdrv');

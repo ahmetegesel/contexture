@@ -49,7 +49,7 @@
   layer: workspace
   provenance: ratified
   scope: "All changes affecting public APIs, contracts, behaviors, or dependencies."
-  evidence: ".contexture/extensions/modules/docs/scripts/docs-audit.awk"
+  evidence: "ctx docs audit"
   anti: "Refactoring an API contract without updating the unit's corpus doc"
   good: "Updating the endpoint signature in code and, with ctx docs entry on the matching contract rule, the unit's corpus doc in the same change"
 
@@ -61,7 +61,7 @@
   layer: workspace
   provenance: ratified
   scope: "All task initiations, feature developments, refactorings, and investigations."
-  evidence: ".contexture/extensions/modules/docs/scripts/query"
+  evidence: "ctx docs query"
   caution: "Reading code files before querying docs causes hallucinated assumptions and misses documented contracts and pitfalls."
   anti: "Reading source files directly before querying the corpus"
   good: "Querying the corpus first (ctx docs search or file owner), then reading the owning doc and its pitfalls"
@@ -74,7 +74,7 @@
   layer: workspace
   provenance: ratified
   scope: "All session completion checkpoints and close transactions."
-  evidence: ".contexture/extensions/modules/docs/scripts/gate"
+  evidence: "ctx docs gate"
   caution: "A failing close gate indicates uncovered code files, doc updates missing from the delta, or doc syntax errors that break downstream readers."
   anti: "Closing a task or ending a session with modified code but unupdated documentation"
   good: "Chaining the audit and the check via ctx docs gate to verify coverage and zero stale docs before closing"
@@ -94,17 +94,17 @@
 
 @rule docs/drift
   directive: must
-  statement: "Drift is reconciled from the change delta, never from memory: the status-prefixed delta feeds ctx docs check with BOTH halves in one stream (the code delta from git and the corpus delta: the corpus paths of the same git delta under the files driver, ctx docs changes under a store driver); every affected doc is updated through the ctx docs write verbs in the same change, uncovered paths widen a unit's sources or open a new unit, and the audit and the check re-run clean before the doc change lands."
+  statement: "Drift is reconciled from the change delta, never from memory: the status-prefixed delta feeds ctx docs check with BOTH halves in one stream (the code delta from git and the corpus delta: the corpus paths of the same git delta for a corpus git tracks, else the docs the reconciliation updated); every affected doc is updated through the ctx docs write verbs in the same change, uncovered paths widen a unit's sources or open a new unit, and the audit and the check re-run clean before the doc change lands."
   status: followed
   prevalence: universal
   layer: workspace
   provenance: ratified
   scope: "Any code change inside a documented repository."
-  evidence: ".contexture/extensions/modules/docs/scripts/docs-check.awk"
-  enforced_at: [.contexture/extensions/modules/docs/scripts/docs-check.awk, .contexture/extensions/modules/docs/scripts/gate, .contexture/extensions/rhythms/docs-drift.md]
-  caution: "Two ways this check reports a result that is not the truth. A code-only stream can never pass: the check marks a file fresh only when a doc path appears in the SAME stdin, so omitting the docs half reports every claimed file stale forever, whatever the docs say; the stale count then says nothing about the work. And a name-only delta carries no deletion marker, so deleted files read as uncovered. Under a store driver the check runs in its store mode: a doc refreshes only the code its own sources name, and every doc can ride the driver-fed delta."
+  evidence: "ctx docs check"
+  enforced_at: [ctx docs check, ctx docs gate, the docs-drift rhythm]
+  caution: "Two ways this check reports a result that is not the truth. A code-only stream can never pass: the check marks a file fresh only when a doc path appears in the SAME stdin, so omitting the docs half reports every claimed file stale forever, whatever the docs say; the stale count then says nothing about the work. And a name-only delta carries no deletion marker, so deleted files read as uncovered. An untracked corpus cannot ride a tracked delta, a store driver's corpus included: when all of a governed file's claimants are untracked the check reports UNTRACKED CLAIMANT with a process-owned clean, so the flow feeds its own doc list as the corpus half."
   anti: "Shipping a code change and deferring its doc update to a later commit; or verifying with a pipeline that feeds the check the code delta alone: it reads every claimed file stale where a claimant is tracked, and CLEAN (PROCESS-OWNED) where none is, so its verdict says nothing about the docs"
-  good: "Both halves in one stream, records split so a rename's old path surfaces as a dead source (the working command is in ctx docs help check); for an uncommitted working tree, ctx docs gate composes both halves by itself on every driver and needs no pipeline"
+  good: "Both halves in one stream, records split so a rename's old path surfaces as a dead source (the working command is in ctx docs help check); for a tracked corpus, ctx docs gate composes both halves by itself and needs no pipeline"
 
 @rule docs/greppable-evidence
   directive: must
@@ -114,7 +114,7 @@
   layer: workspace
   provenance: ratified
   scope: "All @rule, @contract, @stages, and @pitfalls evidence fields."
-  evidence: ".contexture/extensions/modules/docs/scripts/docs-audit.awk"
+  evidence: "ctx docs audit"
   anti: "evidence: 'controllers/feed.cs:42'"
   good: "evidence: 'OrderController.ListOrders'"
 
@@ -132,13 +132,13 @@
 
 @rule docs/fixed-pitfalls
   directive: must
-  statement: "A fixed pitfall is removed (the doc describes current truth); the id retires, never recycled; a behavior change born of the fix lands as a contract @rule; a new pitfall only for a genuinely new surprise, new id; references re-point via a fresh journal entry recording the resolution (append-only; under the files driver git history holds the removed text)."
+  statement: "A fixed pitfall is removed (the doc describes current truth); the id retires, never recycled; a behavior change born of the fix lands as a contract @rule; a new pitfall only for a genuinely new surprise, new id; references re-point via a fresh journal entry recording the resolution (append-only; the resolution's journal entry is the surviving reference)."
   status: followed
   prevalence: universal
   layer: workspace
   provenance: ratified
   scope: "Every @pitfalls block of the corpus."
-  evidence: ".contexture/extensions/modules/docs/scripts/docs-audit.awk"
+  evidence: "ctx docs audit"
   caution: "A pitfall morphed in class to keep its journal anchor describes behavior that no longer exists."
   anti: "Reclassifying a fixed bug as a gotcha to preserve its journal anchor."
   good: "Remove the fixed pitfall with ctx docs pitfall <id> --remove (the id retires), land the behavior as a contract @rule, and re-point refs from a fresh journal entry."
@@ -151,7 +151,7 @@
   layer: workspace
   provenance: ratified
   scope: "All cross-references inside the docs corpus."
-  evidence: ".contexture/extensions/modules/docs/scripts/query"
+  evidence: "ctx docs query"
   caution: "Block-level prose like 'see contract' resolves to nothing; narrative 'above/below' mentions stay prose."
   anti: "(see contract) with no block address"
   good: "(see #contract); (see order-flow.md#pitfalls)"

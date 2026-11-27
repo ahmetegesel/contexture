@@ -3,7 +3,7 @@
 # another layout (it reads in the canonical layout, every value kept), with the legacy shape
 # it carries (the design's LEGACY SHAPES CARRIED, numbered 1 to 15 below) and the typed home
 # of any content no schema field holds. No answer carries stored bytes. Only a hand-written
-# posix file can hold these shapes: the fts5 and service stores hold what the verbs write,
+# posix file can hold these shapes: the sqlite and service stores hold what the verbs write,
 # so TC60 plants the files on posix alone.
 # Positions are <file>:<line> of the item's head (the state's first line for the state).
 #

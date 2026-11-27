@@ -181,7 +181,7 @@ check_and_sync_freshness() {
     if [[ -f "$DB_PATH" ]]; then
       local db_dir
       db_dir="$(cd "$(dirname "$DB_PATH")" && pwd)"
-      if [[ -d "$db_dir/.git" || -f "$db_dir/package.json" || -d "$db_dir/backend" || -d "$db_dir/docs" || -d "$db_dir/src" ]]; then
+      if [[ -d "$db_dir/.git" || -f "$db_dir/package.json" || -d "$db_dir/backend" || -d "$db_dir/docs" || -d "$db_dir/.contexture" || -d "$db_dir/src" ]]; then
         repo_root="$db_dir"
       fi
     fi
@@ -241,6 +241,17 @@ check_and_sync_freshness() {
       scan_find "$src_root" -type f \( -name "*.ts" -o -name "*.tsx" \) "${newer[@]}"
       scan_find "$repo_root" -type f -name "*.md" "${newer[@]}"
     fi 2>/dev/null || true)
+
+  # The docs walk folder the full index recorded, which the scan above can exclude (a drawer
+  # root): markdown under it newer than the database is dirty too, once
+  local docs_root="" seen=" "
+  docs_root="$(sqlite_exec "$DB_PATH" "SELECT coalesce(docs_root, '') FROM graph_meta LIMIT 1;" 2>/dev/null || true)"
+  if [[ -n "$docs_root" && -d "$repo_root/$docs_root" ]]; then
+    for f in ${dirty_files[@]+"${dirty_files[@]}"}; do seen+="$f "; done
+    while IFS= read -r f; do
+      if [[ -n "$f" && "$seen" != *" $f "* ]]; then dirty_files+=("$f"); fi
+    done < <(scan_find "$repo_root/$docs_root" -type f -name "*.md" -newer "$db_abs" 2>/dev/null || true)
+  fi
 
   # For a graph that records its roots, an indexed file the disk no longer has is dirty too,
   # unless every one reads gone (another root)

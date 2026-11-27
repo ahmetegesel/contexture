@@ -3,8 +3,8 @@ import { exec, type Run } from './exec';
 import type { Driver } from './stage';
 
 export function driverPath(sb: string, driver: Driver): string {
-  return driver === 'fts5'
-    ? join(sb, '.contexture/extensions/storage/drivers/fts5/driver')
+  return driver === 'sqlite'
+    ? join(sb, '.contexture/extensions/storage/drivers/sqlite/driver')
     : join(sb, '.contexture/storage/drivers/posix/driver');
 }
 

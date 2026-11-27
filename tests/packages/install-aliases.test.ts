@@ -76,7 +76,7 @@ describe.concurrent('package-install: install aliases', () => {
     expect(renamed.code).toBe(0);
     expect(existsSync(extPath(sb, 'modules/journalled/scripts/put'))).toBe(true);
     expect(existsSync(extPath(sb, 'modules/notebook'))).toBe(false);
-    const gone = await uninstall(sb, 'pkg-memos');
+    const gone = await uninstall(sb, 'pkg-memos', '--delete-data');
     expect(gone.code).toBe(0);
     expect(existsSync(extPath(sb, 'modules/journalled/scripts/put'))).toBe(false);
     expect(existsSync(extPath(sb, '.state/pkg-memos.files'))).toBe(false);

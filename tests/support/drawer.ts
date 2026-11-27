@@ -37,7 +37,7 @@ export function parseFallbackRoot(dataFile: string = UNIT_DATA): string {
 
 export const FALLBACK_ROOT = parseFallbackRoot();
 
-export const FTS5_DB = '.contexture/sessions.db';
+export const SQLITE_DB = '.contexture/sessions.db';
 
 // the leftovers nudge's day mark in the drawer's scratch (the unit verb library's stamp)
 export const LEFTOVERS_STAMP = '.contexture/tmp/unit-leftovers.stamp';
@@ -50,6 +50,8 @@ export const libraryLock = (namespace: string): string => join('lib', `${namespa
 
 export const configLock = (): string => 'config.lock';
 
+export const moveMarker = (): string => 'storage-moving';
+
 export function lockPath(sb: string, lock: string): string {
   return join(sb, '.contexture', 'tmp', 'locks', lock);
 }
@@ -59,9 +61,9 @@ const LOCK_SEGMENTS = lockPath('/', unitLock('u')).split('/').filter(Boolean);
 const NAMESPACE_LOCK = namespaceLock('\0').split('\0').map(escRe).join('[^ ]*');
 
 export const RECORD_LEAK = new RegExp(
-  [RECORD_ROOT, FALLBACK_ROOT, FTS5_DB.split('/').pop() ?? '', LOCK_SEGMENTS.slice(1, 3).join('/'), LOCK_SEGMENTS.slice(2, 4).join('/')]
+  [RECORD_ROOT, FALLBACK_ROOT, SQLITE_DB.split('/').pop() ?? '', LOCK_SEGMENTS.slice(1, 3).join('/'), LOCK_SEGMENTS.slice(2, 4).join('/')]
     .map(escRe)
-    .concat([NAMESPACE_LOCK, 'lanes\\/[^ ]*\\/(recipe|journal|report)', '(state|backlog|journal|knowledge|recipe|report)\\.md', 'sessions? (folder|drawer|directory)', '\\.contexture\\/(extensions\\/)?modules\\b', '\\.contexture\\/config\\b', '\\.contexture\\/storage\\.conf\\b', 'config\\.lock'])
+    .concat([NAMESPACE_LOCK, 'lanes\\/[^ ]*\\/(recipe|journal|report)', '(state|backlog|journal|knowledge|recipe|report)\\.md', 'sessions? (folder|drawer|directory)', '\\.contexture\\/(extensions\\/)?modules\\b', '\\.contexture\\/config\\b', '\\.contexture\\/storage\\.conf\\b', 'config\\.lock', escRe(moveMarker())])
     .join('|'),
 );
 

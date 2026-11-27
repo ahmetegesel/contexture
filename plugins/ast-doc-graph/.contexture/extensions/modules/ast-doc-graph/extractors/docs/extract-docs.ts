@@ -190,7 +190,7 @@ export function extractEvidenceSymbols(raw: string | null | undefined): string[]
 
 // --- PARSER ---
 
-export function parseDocMarkdown(content: string, filePath: string, projectRoot?: string): ParseResult {
+export function parseDocMarkdown(content: string, filePath: string, projectRoot?: string, docsRoot = 'docs'): ParseResult {
   const lines = content.split(/\r?\n/);
 
   type DocHeader = {
@@ -212,7 +212,8 @@ export function parseDocMarkdown(content: string, filePath: string, projectRoot?
   const seenRuleSlugs = new Set<string>();
 
   // Determine doc id prefix
-  // Default doc id format: doc:<repo>:<slug> or doc:<relPathNoExt>
+  // Default doc id format: doc:<repo>:<slug> or doc:<relPathNoExt>, the docs walk folder stripped
+  const docsPrefix = docsRoot ? `${docsRoot.replace(/\/+$/, '')}/` : '';
   function computeDocId(header: DocHeader): string {
     const slug = header.slug;
     const repo = header.repo || 'unknown';
@@ -220,8 +221,8 @@ export function parseDocMarkdown(content: string, filePath: string, projectRoot?
     if (projectRoot && filePath) {
       const rel = path.relative(projectRoot, filePath);
       let cleanRel = rel.replace(/\.md$/i, '');
-      if (cleanRel.startsWith('docs/')) {
-        cleanRel = cleanRel.slice('docs/'.length);
+      if (docsPrefix && cleanRel.startsWith(docsPrefix)) {
+        cleanRel = cleanRel.slice(docsPrefix.length);
       }
       if (cleanRel.includes('/')) {
         return `doc:${cleanRel.replace(/\//g, ':')}`;
@@ -725,6 +726,8 @@ Arguments:
 
 Options:
   --project-root <path>   Root path of the target repository (default: auto-detected)
+  --docs-root <path>      The docs walk folder relative to the project root, stripped from a
+                          doc's path for its id and walked when no file is named (default: docs)
   --out-docs <file>       Output destination for docs JSONL (default: stdout)
   --out-rules <file>      Output destination for doc_rules JSONL (default: stdout)
   --out-pitfalls <file>   Output destination for doc_pitfalls JSONL (default: stdout)
@@ -735,6 +738,7 @@ Options:
 export async function main() {
   const args = process.argv.slice(2);
   let projectRoot = '';
+  let docsRoot = 'docs';
   let outDocsPath = '';
   let outRulesPath = '';
   let outPitfallsPath = '';
@@ -746,6 +750,10 @@ export async function main() {
       projectRoot = args[++i];
     } else if (arg.startsWith('--project-root=')) {
       projectRoot = arg.slice('--project-root='.length);
+    } else if (arg === '--docs-root') {
+      docsRoot = args[++i] ?? '';
+    } else if (arg.startsWith('--docs-root=')) {
+      docsRoot = arg.slice('--docs-root='.length);
     } else if (arg === '--out-docs') {
       outDocsPath = args[++i];
     } else if (arg.startsWith('--out-docs=')) {
@@ -803,7 +811,7 @@ export async function main() {
     if (!projectRoot) {
       projectRoot = findProjectRoot();
     }
-    const defaultDocsDir = path.join(projectRoot, 'docs');
+    const defaultDocsDir = path.join(projectRoot, docsRoot || 'docs');
     if (fs.existsSync(defaultDocsDir)) {
       targetFiles = findMarkdownFiles(defaultDocsDir);
     }
@@ -828,7 +836,7 @@ export async function main() {
   for (const file of targetFiles) {
     try {
       const content = fs.readFileSync(file, 'utf8');
-      const { doc, rules, pitfalls, unitless } = parseDocMarkdown(content, file, projectRoot);
+      const { doc, rules, pitfalls, unitless } = parseDocMarkdown(content, file, projectRoot, docsRoot);
       if (unitless > 0) {
         console.error(`Warning: skipping ${unitless} rule or pitfall ${unitless === 1 ? 'entry' : 'entries'} before any @doc line in ${path.relative(projectRoot, file)}`);
       }

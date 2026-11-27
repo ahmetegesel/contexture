@@ -5,6 +5,7 @@ import { addFile, addModule, extPath, install, installPkg, isExec, newPkg, recor
 import { chmodPlant, ROOT_USER } from '../support/plants';
 import { stage } from '../support/stage';
 import { put, treeState } from '../support/tree';
+import { twinPkg } from '../support/twin';
 
 const sandbox = () => stage('posix', 'pkg-overlay');
 const files = (state: string): string => state.split('\n').filter((l) => !l.includes('/ ')).join('\n');
@@ -69,14 +70,12 @@ describe.concurrent('package-install: the six package shapes', () => {
     expect(existsSync(extPath(sb, 'templates'))).toBe(false);
   });
 
-  it('[modules-r16, plugins-r9, the-engine-r23] a driver package records its kind and driver name and lands the driver executable', async () => {
+  it('[modules-r16, plugins-r9, the-engine-r23] a driver package records its kind, driver name, and storage format and lands the driver executable', { timeout: 900_000 }, async () => {
     const sb = sandbox();
-    const p = newPkg(sb, 'shape-driver');
-    addFile(p, 'storage/drivers/shapedrv/driver', '#!/bin/sh\nexit 0', 0o755);
-    expect((await installPkg(sb, p)).code).toBe(0);
+    const p = twinPkg(sb, { name: 'shape-driver', driver: 'shapedrv', format: 4 });
+    expect((await install(sb, p)).code).toBe(0);
     const rec = recordText(sb, 'shape-driver');
-    expect(rec).toContain('kind driver');
-    expect(rec).toContain('driver shapedrv');
+    expect(rec).toContain('kind driver\ndriver shapedrv\nformat 4\n');
     expect(isExec(extPath(sb, 'storage/drivers/shapedrv/driver'))).toBe(true);
   });
 

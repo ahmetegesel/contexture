@@ -84,7 +84,7 @@ Sample line:
 ### 2.3 `docs.jsonl`
 Captures documentation unit metadata.
 
-* `id` (string, required): Unique identifier for the documentation unit (format: `doc:<path_slug>`).
+* `id` (string, required): Unique identifier for the documentation unit (format: `doc:<path_slug>`, the markdown path relative to the repository root with the docs walk folder (`--docs-root`) and the `.md` suffix stripped and each `/` read as `:`, so a corpus doc at `<docs root>/<repo>/<slug>.md` is `doc:<repo>:<slug>` at the drawer root and at `docs` alike; a path with no folder left takes its header's `doc:<repo>:<slug>`).
 * `repo` (string, required): Repository or module identifier (example: `bilingo-mvp`).
 * `kind` (string, required): Document kind (`protocol`, `guide`, `reference`, `architecture`).
 * `summary` (string, required): One-line summary describing the document purpose.
@@ -225,10 +225,11 @@ CREATE TABLE IF NOT EXISTS indexed_files (
 
 CREATE INDEX IF NOT EXISTS idx_indexed_files_mtime ON indexed_files(mtime);
 
-/* One row: the absolute repository and source scan roots of the last full index */
+/* One row: the absolute repository and source scan roots of the last full index, and its docs walk folder relative to the repository root */
 CREATE TABLE IF NOT EXISTS graph_meta (
     repo_root TEXT NOT NULL,
-    src_root TEXT NOT NULL
+    src_root TEXT NOT NULL,
+    docs_root TEXT
 );
 
 /* ========================================================================= */
@@ -334,6 +335,7 @@ The `indexed_files` table tracks modification times and cryptographic hashes of 
 The `graph_meta` table holds one row, written by every full load in its transaction and never by a delta, so the graph knows the repository it indexed whatever folder its database sits in or a query runs from:
 * `repo_root` (string, required): The absolute repository root of the last full index (`--repo-root`, the working folder by default).
 * `src_root` (string, required): The absolute source scan root of that index (`--src-dir` resolved against the repository root, else the repository root).
+* `docs_root` (string, nullable): The docs walk folder of that index relative to the repository root (`--docs-root`): the docs namespace's declared root when it lies inside the repository root (`.contexture/docs` for docs-discipline under posix), `docs` for the generic walk, empty when the declared root lies outside. A load over a `graph_meta` made before the column adds it (`ALTER TABLE`, empty until the next full load), since the schema's `CREATE TABLE IF NOT EXISTS` never adds a column.
 
 Every delta checks its roots against the row (Section 7.1) and the query scans them (Section 8.1). A graph loaded by an earlier release holds no row (a delta's schema application adds the empty table) until its next full index.
 
@@ -594,8 +596,8 @@ To eliminate the operational complexity, memory footprint, and potential flakine
 
 ### 8.1 Pre-Query Freshness Check
 Every invocation of `graph-query` executes `check_and_sync_freshness` before evaluating the requested query:
-1. Repository Root Resolution: Takes the repository and source roots the graph records (Section 3.2), never a guess, so a database kept outside its repository answers for that repository from any working folder; a recorded repository root that is absent (the repository moved) prints one notice on stderr (`[ast-doc-graph: the repository root the graph records, <root>, is absent; answering from the graph as it stands. Run a full ast-doc-index of the repository to rebuild it]`) and the query answers as the graph stands. A graph loaded before the record falls back to a guess: the database folder when it holds `.git`, `package.json`, `backend`, `docs`, or `src`, else the working folder's git toplevel, else the working folder; the query then prints one notice on stderr naming the guess and the full index that records the root (`[ast-doc-graph: the graph records no repository root, so its refresh takes <root> as a guess and removes no file. Run a full ast-doc-index of the repository to record its root]`).
-2. Fast Filesystem Scan: Executes system `find` comparing `.ts` and `.tsx` files under the source root and `.md` files under the repository root against `graph.db` using `-newer` (one walk when the two roots are the same folder). The scan filters out standard build and artifact directories. On modern filesystems, this check completes in 1 to 5ms.
+1. Repository Root Resolution: Takes the repository and source roots the graph records (Section 3.2), never a guess, so a database kept outside its repository answers for that repository from any working folder; a recorded repository root that is absent (the repository moved) prints one notice on stderr (`[ast-doc-graph: the repository root the graph records, <root>, is absent; answering from the graph as it stands. Run a full ast-doc-index of the repository to rebuild it]`) and the query answers as the graph stands. A graph loaded before the record falls back to a guess: the database folder when it holds `.git`, `package.json`, `backend`, `docs`, a `.contexture` drawer, or `src`, else the working folder's git toplevel, else the working folder; the query then prints one notice on stderr naming the guess and the full index that records the root (`[ast-doc-graph: the graph records no repository root, so its refresh takes <root> as a guess and removes no file. Run a full ast-doc-index of the repository to record its root]`).
+2. Fast Filesystem Scan: Executes system `find` comparing `.ts` and `.tsx` files under the source root and `.md` files under the repository root against `graph.db` using `-newer` (one walk when the two roots are the same folder), then the `.md` files under the recorded docs root (`graph_meta.docs_root`, read in a query of its own, so a graph without the column reads none), which the repository root scan excludes when it lies in the drawer, each file counted once. The scan filters out standard build and artifact directories. On modern filesystems, this check completes in 1 to 5ms.
 3. Removed Files: For a graph that records its roots, every file `indexed_files` holds that the disk no longer has counts as dirty too, so the inline delta removes it (unless every indexed file reads absent, the sign of a repository root other than the index's, when none counts). A graph without the record counts no removed file, and its inline delta runs with `--no-reconcile` (Section 7.1), so a guess landing on another root that holds only some of the indexed paths never removes the rest; its newer files still sync, from the guessed root, until a full index records the root. This costs one existence test per indexed file on every synced query, so it grows with the graph's file count (about a tenth of a second for ten thousand files on a laptop); `--no-sync` skips it with the scan.
 
 ### 8.2 Lifecycle Threshold Bands

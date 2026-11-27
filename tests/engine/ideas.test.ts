@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { declaredRoot, libraryLock, lockPath } from '../support/drawer';
 import type { Run } from '../support/exec';
-import { holdLock } from '../support/locks';
+import { holdLock, holdMove } from '../support/locks';
 import { ROOT } from '../support/root';
 import { fresh, seed } from '../support/snapshot';
 import { must, run, unit, waitFor } from '../support/unit';
@@ -592,4 +592,16 @@ describe.skipIf(!existsSync(LIVE))('the ideas workspace module (needs its tracke
     expect([r.code, r.stdout, r.stderr]).toEqual([0, 'same\n', '']);
     expect(existsSync(lockPath(sb, libraryLock('ideas')))).toBe(false);
   }, 30_000);
+
+  it('[the-engine-r-mvf01] while storage is being moved, add and pick refuse rc 2 under their own names with the freeze\'s message and code, and every view reads unchanged', async () => {
+    const sb = sandbox();
+    await must(ideas(sb, ['add', 'kept', '--what=k']));
+    const before = [state(sb), (await ideas(sb, ['get', 'kept'])).stdout, (await ideas(sb, ['list'])).stdout];
+    holdMove(sb, 'sqlite', 'live');
+    for (const [verb, args] of [['add', ['add', 'moved', '--what=m']], ['pick', ['pick', 'kept', '--by=demo']]] as const) {
+      const r = await ideas(sb, args);
+      expect([r.code, r.stdout, r.stderr], verb).toEqual([2, '', `ideas ${verb}: error: storage is being moved to another driver; retry after the move ends (ERR_STORAGE_LOCKED)\n`]);
+    }
+    expect([state(sb), (await ideas(sb, ['get', 'kept'])).stdout, (await ideas(sb, ['list'])).stdout]).toEqual(before);
+  });
 });

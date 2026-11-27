@@ -491,18 +491,6 @@ EOF
   return 0
 }
 
-# docs_delta_source: DOCS_DELTA is log when the configured driver keeps a store change log
-# (store.changelog: the corpus half of a delta comes from the store), git otherwise (the
-# files driver: the git delta carries the corpus only where the workspace tracks it); the
-# check engine takes it as its bounded delta_source token
-docs_delta_source() {
-  DOCS_DELTA=git
-  if [ -n "$DOCS_LIB" ] && store_has store.changelog < /dev/null; then
-    DOCS_DELTA=log
-  fi
-  return 0
-}
-
 # docs_head: the workspace's git HEAD (a full commit id), or none outside a repository
 docs_head() {
   dh_h=$(git -C "$DOCS_ROOT" rev-parse --verify -q HEAD 2>/dev/null) || dh_h=""
@@ -614,11 +602,62 @@ docs_delta_unread() {
     END { printf "%s %d delta path(s) hold a control character (a tab, a newline) that a status line cannot carry; the check does not read them: %s\n", ENVIRON["DOCS_NOTICE_LABEL"], NR, s }' "$DOCS_SCRATCH/unread" >&2
 }
 
+# docs_corpus_root: DOCS_CORPUS_ROOT, the workspace relative folder the storage core declares
+# for this module's own namespace (its row of store_roots; a fallback row after it is not
+# read), the folder where git sees the corpus when posix keeps it as files; docs at
+# the default declaration, so every translation below is the identity there. rc 2 with the
+# library's line when the storage core cannot list the roots or name the own namespace, as
+# the record file guard refuses, never a guessed folder
+docs_corpus_root() {
+  DOCS_CORPUS_ROOT=""
+  if ! command -v store_roots >/dev/null 2>&1; then
+    printf '%s: the storage core library cannot list the declared roots (need: the storage core of this release) (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
+    return 2
+  fi
+  cr_roots=$(store_roots < /dev/null) || return 2
+  cr_own=$(store_namespace) || return 2
+  DOCS_CORPUS_ROOT=$(printf '%s\n' "$cr_roots" | DOCS_CR_NS="$cr_own" awk -F '\t' '$1 == ENVIRON["DOCS_CR_NS"] { print $2; exit }')
+  if [ -z "$DOCS_CORPUS_ROOT" ]; then
+    printf '%s: the storage core declares no root for the %s namespace (ERR_STORAGE_READ)\n' "$DOCS_VERB" "$cr_own" >&2
+    return 2
+  fi
+  return 0
+}
+
+# DOCS_CORPUS_AWK: corpus(p), 1 when a git path names a corpus doc, a path under the declared
+# root (DOCS_CR in the environment, the root and a slash) whose logical address is
+# docs/<repo>/<slug>.md, the one rule the untracked half and the trackedness count share;
+# logical(p) maps a path under the declared root to its logical address; both read a path
+# git quoted for a double quote in it (git does even under core.quotePath=false) as its bytes
+# through git_path(p), which leaves a path holding any other escape as git spelled it
+DOCS_CORPUS_AWK='
+function git_path(p,   n, o, i, c, q, b) {
+  q = sprintf("%c", 34); b = sprintf("%c", 92); n = length(p)
+  if (n < 2 || substr(p, 1, 1) != q || substr(p, n, 1) != q) return p
+  o = ""
+  for (i = 2; i < n; i++) {
+    c = substr(p, i, 1)
+    if (c == b) { c = substr(p, ++i, 1); if (c != q && c != b) return p }
+    o = o c
+  }
+  return o
+}
+function logical(p,   r) {
+  p = git_path(p)
+  r = ENVIRON["DOCS_CR"]
+  if (r != "" && index(p, r) == 1) return "docs/" substr(p, length(r) + 1)
+  return p
+}
+function corpus(p) { p = git_path(p); return index(p, ENVIRON["DOCS_CR"]) == 1 && logical(p) ~ /^docs\/[^\/]+\/[^\/]+\.md$/ }
+'
+
 # docs_untracked_half: the workspace root's untracked files (git ls-files --others on stdin)
-# as A lines, the corpus docs (docs/<repo>/<slug>.md) left out: an untracked doc cannot ride a
-# tracked delta, whether git ignores it or not, so the check reads its claimants untracked
+# as A lines, the corpus docs (under the declared root) left out: an untracked doc cannot
+# ride a tracked delta, whether git ignores it or not, so the check reads its claimants
+# untracked
 docs_untracked_half() {
-  awk '$0 != "" && $0 !~ /^docs\/[^\/]+\/[^\/]+\.md$/ { print "A\t" $0 }'
+  DOCS_CR="${DOCS_CORPUS_ROOT:-docs}/" awk "$DOCS_CORPUS_AWK"'
+    $0 != "" && !corpus($0) { print "A\t" $0 }'
 }
 
 # docs_delta_shebangs: the governed set's first-line read, on this side so no engine line
@@ -760,130 +799,18 @@ docs_delta_universe() {
     END { for (p in added) if (!(p in seen)) print "path\t" p }' "$DOCS_SCRATCH/universe.raw" > "$DOCS_UNIVERSE_LIST"
 }
 
-# docs_corpus_untracked: under the files driver, where a doc's logical address is its file
-# under the workspace root, DOCS_UNTRACKED counts the materialized corpus docs the root's
-# repository does not track (ignored or not; every doc outside a repository) and DOCS_NDOCS
-# counts them all
+# docs_corpus_untracked: DOCS_UNTRACKED counts the materialized corpus docs the root's
+# repository does not track at the declared root (ignored or not; every doc outside a
+# repository, and every doc a store driver holds, since no file lives there) and
+# DOCS_NDOCS counts them all; the declared root reaches git as a literal pathspec
 docs_corpus_untracked() {
-  git -C "$DOCS_ROOT" ls-files -- docs > "$DOCS_SCRATCH/tracked" 2>/dev/null || : > "$DOCS_SCRATCH/tracked"
-  DOCS_UNTRACKED=$(DOCS_TRACKED="$DOCS_SCRATCH/tracked" awk '
-    BEGIN { f = ENVIRON["DOCS_TRACKED"]; while ((getline l < f) > 0) t[l] = 1; close(f) }
+  git -C "$DOCS_ROOT" -c core.quotePath=false ls-files -- ":(literal)${DOCS_CORPUS_ROOT:-docs}" > "$DOCS_SCRATCH/tracked" 2>/dev/null || : > "$DOCS_SCRATCH/tracked"
+  DOCS_UNTRACKED=$(DOCS_TRACKED="$DOCS_SCRATCH/tracked" DOCS_CR="${DOCS_CORPUS_ROOT:-docs}/" awk "$DOCS_CORPUS_AWK"'
+    BEGIN { f = ENVIRON["DOCS_TRACKED"]; while ((getline l < f) > 0) t[logical(l)] = 1; close(f) }
     !($0 in t) { n++ }
     END { print n + 0 }' "$DOCS_PATHS")
   DOCS_NDOCS=$(awk 'END { print NR }' "$DOCS_PATHS")
   return 0
-}
-
-# docs_store_changes_rows: the store.changes answer flattened into its six status fields,
-# <seq> TAB <at> TAB <op> TAB <key> TAB <head> TAB <prior>, oldest first
-docs_store_changes_rows() {
-  if [ -z "$DOCS_JSON" ]; then
-    printf '%s: the storage answer decoder is missing (need: the storage core) (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
-    return 2
-  fi
-  if ! awk -f "$DOCS_JSON" < "$1" > "$2.flat" 2> "$2.err"; then
-    cat "$2.err" >&2
-    return 2
-  fi
-  awk '
-    {
-      p = $0
-      if ((eq = index(p, "=")) > 0) { v = substr(p, eq + 1); p = substr(p, 1, eq - 1) }
-      else if ((cl = index(p, ":")) > 0) { v = substr(p, cl + 1); p = substr(p, 1, cl - 1) }
-      else next
-      if (p !~ /^changes\.[0-9]+\./) next
-      rest = substr(p, 9)
-      dot = index(rest, ".")
-      if (dot < 2) next
-      n = substr(rest, 1, dot - 1) + 0
-      f = substr(rest, dot + 1)
-      row[n, f] = v
-      if (n > max) max = n
-    }
-    END {
-      for (i = 1; i <= max; i++)
-        printf "%s\t%s\t%s\t%s\t%s\t%s\n", row[i, "seq"], row[i, "at"], row[i, "op"], row[i, "key"], row[i, "head"], row[i, "prior"]
-    }' "$2.flat" > "$2"
-  return 0
-}
-
-# docs_changes [--since=<rev>]: the corpus half of a delta from the store's change log, one
-# status-prefixed line per doc, <status> TAB docs/<repo>/<slug>.md, bytewise by path. The
-# window is the rows stamped with the current HEAD; --since=<rev> widens it to the heads git
-# rev-list --boundary <rev>..HEAD names (the boundary's leading dash stripped), <rev> itself,
-# and HEAD. Net status per doc, as git would report the same history: A when the doc was
-# absent before its first row in the window and exists now, M when it was present and
-# exists now, D when it was present and is gone now, no line when it was absent and is gone.
-# rc 1 on a driver without store.changelog (under the files driver git carries the corpus
-# delta where the workspace tracks the corpus, and nothing carries an untracked one), an
-# unknown revision, or --since outside a repository; rc 2 a driver failure
-docs_changes() {
-  dx_since=""
-  for dx_a in "$@"; do
-    case "$dx_a" in
-      --since=?*) dx_since=${dx_a#--since=} ;;
-      *) printf '%s: unknown argument: %s (usage: ctx docs changes [--since=<rev>])\n' "$DOCS_VERB" "$dx_a" >&2; return 1 ;;
-    esac
-  done
-  docs_require || return 2
-  if ! store_has store.changelog < /dev/null; then
-    printf '%s: the configured storage driver keeps no store change log (store.changelog); under the files driver the corpus delta comes from git where the workspace tracks the corpus, and an untracked corpus reconciles through the docs-drift flow\n' "$DOCS_VERB" >&2
-    return 1
-  fi
-  docs_scratch || return 2
-  printf 'head=%s\n' "$(docs_head)" > "$DOCS_SCRATCH/heads"
-  if [ -n "$dx_since" ]; then
-    docs_since_rev "$dx_since" || return 1
-    printf 'head=%s\n' "$DOCS_SINCE_REV" >> "$DOCS_SCRATCH/heads"
-    git -C "$DOCS_ROOT" rev-list --boundary "$DOCS_SINCE_REV..HEAD" 2>/dev/null | sed -e 's/^-//' -e 's/^/head=/' >> "$DOCS_SCRATCH/heads"
-  fi
-  if ! store_changes < "$DOCS_SCRATCH/heads" > "$DOCS_SCRATCH/rows.json"; then
-    return 2
-  fi
-  docs_store_changes_rows "$DOCS_SCRATCH/rows.json" "$DOCS_SCRATCH/rows" || return $?
-  docs_keys || return $?
-  printf '%s\n' "$DOCS_KEYS" > "$DOCS_SCRATCH/now"
-  DOCS_NOW_FILE="$DOCS_SCRATCH/now" awk -F '\t' '
-    BEGIN {
-      f = ENVIRON["DOCS_NOW_FILE"]
-      while ((getline k < f) > 0) if (k != "") now[k] = 1
-      close(f)
-    }
-    NF == 6 && !($4 in first) { first[$4] = $6; order[++n] = $4 }
-    END {
-      for (i = 1; i <= n; i++) {
-        k = order[i]
-        if (first[k] == "absent" && (k in now)) print "A\tdocs/" k ".md"
-        else if (first[k] == "present" && (k in now)) print "M\tdocs/" k ".md"
-        else if (first[k] == "present") print "D\tdocs/" k ".md"
-      }
-    }' "$DOCS_SCRATCH/rows" | sort -t "$(printf '\t')" -k2,2
-}
-
-# docs_changes_prepare [--since=<rev>] / docs_changes_emit: the corpus half computed into the
-# scratch before a pipeline (its refusal stops the verb), then printed inside it
-docs_changes_prepare() {
-  docs_scratch || return 2
-  docs_changes "$@" > "$DOCS_SCRATCH/changes"
-}
-docs_changes_emit() {
-  cat "$DOCS_SCRATCH/changes"
-}
-
-# docs_code_half: a git delta on stdin without the workspace root's corpus paths
-# (docs/<repo>/<slug>.md): under a store those files, if any linger, are not the corpus; a
-# rename with one corpus side keeps its other side (A for the new path, D for the old)
-docs_code_half() {
-  awk -F '\t' '
-    function corpus(p) { return p ~ /^docs\/[^\/]+\/[^\/]+\.md$/ }
-    $1 ~ /^R/ && NF >= 3 {
-      if (corpus($2) && corpus($3)) next
-      if (corpus($3)) { print "D\t" $2; next }
-      if (corpus($2)) { print "A\t" $3; next }
-      print; next
-    }
-    NF >= 2 && corpus($2) { next }
-    { print }'
 }
 
 # docs_git_env: an engine that runs inside the scratch still probes the workspace's git
@@ -948,8 +875,7 @@ EOF
 # missing required field, a duplicate key or id, a missing address, a newline in a one-line
 # field, a carriage return); the result audited by docs-audit.awk over its whole repo (the
 # stored docs with the edited ones in place, run from a scratch copy so errors name
-# docs/<repo>/<slug>.md); then store.put with --op=<verb> and --head=<the workspace git
-# HEAD>. A refusal at any step writes nothing. --dry-run stops before the store and prints
+# docs/<repo>/<slug>.md); then store.put. A refusal at any step writes nothing. --dry-run stops before the store and prints
 # the changed lines.
 
 DOCS_NA=0
@@ -1224,17 +1150,25 @@ docs_grammar_check() {
   return 1
 }
 
-# docs_store <repo> <slug> <op> <file>: store.put stamped with the op and the workspace
-# HEAD; the driver's message passes on a failure
+# docs_store <repo> <slug> <op> <file>: store.put of the file (the op names the verb, which
+# the store keeps no record of); a refusal carries the storage layer's message and code
+# under the verb's name
 docs_store() {
-  ds_head=$(docs_head)
-  if store_put "$1/$2" "--op=$3" "--head=$ds_head" < "$4" > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
+  if store_put "$1/$2" < "$4" > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
     return 0
   else
     dst_rc=$?
   fi
-  cat "$DOCS_SCRATCH/store.err" >&2
+  docs_store_refuse store.put
   return "$dst_rc"
+}
+
+# docs_store_refuse <store function>: the store's refusal line as the verb's own, the
+# function's prefix stripped (the resolver's own line rides whole as the message)
+docs_store_refuse() {
+  dsr_line=$(head -n 1 "$DOCS_SCRATCH/store.err")
+  [ -n "$dsr_line" ] || return 0
+  printf '%s: %s\n' "$DOCS_VERB" "${dsr_line#"$1: error: "}" >&2
 }
 
 # docs_say <repo> <slug> <note file>: the verb's line (docs <verb>: <repo>/<slug> <note>)
@@ -1376,7 +1310,7 @@ docs_search_refuse() {
 # docs_search "<term>" [--repo=<repo>] [--type=<t>] [--mode=<m>] [--limit=N] [--json]: the
 # search verb: the shared flags in the --flag=value form only, then the entity engine over
 # the materialized corpus (or one repo's docs). The docs search answers exact alone, the
-# docs namespace declaring no search schema: a direct call naming another mode refuses
+# storage contract's one mode: a direct call naming another mode refuses
 # naming exact, while under the ctx search fan-out (CTX_SEARCH_FANOUT=1) it falls back to
 # exact, which its answer's mode says; a type the module does not hold refuses on a direct
 # call and answers zero hits under the fan-out. Zero hits is an answer, rc 0.
@@ -1453,7 +1387,7 @@ docs_search() {
   fi
 }
 
-# docs_remove_doc <repo> <slug>: store.delete with op remove, stamped with the HEAD; a dry
+# docs_remove_doc <repo> <slug>: store.delete of the doc; a dry
 # run prints the verb's line and the stored doc whole, then writes nothing; the docs lock is
 # held from the existence check to the delete
 docs_remove_doc() {
@@ -1480,14 +1414,13 @@ docs_remove_locked() {
     printf '%s: dry run, nothing written\n' "$DOCS_VERB"
     return 0
   fi
-  dx_head=$(docs_head)
-  if store_delete "$1/$2" --op=remove "--head=$dx_head" < /dev/null > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
+  if store_delete "$1/$2" < /dev/null > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
     printf 'docs remove: %s/%s removed\n' "$1" "$2"
     return 0
   else
     dx_rc=$?
   fi
-  cat "$DOCS_SCRATCH/store.err" >&2
+  docs_store_refuse store.delete
   return "$dx_rc"
 }
 

@@ -116,7 +116,7 @@ The SQLite database operates in Write-Ahead Logging (WAL) mode (`PRAGMA journal_
 Before adopting `ast-doc-graph` in a repository, answer these questions:
 
 * Language and toolchain: Does the repository contain TypeScript (`.ts`, `.tsx`) files; is a TypeScript 5 or 6 package reachable (its own `node_modules`, or one `AST_DOC_GRAPH_TYPESCRIPT` can name, since TypeScript 7 offers no compiler API); and is a runner on the PATH (`tsx`, or Node 22.6+)?
-* Documentation discipline: Does the repository follow the Contexture docs-discipline format (typed `@doc` blocks with `@contract` rules and `@pitfalls` in `docs/`)?
+* Documentation discipline: Does the repository follow the Contexture docs-discipline format (typed `@doc` blocks with `@contract` rules and `@pitfalls`, kept by the docs module at its declared root, `.contexture/docs/` under the posix driver, or in a `docs/` folder where no docs module is installed)?
 * Source directory layout: Where do primary business logic, services, and core models live (`src/`, `backend/`, `packages/`, etc.)?
 * System SQLite: Is `/usr/bin/sqlite3` available with FTS5 support (standard on macOS and modern Linux distributions)?
 * Exclusion boundaries: Which directories should be skipped during source discovery (`node_modules`, `dist`, `build`, `archive`, test directories)?
@@ -176,9 +176,17 @@ ctx ast-doc-graph index --repo-root . --clean
 
 The driver discovers TypeScript files and documentation units, runs the extractors,
 and compiles `graph.db` in the repository root. A repository without TypeScript
-never runs the TypeScript extractor, and a docs walk (the `docs/` folder, else the
-repository root outside the exclusion folders) that finds no markdown yields an
-empty docs side, so a docs-only or a code-only repository indexes rc 0.
+never runs the TypeScript extractor, and a docs walk that finds no markdown
+yields an empty docs side, so a docs-only or a code-only repository indexes rc 0.
+The walk reads the docs namespace's declared root, read through the drawer's
+storage library, when it lies inside the repository root (`.contexture/docs/`
+under the posix driver); a drawer declaring no docs namespace
+walks the `docs/` folder, else the repository root outside the exclusion
+folders. Under `ctx` with `--repo-root` naming another repository (a child
+repository), a declared root outside it leaves that graph's docs side empty
+with one notice, since the workspace corpus's sources are workspace relative.
+The full index records the walk folder in the graph, so a graph built by an
+earlier release needs one full index after the update.
 
 The index runs only inside a contexture drawer: under `ctx` the drawer is the
 workspace (`CTX_ROOT`), so `--repo-root` may name any repository; run directly,
@@ -386,7 +394,7 @@ ctx ast-doc-graph query stats
 * Static call graph approximation: The AST extractor identifies direct invocations, method calls on identifiers, and property access calls. Dynamic calls (`obj[fnName]()`), indirect callback dispatches, and heavily polymorphic reflection are not statically resolvable.
 * TypeScript Compiler API resolution: The extractor parses through a TypeScript 5 or 6 compiler API whatever the target uses, found through its own Node resolution, then the target repository's `node_modules` and its ancestors, or named alone by `AST_DOC_GRAPH_TYPESCRIPT`. TypeScript 7 offers no `createSourceFile`, so a repository whose only reachable typescript is 7 indexes once the variable names a 5 or 6 package, and refuses rc 1 until then: the refusal stops the whole index, docs included, so no partial graph reads as complete. The runner (`tsx`, or Node with `--experimental-strip-types`) runs the extractor and supplies no compiler API.
 * Documentation grammar compliance: The docs extractor parses documents adhering to the docs-discipline corpus grammar (the docs module's private grammar). A file with no `@doc <kind> <id>` line and no rule or pitfall block adds nothing to the graph. A rule or pitfall met at column 0 before any `@doc` line (a `@contract`, `@dependency_rules`, `@rule`, or `@pitfalls` block, or a `! [severity/type] id:` pitfall line, as a guide page quoting the grammar holds) has no unit to hold it: the extractor skips those entries with one warning on stderr naming the file and the count (`Warning: skipping 2 rule or pitfall entries before any @doc line in docs/guide.md`), and the rest of the corpus indexes. The id line a migrated contract rule or responsibility carries on its second line, numbered (`id: <slug>-r<N>`, `id: <slug>-o<N>`) or opaque (`id: <slug>-r-<token>`, `id: <slug>-o-<token>`), is skipped as an unknown field, so the extracted rules and pitfalls stay the same.
-* Files-only corpus reader: The docs extractor reads the corpus as files under `docs/` (the pipeline driver scans the folder, the parser reads each file), never through `ctx docs`. Under the docs-discipline files driver that folder is the corpus; under a store driver (the storage-fts5 plugin, or any driver whose corpus lives outside the files) the folder holds no corpus, so the graph indexes no docs, rules, or pitfalls while code indexing works unchanged. Routing the extraction through `ctx docs` is a later change; until then, index docs only in a workspace on the files driver.
+* Files-only corpus reader: The docs extractor reads the corpus as files under the docs namespace's declared root (the pipeline driver reads that root through the drawer's storage library and scans the folder, the parser reads each file), never through `ctx docs`. Under the posix driver that folder (`.contexture/docs/`) is the corpus; installing another driver package (storage-sqlite, or any driver package) moves the corpus into that driver and moves the posix documents into a stamped backup or deletes them, so while it is active the folder holds no corpus document and the graph indexes no docs, rules, or pitfalls, while code indexing works unchanged; uninstalling the active driver moves the record back into posix, and the next index restores the docs side. Routing the extraction through `ctx docs` is a later change; until then, index docs only in a workspace on posix.
 * Incremental delta lifecycle: Single-file and partial-batch delta updates are fully supported via `ctx ast-doc-graph index --delta` and lazy JIT micro-sync in the query verb. Re-parsing is scoped strictly to modified files with automatic cascading edge purging and dynamic governance re-linking. Removal rides every run: a full run rebuilds the graph from the files it discovers, and a delta removes each indexed file the disk no longer has and adds each unindexed one inside the folders the graph covers, so a deleted, renamed, or moved source file or corpus doc leaves no row behind. A file added in a folder the graph never covered, with an mtime older than the graph, waits for the next full run (or a delta naming it, a TypeScript file only inside the graph's source root). The graph is bound to the repository and source roots its last full index recorded: a delta elsewhere, or given another `--src-dir`, refuses, and a repository moved or copied with its graph answers for the recorded root (a moved one's queries name the absent root) until a full index of its new place records that place. A graph loaded before the record (by an earlier release) keeps the old guess of its root for its refresh, which then removes and adds no file and syncs only the newer ones, so such a graph's database kept outside its repository never loses the rows of paths a wrongly guessed root lacks, while its refresh may still read a newer file from that root; each query names the guess on stderr until a full index records the root, so run one after the upgrade.
 * Zero em-dash and zero spaced hyphen compliance: In accordance with Contexture repository typography laws, all authored tools, scripts, and documentation strictly avoid em-dashes and spaced hyphens.
 
@@ -450,7 +458,9 @@ A docs-only sandbox exercises the same verbs without the TypeScript need (no
 index runs only inside a contexture drawer, so the staging builds a scratch
 workspace carrying the base runtime, this plugin's module, and the
 docs-discipline sample corpus, and runs the verbs through that workspace's
-`ctx`; the outputs below are verbatim from that run:
+`ctx`; the scratch carries no storage core and declares no docs namespace, so
+the walk reads its `docs/` folder (in a workspace with the docs module it
+reads the declared root instead); the outputs below are verbatim from that run:
 
 ```sh
 scratch="../../.contexture/tmp/ast-doc-graph-walk"

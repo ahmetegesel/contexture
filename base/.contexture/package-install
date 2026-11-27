@@ -24,7 +24,10 @@
 # CTX_PACKAGE_AS names (space separated <module>=<alias> pairs, which ctx package
 # install --as=<module>=<alias> sets); a module the pairs do not name keeps the alias
 # the install record's module line holds, so a re-install without the flags keeps
-# every alias. The module's files land under modules/<alias>/, its laws and hooks go
+# every alias, and a module whose data this package kept at an uninstall returns under
+# the name it was kept under, taking the kept declaration back in its record phase (a
+# rollback restores it), so its verbs read the kept keys; an --as naming another name for
+# it refuses naming the kept one. The module's files land under modules/<alias>/, its laws and hooks go
 # with them, and the module's namespace is the alias, its folder's name, and so is its
 # storage root: a root its data file declares applies only under its own name. A name
 # collision without an alias refuses naming --as, and so does a storage root another
@@ -37,10 +40,15 @@
 # matching the manifest; a path that escapes or carries blanks; a payload file
 # outside the extension root; a core path; an existing file no package recorded;
 # a path another package recorded; a module name against a builtin (unit,
-# run, lane, rhythm, store), a workspace module, or a reserved name; a storage root another
-# installed module resolves to, or two modules of the package share; a driver name against the
-# core posix driver or a driver that already resolves ahead of the extension
-# root; a malformed module manifest; a driver part
+# run, lane, rhythm, store), a workspace module, or a reserved name; a module name another
+# package's kept data holds; a storage root another installed module resolves to, kept data
+# holds, or two modules of the package share; a re-install that would leave an installed
+# module's data undeclared while it holds a key (an --as moving it, a version dropping it);
+# a module returning over this package's kept data without a data file, or under other
+# storage roots than the kept declaration's;
+# a driver name against the
+# core posix driver (the only driver the resolver finds outside the extension
+# root); a malformed module manifest; a driver part
 # without an executable.
 # A re-install of this package's recorded files is an update: changed files
 # update, files the new source drops are removed when unchanged and preserved
@@ -51,6 +59,22 @@
 # folder the install made removed, so a failed fresh install leaves the tree as it
 # found it and its retry proceeds), a failing part hook, or a failing compose (the
 # overlay and its record are in place; the law layer is stale).
+#
+# A driver package moves the record (docs/the-engine.md, Moving a record between backends).
+# Before anything is written: no CTX_STORAGE_ variable, one driver package at a time, the
+# readiness probe, the driver settings (CTX_PACKAGE_DRIVER_CONFIG, one <key>=<value> per line,
+# checked against the incoming part's config schema), the run folder in the drawer's scratch,
+# the move state with crash recovery, and the old copy answer (CTX_PACKAGE_OLD, backup or
+# delete, else asked at a terminal or refused). An install while posix is configured then lands
+# the overlay and its record (with a format line), runs the behavior test, writes the settings,
+# runs the driver's prepare hook, and moves every namespace into the driver under the storage
+# moving freeze (preflight, the take, copy, the storage.driver switch, check); any failure or
+# signal through the check unwinds it all, rc 2 (or 129, 130, 143); past the check the old
+# copy step, the release, the driver's finish hook, the package's install hook, and the
+# compose only warn when they fail, rc 0, so the engine writes the package line. A reinstall of
+# the configured driver at the recorded format is a plain update guarded by a dump compare; at
+# another format the record moves out through posix and back in. The shared steps are the
+# configuration library's driver run section.
 set -u
 
 err() { printf 'package-install: %s\n' "$*" >&2; }
@@ -192,8 +216,27 @@ pkg_summary=$("$ctx_bin" _package "$pkg_manifest" summary) || die 1 "cannot read
 pkg_version=$("$ctx_bin" _package "$pkg_manifest" version) || die 1 "cannot read the package version"
 pkg_kind=$("$ctx_bin" _package "$pkg_manifest" kind) || die 1 "cannot read the package kind"
 pkg_driver=$("$ctx_bin" _package "$pkg_manifest" driver) || die 1 "cannot read the package driver name"
+pkg_format=$("$ctx_bin" _package "$pkg_manifest" format) || die 1 "cannot read the package storage format"
 "$ctx_bin" _package "$pkg_manifest" parts > "$scratch/parts" || die 1 "cannot read the package parts"
 [ -s "$scratch/parts" ] || die 1 "the package manifest declares no parts"
+case "${CTX_PACKAGE_OLD:-}" in
+  ""|backup|delete) ;;
+  *) die 1 "malformed old copy answer '${CTX_PACKAGE_OLD:-}' (backup or delete)" ;;
+esac
+if [ "$pkg_kind" != driver ] && [ -n "${CTX_PACKAGE_DRIVER_CONFIG:-}" ]; then
+  die 1 "--driver-config sets a driver package's setting, and '$pkg_name' is a feature package"
+fi
+if [ "$pkg_kind" = driver ]; then
+  case "$0" in */*) pi_home=${0%/*} ;; *) pi_home=. ;; esac
+  pi_lib=""
+  for _c in "$pi_home/config-lib" "$ws_root/.contexture/config-lib"; do
+    if [ -f "$_c" ]; then pi_lib=$_c; break; fi
+  done
+  [ -n "$pi_lib" ] || die 2 "the configuration library is not installed beside the installer"
+  . "$pi_lib"
+  DL_WS=$ws_root DL_LABEL=package-install DL_BIN=$ctx_bin DL_SCR=$scratch DL_PKG=$pkg_name DL_PKG_ROOT=$pkg_root DL_ANSWER=${CTX_PACKAGE_OLD:-}
+  dl_init
+fi
 
 if ( cd "$payload_root" && find . ! -type d ! -type f -print ) > "$scratch/specials" 2>/dev/null; then
   [ -s "$scratch/specials" ] && die 1 "the package carries a non-regular file: $(head -n 1 "$scratch/specials") (only files and directories install)"
@@ -259,9 +302,73 @@ if [ "$have_record" -eq 1 ]; then
     printf '%s %s\n' "$_am" "$_aa"
   done >> "$scratch/aliases"
 fi
+# the package's kept data, "<original> <kept name>" per kept declaration whose origin names
+# this package: a payload module returns under the name its data was kept under, read as a
+# record's module line is, and an --as naming another name for it refuses naming the kept one;
+# a returning module must carry a data file, and the storage root check below holds it to the
+# kept roots, so the return never takes a declaration away from keys its verbs cannot read
+kept_back_refuse() {
+  _krv=$(awk '$1 == "version" && NF == 2 { print $2; exit }' "$kept_root/$2/origin" 2>/dev/null)
+  die 1 "module '$1' returns over the data kept under '$2', but $3, so its verbs would not read the kept keys; install the version that kept it (${_krv:-unknown}), or delete the kept data first: ctx package uninstall $pkg_name --delete-data"
+}
+kept_root=$state_root/retained
+: > "$scratch/kept_own"
+if [ -d "$kept_root" ]; then
+  for _ko in "$kept_root"/*/origin; do
+    [ -f "$_ko" ] || continue
+    _kn=${_ko%/origin}
+    _kn=${_kn##*/}
+    awk -v p="$pkg_name" -v k="$_kn" '
+      $1 == "package" && NF == 2 && pk == "" { pk = $2 }
+      $1 == "module" && NF == 3 && $2 == k && m == "" { m = $3 }
+      END { if (pk == p && m != "") print m " " k }' "$_ko" 2>/dev/null
+  done > "$scratch/kept_own"
+fi
+: > "$scratch/kept_return"
+while read -r _km _kn; do
+  grep -Fqx -- "$_km" "$scratch/modules" || continue
+  _ka=$(awk -v m="$_km" '$1 == m { print $2; exit }' "$scratch/aliases")
+  if [ -z "$_ka" ]; then
+    printf '%s %s\n' "$_km" "$_kn" >> "$scratch/aliases"
+  elif [ "$_ka" != "$_kn" ]; then
+    die 1 "module '$_km' has kept data under the name '$_kn', so it returns under that name: --as=$_km=$_kn (or delete the kept data first: ctx package uninstall $pkg_name --delete-data)"
+  fi
+  grep -Fqx "modules/$_km/data" "$scratch/files" || kept_back_refuse "$_km" "$_kn" "this version carries no data file for it"
+  printf '%s %s\n' "$_km" "$_kn" >> "$scratch/kept_return"
+done < "$scratch/kept_own"
 awk 'FILENAME == ARGV[1] { n[$1] = $2; next } { print $0 " " (($0 in n) ? n[$0] : $0) }' "$scratch/aliases" "$scratch/modules" > "$scratch/inames"
 _dup=$(awk '{ print $2 }' "$scratch/inames" | LC_ALL=C sort | uniq -d | head -n 1)
 [ -z "$_dup" ] || die 1 "two modules of the package would install as '$_dup' (name each with its own --as=<module>=<name>)"
+
+# a re-install never leaves an installed module's data undeclared: a data carrying module the
+# record names whose installed name no payload module with a data file takes again (an --as
+# moving it, a version dropping it or its data file) refuses while its namespace holds a key
+# or its key count fails, since its data would be neither listed nor moved
+clear_bin=$ws_root/.contexture/storage/scripts/store-clear
+if [ "$have_record" -eq 1 ]; then
+  awk '
+    $1 == "module" && NF == 3 { orig[$2] = $3; next }
+    $1 == "file" {
+      n = split($4, a, "/")
+      if (n == 5 && a[1] == ".contexture" && a[2] == "extensions" && a[3] == "modules" && a[5] == "data") d[a[4]] = 1
+    }
+    END { for (m in d) print m " " ((m in orig) ? orig[m] : m) }' "$state_file" | LC_ALL=C sort > "$scratch/data_now"
+  while read -r _dn _do; do
+    [ -f "$ext_root/modules/$_dn/data" ] || continue
+    _keeps=$(awk -v n="$_dn" '$2 == n { print $1; exit }' "$scratch/inames")
+    if [ -n "$_keeps" ] && grep -Fqx "modules/$_keeps/data" "$scratch/files"; then
+      continue
+    fi
+    if _dc=$(CTX_ROOT=$ws_root "$clear_bin" count "$_dn" 2>/dev/null) && [ -n "$_dc" ]; then :; else _dc=unknown; fi
+    [ "$_dc" != 0 ] || continue
+    case "$_dc" in
+      unknown) _dk="key count unknown" ;;
+      1) _dk="1 key" ;;
+      *) _dk="$_dc keys" ;;
+    esac
+    die 1 "the re-install would leave the data of module '$_do' (namespace '$_dn', $_dk) undeclared; uninstall the package with --keep-data or --delete-data as the human answers, then install it"
+  done < "$scratch/data_now"
+fi
 # the destination of every payload path: modules/<original>/... lands at modules/<installed>/...
 awk 'FILENAME == ARGV[1] { n[$1] = $2; next }
   { split($0, a, /\//); d = $0
@@ -290,6 +397,13 @@ while read -r mname_o mname; do
   fi
   if [ -e "$ws_root/.contexture/modules/$mname" ]; then
     die 1 "module name '$mname' collides with a workspace module (install it under another name: --as=$mname_o=<name>)"
+  fi
+  if [ -e "$kept_root/$mname" ]; then
+    _kp=$(awk '$1 == "package" && NF == 2 { print $2; exit }' "$kept_root/$mname/origin" 2>/dev/null)
+    _km=$(awk -v k="$mname" '$1 == "module" && NF == 3 && $2 == k { print $3; exit }' "$kept_root/$mname/origin" 2>/dev/null)
+    if [ "$_kp" != "$pkg_name" ] || [ "$_km" != "$mname_o" ]; then
+      die 1 "module name '$mname' holds data that package '${_kp:-unknown}' kept at its uninstall (install it under another name: --as=$mname_o=<name>)"
+    fi
   fi
   if [ -e "$ext_root/modules/$mname" ]; then
     if record_has_prefix ".contexture/extensions/modules/$mname/"; then
@@ -341,6 +455,8 @@ if [ -x "$sd_bin" ] && grep -q '^modules/[^/]*/data$' "$scratch/files"; then
   if [ "$have_record" -eq 1 ]; then
     awk '$1 == "file" { n = split($4, a, /\//); if (n >= 5 && a[1] == ".contexture" && a[2] == "extensions" && a[3] == "modules") print a[4] }' "$state_file" > "$scratch/own"
   fi
+  awk '{ print $2 }' "$scratch/kept_return" >> "$scratch/own"
+  CTX_STORE_WORKSPACE=$ws_root "$sd_bin" --retained > "$scratch/kept_rows" 2>/dev/null || :
   CTX_STORE_WORKSPACE=$ws_root "$sd_bin" --list > "$scratch/roots.old" 2> "$scratch/roots.old.err"
   sd_rc=$?
   if [ "$sd_rc" -ne 0 ]; then
@@ -357,10 +473,26 @@ if [ -x "$sd_bin" ] && grep -q '^modules/[^/]*/data$' "$scratch/files"; then
         print m
         exit
       }' "$scratch/own" "$scratch/roots.old.err")
+    # kept data whose declaration the reader refuses has one repair: its package's return
+    _lns=$(printf '%s\n' "$_left" | awk -v q="'" 'index($0, "namespace " q) == 1 { s = substr($0, 12); print substr(s, 1, index(s, q) - 1); exit }')
+    _lkp=""
+    [ -z "$_lns" ] || [ ! -f "$kept_root/$_lns/data" ] || _lkp=$(awk -F '\t' -v n="$_lns" '$1 == n { print $2; exit }' "$scratch/kept_rows")
+    _lwhy=${_left#*"': "}
+    [ -z "$_lkp" ] || die 2 "the data package '$_lkp' kept under namespace '$_lns' has a declaration the storage core cannot read ($_lwhy), so the storage roots cannot be checked; install $_lkp again to take it back, which repairs it"
     if [ "$sd_rc" -ne 1 ] || [ -n "$_left" ]; then
       die 2 "a module data file of the workspace cannot be read, so the storage roots cannot be checked (${_left:-$(sd_why "$scratch/roots.old.err")}); fix that module's data file first"
     fi
   fi
+  # sd_row <namespace> <listing>: the namespace's roots in a listing, the fallback root after
+  # the root, quoted and joined for a line, or nothing when the listing left it out
+  sd_row() { awk -F '\t' -v n="$1" '$1 == n { s = $2; for (i = 3; i <= NF; i++) s = s "\047 and \047" $i; print s; exit }' "$2"; }
+  # a returning module keeps the kept roots, the fallback root among them; a kept declaration
+  # the reader cannot read gives no row, and the return then repairs it
+  while read -r _km _kn; do
+    _kr=$(sd_row "$_kn" "$scratch/roots.old")
+    _nr=$(sd_row "$_kn" "$scratch/roots.new")
+    [ -z "$_kr" ] || [ "$_kr" = "$_nr" ] || kept_back_refuse "$_km" "$_kn" "this version stores it under '$_nr' where the kept data lies under '$_kr'"
+  done < "$scratch/kept_return"
   _clash=$(awk '
     FILENAME == ARGV[1] { own[$0] = 1; next }
     FILENAME == ARGV[2] { orig[$2] = $1; next }
@@ -385,9 +517,13 @@ if [ -x "$sd_bin" ] && grep -q '^modules/[^/]*/data$' "$scratch/files"; then
     _cr=${_clash#*"$_tab"}
     _co=${_cr#*"$_tab"}
     _cr=${_cr%%"$_tab"*}
+    _ckp=$(awk -F '\t' -v n="$_co" '$1 == n { print $2; exit }' "$scratch/kept_rows")
     case "$_co" in
       @*) die 1 "two modules of the package would store under the root '$_cr', '${_co#@}' and '$_cm' (install one under another name: --as=$_cm=<name>)" ;;
-      *) die 1 "module '$_cm' would store under the root '$_cr', which the installed module '$_co' stores under (install it under another name: --as=$_cm=<name>)" ;;
+      *)
+        [ -z "$_ckp" ] || die 1 "module '$_cm' would store under the root '$_cr', which holds the data of namespace '$_co' that package '$_ckp' kept at its uninstall (install it under another name: --as=$_cm=<name>)"
+        die 1 "module '$_cm' would store under the root '$_cr', which the installed module '$_co' stores under (install it under another name: --as=$_cm=<name>)"
+        ;;
     esac
   fi
 fi
@@ -400,16 +536,6 @@ while IFS= read -r dname; do
     *[!A-Za-z0-9._-]*) die 1 "malformed driver name '$dname' (letters, digits, dot, underscore, hyphen)" ;;
   esac
   [ "$dname" = posix ] && die 1 "driver name 'posix' collides with the core posix driver"
-  if [ -e "$ws_root/.contexture/storage/drivers/$dname" ]; then
-    die 1 "driver name '$dname' already resolves in the core"
-  fi
-  if [ -e "$ws_root/.contexture/drivers/$dname" ]; then
-    die 1 "driver name '$dname' already resolves in the workspace"
-  fi
-  for _md in "$ws_root"/.contexture/modules/*/drivers/"$dname"; do
-    [ -e "$_md" ] || continue
-    die 1 "driver name '$dname' already resolves in a module"
-  done
   if [ -e "$ext_root/storage/drivers/$dname" ]; then
     if record_has_prefix ".contexture/extensions/storage/drivers/$dname/"; then
       :
@@ -483,6 +609,9 @@ record_phase=0
 uninstall_phase=0
 rollback() {
   _rb=$1
+  _rbrc=${2:-2}
+  trap '' HUP INT TERM
+  [ -z "${DL_TOKEN:-}" ] || dl_release
   if [ -f "$scratch/moved" ]; then
     while IFS= read -r _t; do
       _p=${_t#"$ws_root"/}
@@ -513,12 +642,393 @@ rollback() {
       rm -f "$stash_uninstall" 2>/dev/null
     fi
   fi
+  if [ -s "$scratch/kept_back" ]; then
+    mkdir -p "$kept_root" 2>/dev/null
+    while IFS= read -r _k; do
+      mv "$stage/.backup/.kept/$_k" "$kept_root/$_k" 2>/dev/null
+    done < "$scratch/kept_back"
+  fi
   rm -rf "$stage" 2>/dev/null
   LC_ALL=C sort -ru "$scratch/made" | while IFS= read -r _d; do
     rmdir "$_d" 2>/dev/null
   done
-  die 2 "$_rb"
+  die "$_rbrc" "$_rb"
 }
+
+# The driver package run (docs/the-engine.md, Moving a record between backends). Before
+# anything is written: no storage variable, one driver package at a time, the readiness
+# probe, the driver settings, the run folder in the drawer's scratch, the move state with crash
+# recovery, the path, and the old copy answer; then a reinstall's freeze and dump before the
+# files land, or a format change's move out with the installed code. After the overlay, its
+# record, and its stash: the behavior test, then the move in or the reinstall's dump after;
+# any failure through the verify unwinds in reverse, a signal stopping the held step first;
+# past the verify nothing unwinds.
+dl_keep=0
+dl_mode=""
+dl_phase=""
+dl_step=""
+dl_why=""
+dl_part=$ext_root/storage/drivers/$pkg_driver
+in_prep=0
+in_copy=0
+in_switch=0
+dl_warns=""
+
+dl_exit() {
+  rm -rf "$scratch"
+  [ "$dl_keep" -eq 1 ] || dl_run_drop
+}
+
+# driver_setting_ok <key> <value> <what>: the key one the incoming part's config schema
+# declares and the value of its type, else a refusal rc 1 naming <what>
+driver_setting_ok() {
+  _row=$(awk -F '\t' -v k="$1" '$1 == k { print; exit }' "$scratch/dcfg.rows")
+  [ -n "$_row" ] || die 1 "$3: the '$pkg_driver' driver's config schema declares no key '$1'"
+  _t=$(printf '%s\n' "$_row" | awk -F '\t' '{ print $3 }')
+  _one=$(printf '%s\n' "$_row" | LC_ALL=C awk "$CFG_ESC_AWK"'BEGIN { FS = "\t" } { print cfg_unesc($4) }')
+  _min=$(printf '%s\n' "$_row" | awk -F '\t' '{ print $5 }')
+  _max=$(printf '%s\n' "$_row" | awk -F '\t' '{ print $6 }')
+  if ! { cfg_validate_str package-install "the value of '$1'" "$2" && cfg_schema_validate_value "$_t" "$_one" "$_min" "$_max" "$2" package-install "$1"; } 2> "$scratch/dcfg.err"; then
+    die 1 "$3: $(sed -n '1s/^package-install: error: //p' "$scratch/dcfg.err")"
+  fi
+}
+
+driver_settings_read() {
+  : > "$scratch/dcfg.rows"
+  _cf=$payload_root/storage/drivers/$pkg_driver/config
+  if [ -f "$_cf" ]; then
+    cfg_schema_parse "$_cf" package-install > "$scratch/dcfg.rows" 2> "$scratch/dcfg.err" \
+      || die 1 "the '$pkg_driver' driver's config schema cannot be read: $(dl_first "$scratch/dcfg.err")"
+  fi
+  printf '%s' "${CTX_PACKAGE_DRIVER_CONFIG:-}" > "$scratch/dcfg.given"
+  : > "$scratch/dcfg.set"
+  while IFS= read -r _pair || [ -n "$_pair" ]; do
+    [ -n "$_pair" ] || continue
+    _k=${_pair%%=*}
+    _val=${_pair#*=}
+    awk -F '\t' -v k="$_k" '$1 == k { f = 1 } END { exit(f ? 0 : 1) }' "$scratch/dcfg.set" \
+      && die 1 "--driver-config names the key '$_k' twice; give the one value the human chose"
+    driver_setting_ok "$_k" "$_val" "--driver-config=$_k=$_val"
+    printf '%s\t%s\n' "$_k" "$_val" >> "$scratch/dcfg.set"
+  done < "$scratch/dcfg.given"
+}
+
+# driver_settings_settle: a reinstall at the configured driver's format changes no setting
+# (its driver holds the record); otherwise a required setting with no default that neither the
+# flags nor the configuration give is asked at a terminal or refused naming its flag
+driver_settings_settle() {
+  if [ "$dl_mode" = plain ]; then
+    while IFS='	' read -r _k _val; do
+      _cur=$(cfg_get "storage.$_k" "$ws_root/.contexture" 2>/dev/null)
+      [ "$_cur" = "$_val" ] || die 1 "--driver-config=$_k=$_val changes a setting of the configured driver '$pkg_driver', which holds the record: uninstall $pkg_name, then install it with --driver-config=$_k=$_val"
+    done < "$scratch/dcfg.set"
+    return 0
+  fi
+  for _k in $(awk -F '\t' '$2 == "required" && $7 == "0" { print $1 }' "$scratch/dcfg.rows"); do
+    awk -F '\t' -v k="$_k" '$1 == k { f = 1 } END { exit(f ? 0 : 1) }' "$scratch/dcfg.set" && continue
+    _cur=$(cfg_get "storage.$_k" "$ws_root/.contexture" 2>/dev/null) && [ -n "$_cur" ] && continue
+    _val=$(cfg_answer_value package-install "installing '$pkg_name' needs the '$pkg_driver' driver's setting '$_k', which has no default" "--driver-config=$_k=<value>") || exit $?
+    driver_setting_ok "$_k" "$_val" "the answer for '$_k'"
+    printf '%s\t%s\n' "$_k" "$_val" >> "$scratch/dcfg.set"
+  done
+}
+
+# driver_behavior: the storage core's behavior test on the installed part, in the foreground
+# (a background job ignores an interrupt from its start), its one verdict line in dl_why
+driver_behavior() {
+  ( cd "$ws_root" || exit 2
+    unset CTX_DIR
+    CTX_ROOT=$ws_root
+    export CTX_ROOT
+    exec "$DL_CORE/driver-behavior" "$dl_part" ) < /dev/null > "$scratch/behavior.out" 2> "$scratch/behavior.err"
+  _br=$?
+  case "$_br" in
+    0) return 0 ;;
+    129|130|143) on_sig "$_br" ;;
+  esac
+  dl_why=$(dl_first "$scratch/behavior.out")
+  [ "$dl_why" != "it gave no reason" ] || dl_why="it answered rc $_br: $(dl_first "$scratch/behavior.err")"
+  return 1
+}
+
+# driver_dump <before|after>: every namespace scanned through the configured driver into the
+# run folder; dl_why names a failure
+driver_dump() {
+  dl_namespaces "$scratch/dump.ns" || { dl_why="the namespaces cannot be listed"; return 2; }
+  mkdir -p "$DL_RUN/$1" || { dl_why="the run folder cannot be written"; return 2; }
+  for _ns in $(cat "$scratch/dump.ns"); do
+    dl_held "$DL_RUN/$1/$_ns" "$scratch/dump.err" dl_core_exec - 0 driver-resolver store.scan "$_ns" \
+      || { dl_why="namespace '$_ns' cannot be read: $(dl_first "$scratch/dump.err")"; return 2; }
+  done
+}
+
+# dl_carried <run subfolder>: the keys a move copied, summed over its namespaces
+dl_carried() {
+  cat "$1"/copied.* 2>/dev/null | awk '{ n += $1 } END { print n + 0 }'
+}
+
+plain_fail() {
+  trap '' HUP INT TERM
+  dl_phase=unwinding
+  rollback "the update failed at $1 ($2); its files are rolled back and the record reads as before" 2
+}
+
+in_unwind() {
+  dl_unwound=""
+  [ "$in_switch" -eq 0 ] || dl_conf_revert storage.driver
+  if [ "$in_copy" -eq 1 ]; then
+    dl_written "$DL_RUN/in"
+    if dl_move "$DL_RUN/in" unwind "$pkg_driver"; then
+      dl_unwound=$(dl_unwound "$DL_SCR/move.out")
+    else
+      dl_unwound="the unwind of the copy stopped ($(dl_first "$DL_SCR/move.err"))"
+    fi
+  fi
+  dl_release
+  if [ "$in_prep" -eq 1 ] && ! dl_hook "$dl_part" cleanup "$pkg_version" in; then
+    dl_err "the driver's cleanup failed ($DL_LINE)"
+  fi
+  dl_conf_back || dl_err "the workspace configuration cannot be put back"
+}
+
+in_fail() {
+  trap '' HUP INT TERM
+  dl_phase=unwinding
+  in_unwind
+  if [ "$dl_mode" = upgrade ]; then
+    rollback "the update's move in failed at $dl_step ($dl_why)${dl_unwound:+; unwound: $dl_unwound}; the record reads from posix, verified, and $pkg_name stays installed at $dl_old_version, not configured" 2
+  fi
+  rollback "the install failed at $dl_step ($dl_why)${dl_unwound:+; unwound: $dl_unwound}; the install is undone" 2
+}
+
+# dl_unfinished: one warning per step past the verify that did not run
+dl_unfinished() {
+  [ -s "$DL_RUN/pending" ] || return 0
+  grep -qx retire "$DL_RUN/pending" && dl_err "warning: the old copy step did not run: posix still holds the moved records; install $pkg_name again to finish it"
+  grep -qx finish "$DL_RUN/pending" && dl_err "warning: the driver's finish did not run; install $pkg_name again to finish it"
+  return 0
+}
+
+on_sig() {
+  trap '' HUP INT TERM
+  _sig=$1
+  dl_stop
+  case "$dl_phase" in
+    plain-pre)
+      dl_release
+      die "$_sig" "stopped by a signal before the update's files landed; nothing changed"
+      ;;
+    out)
+      dl_phase=unwinding
+      dl_out_unwind
+      die "$_sig" "stopped by a signal during the update's move out${DL_UNWOUND:+; unwound: $DL_UNWOUND}; $pkg_name stays installed at $dl_old_version and configured"
+      ;;
+    out-past)
+      dl_release
+      die "$_sig" "stopped by a signal after the update's move out passed its verify: the record reads from posix and $pkg_name stays installed at $dl_old_version, not configured; install it again to move the record back in"
+      ;;
+    plain-post)
+      dl_phase=unwinding
+      rollback "stopped by a signal during the update; its files are rolled back and the record reads as before" "$_sig"
+      ;;
+    in)
+      dl_phase=unwinding
+      in_unwind
+      rollback "stopped by a signal during $dl_step${dl_unwound:+; unwound: $dl_unwound}; the install is undone" "$_sig"
+      ;;
+    past)
+      dl_release
+      dl_keep=1
+      dl_err "stopped by a signal after the move passed its verify: the record reads from the '$pkg_driver' driver"
+      dl_unfinished
+      exit "$_sig"
+      ;;
+    unwinding) ;;
+    *) exit "$_sig" ;;
+  esac
+}
+
+driver_traps() {
+  trap 'on_sig 129' HUP
+  trap 'on_sig 130' INT
+  trap 'on_sig 143' TERM
+}
+
+driver_pre() {
+  driver_traps
+  _v=$(dl_env_vars)
+  [ -z "$_v" ] || die 1 "the environment sets $_v; a storage variable can point a driver elsewhere, so unset it and run again"
+  _o=$(dl_driver_pkgs | awk -v p="$pkg_name" '$1 != p { print $1; exit }')
+  [ -z "$_o" ] || die 1 "the driver package '$_o' is installed, and one driver package is installed at a time: uninstall it first (ctx package uninstall $_o)"
+  if [ -f "$pkg_root/hooks/probe" ]; then
+    ( cd "$ws_root" || exit 2
+      CTX_ROOT=$ws_root
+      CTX_BIN=$ctx_bin
+      CTX_PACKAGE_NAME=$pkg_name
+      CTX_PACKAGE_ROOT=$pkg_root
+      CTX_PACKAGE_VERSION=$pkg_version
+      LC_ALL=C
+      export CTX_ROOT CTX_BIN CTX_PACKAGE_NAME CTX_PACKAGE_ROOT CTX_PACKAGE_VERSION LC_ALL
+      [ ! -x "$pkg_root/hooks/probe" ] || exec "$pkg_root/hooks/probe" < /dev/null
+      exec sh "$pkg_root/hooks/probe" < /dev/null ) > "$scratch/probe" 2>&1
+    _pr=$?
+    case "$_pr" in
+      0) ;;
+      1|3) die 1 "the package's readiness probe answers that this host cannot run it: $(dl_first "$scratch/probe")" ;;
+      *) die 2 "the package's readiness probe failed (rc $_pr): $(dl_first "$scratch/probe")" ;;
+    esac
+  fi
+  driver_settings_read
+  dl_run_make || die 2 "the drawer's scratch folder cannot hold the driver run, and a driver run never uses the system temp (nothing written)"
+  trap 'dl_exit' EXIT
+  dl_recover || exit $?
+  dl_conf=$(cfg_effective_driver "$ws_root/.contexture")
+  if [ "$have_record" -eq 1 ] && [ "$dl_conf" = "$pkg_driver" ]; then
+    dl_old_format=$(awk '$1 == "format" && NF == 2 { print $2; exit }' "$state_file")
+    dl_old_format=${dl_old_format:-0}
+    dl_old_version=$(awk '$1 == "version" && NF == 2 { print $2; exit }' "$state_file")
+    if [ "$dl_old_format" = "$pkg_format" ]; then dl_mode=plain; else dl_mode=upgrade; fi
+  else
+    case "$dl_conf" in
+      posix|"$pkg_driver") ;;
+      *) die 1 "the configured storage driver is '$dl_conf', not posix, so the record cannot move from posix into '$pkg_driver'" ;;
+    esac
+    dl_mode=in
+  fi
+  driver_settings_settle
+  case "$dl_mode" in
+    in)
+      dl_count posix "$scratch/old.counts" || die 2 "the namespaces cannot be listed, so the record cannot be counted"
+      dl_ask "$scratch/old.counts" "installing '$pkg_name' moves the record from posix into the '$pkg_driver' driver and leaves its old posix copy" || exit $?
+      ;;
+    upgrade)
+      dl_count "$pkg_driver" "$scratch/old.counts" || die 2 "the namespaces cannot be listed, so the record cannot be counted"
+      dl_ask "$scratch/old.counts" "updating '$pkg_name' from storage format $dl_old_format to $pkg_format moves the record out through posix and leaves the '$pkg_driver' driver's old storage, the old copy" || exit $?
+      ;;
+  esac
+  case "$dl_mode" in
+    plain)
+      dl_phase=plain-pre
+      dl_take "$pkg_driver" "$pkg_driver" || die 2 "the update cannot take the storage moving freeze: $(dl_first "$DL_SCR/take.err")"
+      if ! driver_dump before; then
+        dl_release
+        die 2 "the update's dump before its files land failed: $dl_why; nothing changed"
+      fi
+      dl_phase=plain-post
+      ;;
+    upgrade)
+      dl_phase=out
+      if ! dl_out "$pkg_driver"; then
+        _step=$DL_STEP
+        _why=$DL_LINE
+        trap '' HUP INT TERM
+        dl_phase=unwinding
+        dl_out_unwind
+        die 2 "the update's move out failed at $_step ($_why)${DL_UNWOUND:+; unwound: $DL_UNWOUND}; $pkg_name stays installed at $dl_old_version and configured"
+      fi
+      dl_phase=out-past
+      printf '%s\n' "$DL_OUT_LINES"
+      dl_release || dl_err "warning: the move out's freeze cannot be released ($(dl_first "$DL_SCR/release.err"))"
+      _ans=$DL_ANSWER
+      [ -n "$_ans" ] || { [ "$(dl_carried "$DL_RUN/out")" -eq 0 ] && _ans=delete || _ans=backup; }
+      if ! dl_finish_out "$pkg_driver" "$dl_old_version" "$_ans"; then
+        die 2 "the update moved the record out through posix and verified it, but the old version's finish failed ($DL_LINE), so the new version was not installed: $pkg_name stays installed at $dl_old_version, not configured; uninstall it with the human's answer to finish the old copy, then install it"
+      fi
+      printf "package-install: the '%s' driver's old storage %s\n" "$pkg_driver" "$DL_DONE"
+      dl_phase=in
+      ;;
+    in)
+      dl_phase=in
+      ;;
+  esac
+}
+
+# driver_post: after the overlay, its record, and its stash: the reinstall's behavior test and
+# dump after, compared namespace by namespace, or the move in through the check
+driver_post() {
+  if [ "$dl_mode" = plain ]; then
+    dl_step="the behavior test"
+    driver_behavior || plain_fail "$dl_step" "$dl_why"
+    dl_step="the dump after its files landed"
+    driver_dump after || plain_fail "$dl_step" "$dl_why"
+    for _ns in $(cat "$scratch/dump.ns"); do
+      cmp -s "$DL_RUN/before/$_ns" "$DL_RUN/after/$_ns" \
+        || plain_fail "the compare" "namespace '$_ns' reads differently through the new version, so a format change went unmarked or its reads changed"
+    done
+    dl_release || dl_err "warning: the update's freeze cannot be released ($(dl_first "$DL_SCR/release.err"))"
+    dl_phase=done
+    return 0
+  fi
+  dl_step="the behavior test"
+  driver_behavior || in_fail
+  dl_step="the driver settings"
+  dl_conf_save || { dl_why="the workspace configuration cannot be saved in the run folder"; in_fail; }
+  while IFS='	' read -r _k _val; do
+    dl_conf_set "storage.$_k" "$_val" || { dl_why=$(dl_first "$DL_SCR/conf.err"); in_fail; }
+  done < "$scratch/dcfg.set"
+  dl_step="the driver's prepare"
+  dl_hook "$dl_part" prepare "$pkg_version" in
+  _hr=$?
+  case "$_hr" in
+    0) in_prep=1 ;;
+    1) dl_why="it refused: $DL_LINE"; in_fail ;;
+    *) dl_why="it failed (rc $_hr): $DL_LINE"; in_fail ;;
+  esac
+  dl_step="the preflight"
+  dl_move "$DL_RUN/in" preflight posix "$pkg_driver" || { dl_why=$(dl_first "$DL_SCR/move.err"); in_fail; }
+  dl_step="the freeze"
+  dl_take posix "$pkg_driver" || { dl_why=$(dl_first "$DL_SCR/take.err"); in_fail; }
+  dl_step="the copy"
+  in_copy=1
+  dl_move "$DL_RUN/in" copy posix "$pkg_driver" || { dl_why=$(dl_first "$DL_SCR/move.err"); in_fail; }
+  cp "$DL_SCR/move.out" "$scratch/copy.lines"
+  grep ': note: ' "$DL_SCR/move.err" > "$scratch/copy.notes" 2>/dev/null
+  dl_step="the switch"
+  { printf '%s %s %s\n' "$pkg_name" "$pkg_driver" "$pkg_version" > "$DL_RUN/run" \
+    && printf 'check\nretire\nfinish\n' > "$DL_RUN/pending"; } 2> /dev/null \
+    || { dl_why="the run folder cannot be written"; in_fail; }
+  in_switch=1
+  dl_conf_set storage.driver "$pkg_driver" || { dl_why=$(dl_first "$DL_SCR/conf.err"); in_fail; }
+  dl_step="the check"
+  dl_move "$DL_RUN/in" check posix || { dl_why=$(dl_first "$DL_SCR/move.err"); in_fail; }
+  printf 'retire\nfinish\n' > "$DL_RUN/pending"
+  dl_keep=1
+  dl_phase=past
+  cat "$scratch/copy.notes" >&2
+  cat "$scratch/copy.lines"
+}
+
+# driver_past: past the verify, nothing unwinds: the old copy step under the still held
+# freeze (the posix records saved into the run's backup or deleted, as the human answered),
+# the release, and the driver's finish; a step that fails warns naming how to finish it
+driver_past() {
+  [ "$dl_mode" != plain ] || return 0
+  _ans=${DL_ANSWER:-backup}
+  if dl_move "$DL_RUN/in" retire posix "$_ans" "$DL_STAMP"; then
+    sed -n '$p' "$DL_SCR/move.out"
+    grep -vx retire "$DL_RUN/pending" > "$DL_RUN/pending.new"
+    mv -f "$DL_RUN/pending.new" "$DL_RUN/pending"
+  else
+    dl_err "the old copy step failed: $(dl_first "$DL_SCR/move.err")"
+  fi
+  dl_release || dl_err "warning: the move's freeze cannot be released ($(dl_first "$DL_SCR/release.err"))"
+  if dl_hook "$dl_part" finish "$pkg_version" in; then
+    grep -vx finish "$DL_RUN/pending" > "$DL_RUN/pending.new"
+    mv -f "$DL_RUN/pending.new" "$DL_RUN/pending"
+  else
+    dl_err "the driver's finish failed: $DL_LINE"
+  fi
+  if [ -s "$DL_RUN/pending" ]; then
+    dl_unfinished
+  else
+    dl_keep=0
+  fi
+  dl_phase=done
+}
+
+if [ "$pkg_kind" = driver ]; then
+  driver_pre
+fi
 
 make_dir "$state_root" || rollback "cannot create .contexture/extensions/.state"
 rm -rf "$stage"
@@ -622,6 +1132,7 @@ record_phase=1
   printf 'version %s\n' "$pkg_version"
   printf 'kind %s\n' "$pkg_kind"
   [ -n "$pkg_driver" ] && printf 'driver %s\n' "$pkg_driver"
+  [ -n "$pkg_format" ] && printf 'format %s\n' "$pkg_format"
   while read -r mname_o mname; do
     printf 'module %s %s\n' "$mname" "$mname_o"
   done < "$scratch/inames"
@@ -648,6 +1159,20 @@ if [ -f "$stage/.uninstall" ]; then
 elif [ -e "$stash_uninstall" ]; then
   rm -f "$stash_uninstall" || rollback "cannot remove the dropped uninstall hook"
 fi
+# the returning modules take their kept data back: each kept declaration leaves the record
+# area now that the module's own data file declares the namespace, restored by a rollback
+: > "$scratch/kept_back"
+if [ -s "$scratch/kept_return" ]; then
+  mkdir -p "$stage/.backup/.kept" || rollback "cannot take back the kept data"
+  while read -r _km _kn; do
+    mv "$kept_root/$_kn" "$stage/.backup/.kept/$_kn" || rollback "cannot take back the kept data of '$_kn'"
+    printf '%s\n' "$_kn" >> "$scratch/kept_back"
+  done < "$scratch/kept_return"
+  rmdir "$kept_root" 2>/dev/null
+fi
+if [ "$pkg_kind" = driver ]; then
+  driver_post
+fi
 rm -rf "$stage"
 
 # prune the folders the stale removals emptied (bottom-up), stopping at the extension
@@ -671,6 +1196,10 @@ while IFS= read -r _p; do
   printf 'package-install: preserved %s (changed since install; still recorded)\n' "$_p"
 done < "$scratch/stale_keep"
 
+if [ "$pkg_kind" = driver ]; then
+  driver_past
+fi
+
 while read -r mname_o mname; do
   hook=$ext_root/modules/$mname/install
   [ -f "$hook" ] || continue
@@ -682,14 +1211,34 @@ done < "$scratch/inames"
 if [ -f "$pkg_root/hooks/install" ]; then
   ( cd "$ws_root" && CTX_ROOT=$ws_root CTX_PACKAGE_ROOT=$pkg_root CTX_BIN=$ctx_bin CTX_PACKAGE_NAME=$pkg_name CTX_PACKAGE_VERSION=$pkg_version LC_ALL=C export CTX_ROOT CTX_PACKAGE_ROOT CTX_BIN CTX_PACKAGE_NAME CTX_PACKAGE_VERSION LC_ALL && if [ -x "$pkg_root/hooks/install" ]; then exec "$pkg_root/hooks/install" < /dev/null; else exec sh "$pkg_root/hooks/install" < /dev/null; fi )
   _hr=$?
-  [ "$_hr" -eq 0 ] || die 2 "the '$pkg_name' package's install hook failed (rc $_hr); the overlay and its record are in place"
+  if [ "$_hr" -ne 0 ]; then
+    [ "$pkg_kind" = driver ] || die 2 "the '$pkg_name' package's install hook failed (rc $_hr); the overlay and its record are in place"
+    err "warning: the '$pkg_name' package's install hook failed (rc $_hr); the record already reads from the '$pkg_driver' driver, so the install stands: install $pkg_name again to run the hook"
+  fi
 fi
 
 # the law layer: every package version and law fragment feeds the generated layer's
 # sources hash, so recompose through ctx compose after the record lands and the hooks
-# run; a boot then reads the set this install just changed.
-"$ctx_bin" compose || die 2 "the law layer did not recompose; run .contexture/ctx compose and fix what it names (the overlay and its record are in place)"
+# run; a boot then reads the set this install just changed. Past a driver package's check
+# a failure only warns, so the engine still writes the package line of the driver the
+# record reads from.
+if ! "$ctx_bin" compose; then
+  [ "$pkg_kind" = driver ] || die 2 "the law layer did not recompose; run .contexture/ctx compose and fix what it names (the overlay and its record are in place)"
+  err "warning: the law layer did not recompose; the record already reads from the '$pkg_driver' driver, so the install stands: run .contexture/ctx compose and fix what it names"
+fi
 
-printf 'package-install: installed %s (%s) into .contexture/extensions (%s files: %s added, %s updated; %s stale removed, %s preserved)\n' \
-  "$pkg_name" "$pkg_summary" "$((added + updated))" "$added" "$updated" "$stale_removed" "$stale_kept"
+while read -r _km _kn; do
+  if [ "$_km" = "$_kn" ]; then
+    printf 'package-install: took back the kept data of %s\n' "$_kn"
+  else
+    printf 'package-install: took back the kept data of %s (module %s under its kept name)\n' "$_kn" "$_km"
+  fi
+done < "$scratch/kept_return"
+dl_said=""
+case "$dl_mode" in
+  in|upgrade) dl_said="; the record reads from the '$pkg_driver' driver" ;;
+  plain) dl_said="; the record reads as before" ;;
+esac
+printf 'package-install: installed %s (%s) into .contexture/extensions (%s files: %s added, %s updated; %s stale removed, %s preserved)%s\n' \
+  "$pkg_name" "$pkg_summary" "$((added + updated))" "$added" "$updated" "$stale_removed" "$stale_kept" "$dl_said"
 exit 0

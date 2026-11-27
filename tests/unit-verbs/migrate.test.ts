@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { FALLBACK_ROOT, RECORD_ROOT } from '../support/drawer';
 import { fresh, seed } from '../support/snapshot';
-import { fts5Available, stage } from '../support/stage';
+import { sqliteAvailable, stage } from '../support/stage';
 import { must, run, seedUnit, unit } from '../support/unit';
 const last = (r: { code: number; stdout: string; stderr: string }): { code: number; last: string; stderr: string } => ({ code: r.code, last: r.stdout.trimEnd().split('\n').pop() ?? '', stderr: r.stderr });
 
@@ -204,9 +204,9 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
   });
 });
 
-describe.skipIf(!fts5Available())('ctx unit migrate under a store that keeps no fallback root', () => {
+describe.skipIf(!sqliteAvailable())('ctx unit migrate under a store that keeps no fallback root', () => {
   it('[the-record-r-4gj4k] prints that nothing moves, rc 0', async () => {
-    const sb = stage('fts5', 'migrate-fts5');
+    const sb = stage('sqlite', 'migrate-sqlite');
     await seedUnit(sb, 'f-u');
     const r = await unit(sb, 'migrate', '--all');
     expect([r.code, r.stderr, r.stdout.split('\n')[0]]).toEqual([0, '', 'root move: nothing moves, the storage layer keeps no fallback']);

@@ -7,20 +7,20 @@ import { DATE } from '../support/record';
 import { ROOT } from '../support/root';
 import { fresh, seed } from '../support/snapshot';
 import { createLane, lane, must, run, unit } from '../support/unit';
-import { inSqliteStore, needFts5, recordAndList, sqliteStage } from './smoke';
+import { inSqliteStore, needSqlite, recordAndList, sqliteStage } from './smoke';
 
 const U = 'sq';
 const show = async (sb: string, ...args: string[]): Promise<string> => (await must(unit(sb, ...args))).stdout;
 
 let seeded: string;
 beforeAll(async () => {
-  needFts5();
+  needSqlite();
   seeded = await seed(async (sb) => {
     await must(unit(sb, 'bootstrap', U, 'the sqlite smoke unit'));
-  }, 'fts5', 'sq-seed');
+  }, 'sqlite', 'sq-seed');
 });
 
-describe.concurrent('the SQLite smoke set: every command family lands in the fts5 store and nowhere else (C14 runtime half)', () => {
+describe.concurrent('the SQLite smoke set: every command family lands in the sqlite store and nowhere else (C14 runtime half)', () => {
   it('SF1 [the-record-r2, the-record-r10] the unit lifecycle: bootstrap, list, list --all --repo, stamp, objective, close, the closed refusal, reopen, board', async () => {
     const sb = sqliteStage('sf1');
     await must(unit(sb, 'bootstrap', 'sf1', 'the lifecycle unit', 'sq-repo'));
@@ -116,21 +116,23 @@ describe.concurrent('the SQLite smoke set: every command family lands in the fts
     await inSqliteStore(sb, 'unit', [`${U}/state`, 'sq-ref/state']);
   });
 
-  it('SF7 [the-record-r2, the-record-r10, the-record-r13, plugins-r8] search: exact, hybrid, and trigram each find the written task', async () => {
+  it('SF7 [the-record-r2, the-record-r10, the-record-r13, plugins-r8] search: exact finds the written task, and a ranked mode refuses naming exact', async () => {
     const sb = fresh(seeded);
     await must(unit(sb, 'task', 'add', U, 'sq-t7', '--objective=the sqlite search task'));
-    for (const [mode, query] of [['exact', 'sqlite search task'], ['hybrid', 'sqlite search task'], ['trigram', 'sqlite']]) {
-      expect(await show(sb, 'search', query, `--unit=${U}`, `--mode=${mode}`), mode).toContain(`task unit#${U}/task/sq-t7`);
+    expect(await show(sb, 'search', 'sqlite search task', `--unit=${U}`, '--mode=exact')).toContain(`task unit#${U}/task/sq-t7`);
+    for (const mode of ['hybrid', 'trigram']) {
+      const r = await unit(sb, 'search', 'sqlite', `--unit=${U}`, `--mode=${mode}`);
+      expect([r.code, r.stdout, r.stderr], mode).toEqual([1, '', `search.query: error: mode '${mode}' is not supported; answerable modes: exact (ERR_CAPABILITY_UNSUPPORTED)\n`]);
     }
     await inSqliteStore(sb, 'unit', [`${U}/backlog`]);
   });
 
-  it('SF8 [the-record-r2, the-record-r10, the-engine-r19, the-engine-r24, plugins-r8] the descriptor: diagnose names fts5 with a healthy store, and the resolver answers the same card', async () => {
+  it('SF8 [the-record-r2, the-record-r10, the-engine-r19, the-engine-r24, plugins-r8] the descriptor: diagnose names sqlite with a healthy store, and the resolver answers the same card', async () => {
     const sb = fresh(seeded);
     const d = JSON.parse(await show(sb, 'diagnose', '--json'));
-    expect(d.driver.name).toBe('fts5');
+    expect(d.driver.name).toBe('sqlite');
     expect([d.storage.health, d.storage.store]).toEqual(['ok', 'present']);
-    expect(d.driver.descriptor.search_modes.map((m: { name: string }) => m.name)).toEqual(['exact', 'hybrid', 'trigram']);
+    expect(d.driver.descriptor.search_modes.map((m: { name: string }) => m.name)).toEqual(['exact']);
     const cap = await exec('.contexture/storage/scripts/driver-resolver', ['capability'], { cwd: sb });
     expect(cap.code, cap.stderr).toBe(0);
     expect(JSON.parse(cap.stdout)).toEqual(d.driver.descriptor);

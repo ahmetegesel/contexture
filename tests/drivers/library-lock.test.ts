@@ -8,11 +8,11 @@ import { holdLock, sleepShim } from '../support/locks';
 import { pathPlant } from '../support/plants';
 import { moduleCall } from '../support/sh';
 import { fresh, seed } from '../support/snapshot';
-import { DRIVERS, fts5Available } from '../support/stage';
+import { DRIVERS, sqliteAvailable } from '../support/stage';
 import { batchPayload } from '../support/store';
 
 const LIBRARY = '.contexture/storage/scripts/library';
-const LIBPROBE = 'root: libprobe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n';
+const LIBPROBE = 'root: libprobe-root\nsuffix: .txt\nkey: <a>/<b>\n';
 const WAIT_S = 60;
 const SHIMMED_MS = (WAIT_S * 1000 * 3) / 4;
 
@@ -28,7 +28,7 @@ async function until(test: () => boolean, ms = 60_000): Promise<void> {
 }
 
 for (const driver of DRIVERS) {
-  describe.skipIf(driver === 'fts5' && !fts5Available())(`the library lock on ${driver}`, { concurrent: true }, () => {
+  describe.skipIf(driver === 'sqlite' && !sqliteAvailable())(`the library lock on ${driver}`, { concurrent: true }, () => {
     let snap: string;
     beforeAll(async () => {
       snap = await seed(async (sb) => void dataFile(sb, 'modules', 'libprobe', LIBPROBE), driver, 'library-lock');
@@ -88,7 +88,7 @@ for (const driver of DRIVERS) {
 
     it('[the-engine-r-uv5a3] store_put, store_batch, store_get, and store_delete inside a held library lock complete: the driver\'s namespace lock is another folder', async () => {
       const sb = fresh(snap);
-      writeFileSync(join(sb, 'batch.in'), batchPayload([{ action: 'put', key: 'x/z', head: 'none', value: 'batched\n' }]));
+      writeFileSync(join(sb, 'batch.in'), batchPayload([{ action: 'put', key: 'x/z', value: 'batched\n' }]));
       const r = await sh(sb, [
         'lib_lock || exit $?',
         `test ! -e "${lockPath(sb, namespaceLock('libprobe'))}" || exit 9`,
@@ -100,10 +100,10 @@ for (const driver of DRIVERS) {
       ].join('\n'));
       expect([r.code, r.stderr]).toEqual([0, '']);
       expect(r.stdout).toBe([
-        '{"namespace":"libprobe","key":"x/y","op":"write"}',
+        '{"namespace":"libprobe","key":"x/y"}',
         '{"namespace":"libprobe","actions":1}',
         'held',
-        '{"namespace":"libprobe","key":"x/y","op":"remove"}',
+        '{"namespace":"libprobe","key":"x/y"}',
         '',
       ].join('\n'));
     });

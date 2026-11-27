@@ -4,7 +4,7 @@ contexture is an AI workspace convention that lives inside your repository so co
 
 - **Never repeat yourself**: Context windows compact into lossy summaries and fresh chats start cold. contexture preserves the decisions, constraints, open work, and verification proof from earlier turns so your agent picks up right where you left off, even across different harnesses or models.
 - **Built for agents, zero friction for you**: You talk to your coding agent naturally in plain English while the agent drives `.contexture/ctx` under the hood. You never have to memorize CLI flags or maintain notes by hand, though power users can inspect, query, or script the record anytime.
-- **Pluggable by design, lightweight out of the box**: Bring your own storage drivers, workflow rhythms, command output filters, or modules under one shared convention, or start immediately with the simple zero-dependency POSIX driver shipped by default. No background servers, no API keys, no harness lock-in.
+- **Pluggable by design, lightweight out of the box**: Bring your own storage drivers (each shipped as a driver package whose install moves your record into it), workflow rhythms, command output filters, or modules under one shared convention, or start immediately with the simple zero-dependency POSIX driver shipped by default. No background servers, no API keys, no harness lock-in.
 
 **How a session feels**
 
@@ -107,12 +107,12 @@ Five modules ship inside `base/.contexture/modules/` and work out of the box wit
 - **`unit`**: Owns the unit record (state, backlog, journal, knowledge, audit, fold, search, and lifecycle operations) over the storage layer.
 - **`lane`**: Manages isolated subagent dispatch lanes (`create`, `record`, `report`, `show`).
 - **`rhythm`**: Lists workspace and installed rhythms, displays a rhythm whole, and reports the rhythm in force with its next gate.
-- **`store`**: Declares and manages schema-checked generic data containers through `ctx store`, and manages `storage.*` settings via `ctx store config`.
+- **`store`**: Declares and manages schema-checked generic data containers through `ctx store`, and manages `storage.*` settings via `ctx store config` (the storage driver itself changes only through a driver package's install and uninstall).
 - **`run`**: Provides the baseline diff, directory listing, and log compaction filters for `ctx run`.
 
 ### Optional catalog plugins
 
-Optional packages live in `.contexture/plugins/` (with `./plugins/` as fallback) and install into `.contexture/extensions/` via `.contexture/ctx package install <name>` (and uninstall via `.contexture/ctx package uninstall <name>`). Inspect available packages, versions, and live host readiness read-only via `.contexture/ctx package catalog`, `.contexture/ctx package info <name>`, and `.contexture/ctx package list`. Package installation runs **only on the human's explicit go at the act** (boot never installs packages, and the verb itself checks no go).
+Optional packages live in `.contexture/plugins/` (with `./plugins/` as fallback) and install into `.contexture/extensions/` via `.contexture/ctx package install <name>` (and uninstall via `.contexture/ctx package uninstall <name>`, whose keep or delete answer for a package's module data is the human's: `--keep-data` keeps it reachable for a later install, `--delete-data` removes it). A driver package's install moves the record from posix into its driver and its uninstall moves it back, the old copy backed up or deleted as the human answers (`--backup-old` or `--delete-old`). Inspect available packages, versions, and live host readiness read-only via `.contexture/ctx package catalog`, `.contexture/ctx package info <name>`, and `.contexture/ctx package list`. Package installation runs **only on the human's explicit go at the act** (boot never installs packages, and the verb itself checks no go).
 
 | Plugin | Kind | What it adds | Guide |
 | :--- | :--- | :--- | :--- |
@@ -120,7 +120,7 @@ Optional packages live in `.contexture/plugins/` (with `./plugins/` as fallback)
 | `ast-doc-graph` | feature | TypeScript AST and documentation graph for symbol, call-graph, rule, and pitfall queries | [plugins/ast-doc-graph/README.md](plugins/ast-doc-graph/README.md) |
 | `toolchain-filters` | feature | Test runner and compiler output filters (pytest, vitest, jest, cargo test, go test) for `ctx run` | [plugins/toolchain-filters/README.md](plugins/toolchain-filters/README.md) |
 | `starter-rhythms` | feature | Starter work and debug rhythms to copy and edit into your team's own | [plugins/starter-rhythms/README.md](plugins/starter-rhythms/README.md) |
-| `storage-fts5` | driver | Optional SQLite FTS5 storage driver with dual full-text indexing and exact, hybrid, and trigram search (requires `sqlite3` with FTS5) | [plugins/storage-fts5/README.md](plugins/storage-fts5/README.md) |
+| `storage-sqlite` | driver | Optional SQLite storage driver: the record and the corpus in one database, a twin of the posix driver with exact search alike on every driver; installing it by name moves the record in, and uninstalling it moves the record back into posix (requires `sqlite3` 3.44 or later) | [plugins/storage-sqlite/README.md](plugins/storage-sqlite/README.md) |
 | `git` | feature | Gitignore strategy, branch and worktree mechanics, and boot ground checks as a law-only module (explicit choice, never a default) | [plugins/git/README.md](plugins/git/README.md) |
 
 For full catalog notes, module aliasing, and reproducing declared packages on a fresh clone, see [docs/adoption.md#the-module-catalog](docs/adoption.md#the-module-catalog) and [docs/plugins.md](docs/plugins.md). To author your own module or package under the same contract, read [docs/modules.md](docs/modules.md).

@@ -1,5 +1,4 @@
-# the docs module's store declaration: the corpus at docs/workspace, keyed by repo/slug
-root: docs
+# the docs module's store declaration: the corpus keyed by repo/slug, in the drawer beside the other modules' data
+root: .contexture/docs
 suffix: .md
 key: <repo>/<slug>
-changes: true

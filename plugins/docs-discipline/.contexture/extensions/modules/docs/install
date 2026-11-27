@@ -1,0 +1,59 @@
+#!/bin/sh
+# docs module install part hook (optional; private: no summary line). The
+# package installer runs it after the package overlay and the installed-state
+# record, with CTX_ROOT exported and cwd at the workspace root. It seeds nothing:
+# it is the one time corpus root move guard, temporary (idea
+# retire-docs-root-move-guard removes it). Under posix, an empty corpus beside a
+# corpus doc left at the old place (a docs/<repo>/<slug>.md whose first line is the
+# @doc line naming <slug>) means the update ran before the move, so the hook refuses
+# rc 1. The corpus is read only through the module's own verb, reached by the
+# module's installed name, its folder's.
+set -u
+
+if [ -z "${CTX_ROOT:-}" ]; then
+  echo 'docs install: CTX_ROOT is not set (the package installer exports it)' >&2
+  exit 2
+fi
+ctx=${CTX_BIN:-$CTX_ROOT/.contexture/ctx}
+module=${0%/*}
+module=${module##*/}
+
+gd_old_place() {
+  for gd_f in docs/*/*.md; do
+    [ -f "$gd_f" ] || continue
+    gd_r=${gd_f#docs/}
+    gd_s=${gd_r#*/}
+    gd_r=${gd_r%%/*}
+    gd_s=${gd_s%.md}
+    case "$gd_r" in [A-Za-z0-9]*) ;; *) continue ;; esac
+    case "$gd_s" in [A-Za-z0-9]*) ;; *) continue ;; esac
+    case "$gd_r$gd_s" in *[!A-Za-z0-9._-]*) continue ;; esac
+    gd_l=""
+    IFS= read -r gd_l < "$gd_f" || [ -n "$gd_l" ] || continue
+    set -f
+    # shellcheck disable=SC2086
+    set -- $gd_l
+    set +f
+    [ "${1:-}" = "@doc" ] && [ "${3:-}" = "$gd_s" ] && printf '%s\n' "$gd_r"
+  done
+  return 0
+}
+
+gd_driver=$("$ctx" store config get driver 2>/dev/null) || gd_driver=posix
+[ "$gd_driver" = posix ] || exit 0
+gd_index=$("$ctx" "$module" query --index 2>&1)
+gd_qrc=$?
+case "$gd_qrc:$gd_index" in
+  "1:"*": the corpus is empty") ;;
+  0:*"index complete: "*) exit 0 ;;
+  *)
+    echo "docs install: cannot read the corpus index (ctx $module query --index rc $gd_qrc)" >&2
+    exit 2
+    ;;
+esac
+gd_repos=$(cd "$CTX_ROOT" && gd_old_place | LC_ALL=C sort -u | awk 'NR > 1 { printf ", " } { printf "%s", $0 } END { if (NR) print "" }')
+if [ -n "$gd_repos" ]; then
+  echo "docs install: the corpus still sits at its old place (docs/<repo>/ for $gd_repos) while the corpus this module serves holds no doc; move each of those folders once, as docs/adoption.md (Updating) shows, then install again" >&2
+  exit 1
+fi
+exit 0

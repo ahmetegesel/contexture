@@ -44,7 +44,8 @@ describe('the read verbs through ctx on posix', { concurrent: true }, () => {
     const sb = fresh(staged);
     const check = await docs(sb, ['help', 'check']);
     expect(check.code).toBe(0);
-    for (const part of ['--no-renames', 'git status --porcelain', 'ctx docs changes --since=']) expect(check.stdout).toContain(part);
+    for (const part of ['--no-renames', 'one M line per doc of <repo> the reconciliation updated, at its logical address']) expect(check.stdout).toContain(part);
+    for (const gone of ['ctx docs changes', 'git status --porcelain docs/']) expect(check.stdout).not.toContain(gone);
     const nudge = await docs(sb, ['help', 'nudge']);
     expect(nudge.stdout).toMatch(/^ {2}ctx docs nudge <backlog-file> <repo>\.\.\.$/m);
     expect(nudge.stdout).not.toContain('backlog.md');

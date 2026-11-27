@@ -1,0 +1,1113 @@
+#!/bin/sh
+# drivers/sqlite: the SQLite storage driver (contract 4, docs/the-engine.md, The descriptor
+# and the handshake), a twin of the posix driver held in one database. One sh entry point
+# over the sqlite3 command line: the store is one database at schema version 6 (schema.sql,
+# one table of keys and values; db-init.sh opens it, lays the schema in a new or empty file,
+# and refuses a store at any other version). The driver is store-only: it answers
+# capability and storage.health as its own methods and the six generic store functions
+# (list, get, put, delete, batch, scan) plus the exact store.search entry; the record's 35
+# operations live in the unit module's data script over this store, and the docs corpus
+# reaches the driver through the store too.
+#
+# The wire: argv carries the function and its bounded identifiers; values arrive on stdin as
+# escaped key=value payload lines (or raw bytes for a put), staged in a per-call scratch
+# folder under the workspace's .contexture/tmp. The answer is one compact JSON line in the
+# contract key order; a refusal is one stderr line "<function>: error: <message> (<CODE>)"
+# with nothing on stdout. Exit tiers: 0 ok, 1 semantic, 2 storage or driver. Every key
+# meets the storage core's one key rule (store-key.awk), read for the argument checks and
+# the list and scan filter, and no two keys' leading runs of segments fold onto each other
+# under ASCII case.
+#
+# Writes: one transaction each (BEGIN IMMEDIATE to COMMIT, whole or nothing) under the
+# namespace store lock the posix driver takes (.contexture/tmp/locks/store-<namespace>.lock);
+# the answer prints only after the commit. Reads write every value they need in one sqlite3
+# call, so no call spawns a process per key.
+
+set -u
+
+if ! command -v sqlite3 >/dev/null 2>&1; then
+  printf 'sqlite-driver: error: sqlite3 executable not found (ERR_DRIVER_NOT_FOUND)\n' >&2
+  exit 2
+fi
+
+SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
+MODULE_DIR=$SCRIPT_DIR
+LC_ALL=C
+export LC_ALL
+NL='
+'
+
+# the database location (ROOT, DB_PATH): one reader the lifecycle hooks share
+. "$MODULE_DIR/location.sh"
+
+# scratch lives in the workspace drawer when it is writable
+DB_TMP="$ROOT/.contexture/tmp"
+if ! mkdir -p "$DB_TMP" 2>/dev/null || [ ! -w "$DB_TMP" ]; then
+  DB_TMP="${TMPDIR:-/tmp}"
+fi
+
+# the namespace locks live under the drawer's scratch folder while it is writable, else
+# under the per-user folder in the system temp: the posix driver's rule, so a writer and the
+# health probe meet one lock for a namespace whichever driver holds it
+if [ -d "$ROOT/.contexture/tmp" ] && [ -w "$ROOT/.contexture/tmp" ]; then
+  LOCK_BASE="$ROOT/.contexture/tmp"
+else
+  LOCK_BASE="${TMPDIR:-/tmp}/contexture-${USER:-}"
+fi
+
+# scratch_base: the per-verb root ctx exported (created on first use), else the drawer;
+# every transient file stages here so a killed verb's root holds its residue
+scratch_base() {
+  if [ -n "${CTX_SCRATCH_ROOT:-}" ] && mkdir -p "$CTX_SCRATCH_ROOT" 2>/dev/null \
+    && [ -d "$CTX_SCRATCH_ROOT" ] && [ -w "$CTX_SCRATCH_ROOT" ]; then
+    printf '%s\n' "$CTX_SCRATCH_ROOT"
+  else
+    printf '%s\n' "$DB_TMP"
+  fi
+}
+
+# the open path (a fresh schema; a store at another schema refused)
+. "$MODULE_DIR/db-init.sh"
+
+sql_escape() {
+  printf '%s' "$1" | sed "s/'/''/g"
+}
+
+SCRATCH=""
+STORE_SDERR=""
+STORE_TEMPS=""
+STORE_COPY=""
+cleanup() {
+  if [ -n "${STORE_COPY:-}" ]; then
+    STORE_COPY=""
+    set +u
+    [ -z "$!" ] || { kill -KILL "$!"; wait "$!"; } 2>/dev/null
+    set -u
+  fi
+  [ -n "${STORE_SDERR:-}" ] && rm -f "$STORE_SDERR"
+  if [ -n "${STORE_TEMPS:-}" ]; then
+    printf '%s' "$STORE_TEMPS" | while IFS= read -r st_f; do
+      [ -n "$st_f" ] && rm -f "$st_f" 2>/dev/null
+    done
+    STORE_TEMPS=""
+  fi
+  [ -n "${SCRATCH:-}" ] && rm -rf "$SCRATCH"
+  return 0
+}
+
+# store_temp <path>: a temp file outside SCRATCH, named for the exit cleanup as soon as
+# mktemp answers it, so a HUP, INT, or TERM during the call removes it (a signal inside
+# mktemp's own fork, before the name is back, is the one window left)
+store_temp() {
+  STORE_TEMPS="$STORE_TEMPS$1
+"
+}
+trap cleanup EXIT
+# a HUP, INT, or TERM exits through the EXIT trap (dash runs no EXIT trap on a signal it
+# does not trap), so an interrupted function leaves no scratch and no held lock; an open
+# transaction rolls back with its connection
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+scratch() {
+  if [ -z "$SCRATCH" ]; then
+    SCRATCH=$(mktemp -d "$(scratch_base)/sqlite-ws.XXXXXX") || {
+      printf '%s: error: cannot create a scratch folder (ERR_STORAGE_WRITE)\n' "$CMD" >&2
+      exit 2
+    }
+  fi
+}
+
+# scratch_new <file>...: each of this call's scratch files made empty; scratch_add <file>
+# <format> [<args>...]: one printf appended to such a file. Both are silent (a shell reports a
+# failing redirect before a trailing 2>/dev/null applies, so the group carries it) and
+# answer nonzero when the write fails, for the caller to refuse rc 2 ERR_STORAGE_WRITE: a
+# lost line would let a batch commit part of its actions, a transaction script end without
+# its COMMIT (sqlite3 then rolls back and exits 0), or a read answer short. A file is emptied
+# by true, never by the special builtin colon, whose failing redirect ends a dash shell before
+# the caller's refusal
+scratch_new() {
+  for sw_f in "$@"; do
+    { true > "$sw_f"; } 2>/dev/null || return 1
+  done
+}
+
+scratch_add() {
+  sa_f=$1
+  shift
+  { printf "$@" >> "$sa_f"; } 2>/dev/null
+}
+
+# store_stage <file>: stdin copied into the file. The copy runs in the background under the
+# wait builtin, which a trapped signal interrupts at once, and the exit cleanup kills it
+# (STORE_COPY marks it from before its fork, so $! names it): a foreground copy holds a
+# trapped signal until the caller's stdin ends. Nonzero when the copy fails.
+store_stage() {
+  STORE_COPY=1
+  { cat <&3 > "$1" 3<&- & } 2>/dev/null 3<&0
+  wait "$!"
+  ss_rc=$?
+  STORE_COPY=""
+  return "$ss_rc"
+}
+
+SCRATCH_FAILED="cannot write the driver's scratch file"
+
+if [ $# -eq 0 ]; then
+  printf 'sqlite-driver: error: missing command (ERR_INVALID_ARGUMENT)\n' >&2
+  exit 1
+fi
+
+CMD="$1"
+shift
+
+
+# ==============================================================================
+# The generic module store (the storage core's store contract)
+# ==============================================================================
+# Six data functions over a module's declared data file: store.list, store.get,
+# store.put, store.delete, store.batch, and store.scan. The data file (the
+# data file beside a module's manifest, in either module root) is read and validated by
+# the storage core's private store-data script. Schema 6 holds module data only, every
+# namespace in the one `store` table (the record under unit, the docs corpus under docs):
+# the value is opaque bytes keyed by (namespace, key). Keys are exact, ASCII-case-fold
+# twins never coexist, list is bytewise and filtered by the module pattern, and a put or
+# delete is one transaction under the namespace scope lock. The batch takes the same lock
+# once, validates its whole action list, and runs every action in one BEGIN IMMEDIATE
+# transaction; the scan answers every admitted key with its raw value in base64.
+# The posix driver's messages and exit tiers are kept, so a caller never branches.
+STORE_LOCK=""
+STORE_TMP=""
+
+store_cleanup() {
+  [ -n "${STORE_TMP:-}" ] && rm -f "$STORE_TMP" 2>/dev/null
+  STORE_TMP=""
+  store_unlock
+  cleanup
+  return 0
+}
+
+store_unlock() {
+  [ -n "${STORE_LOCK:-}" ] || return 0
+  su_lock=$STORE_LOCK
+  STORE_LOCK=""
+  rm -rf "$su_lock" 2>/dev/null
+  su_base="$LOCK_BASE/locks"
+  su_p=$(dirname "$su_lock")
+  while [ "$su_p" != "$su_base" ] && [ "$su_p" != "/" ]; do
+    rmdir "$su_p" 2>/dev/null || break
+    su_p=$(dirname "$su_p")
+  done
+  return 0
+}
+
+# store_lock <namespace>: one namespace scope lock shared by store.put, store.delete, and
+# store.batch, a folder under the drawer's lock folder, held until store_unlock. The folder
+# carries its holder pid; a waiter removes a lock whose pid is gone, gives a lock with no
+# pid file ten polls of grace for its holder to write one, and refuses a live holder rc 2
+# ERR_STORAGE_LOCKED after 600 polls 0.1 s apart, 60 s of sleep (the unit lock's wait;
+# where sleep refuses a fraction, a poll sleeps 1 s and counts as ten). STORE_LOCK names
+# the folder only once mkdir holds it, so a waiter's interrupt trap removes nothing.
+store_lock() {
+  sl_lock="$LOCK_BASE/locks/store-$1.lock"
+  mkdir -p "$(dirname "$sl_lock")" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "cannot make the storage layer's lock folder"
+  sl_n=0
+  sl_miss=0
+  while [ "$sl_n" -lt 600 ]; do
+    if mkdir "$sl_lock" 2>/dev/null; then
+      STORE_LOCK=$sl_lock
+      { printf '%s\n' "$$" > "$STORE_LOCK/pid"; } 2>/dev/null || {
+        rm -rf "$STORE_LOCK" 2>/dev/null
+        STORE_LOCK=""
+        refuse 2 ERR_STORAGE_WRITE "cannot write the storage layer's lock holder pid"
+      }
+      return 0
+    fi
+    sl_pid=$(cat "$sl_lock/pid" 2>/dev/null)
+    case "$sl_pid" in
+      ""|*[!0-9]*)
+        sl_miss=$((sl_miss + 1))
+        if [ "$sl_miss" -ge 10 ]; then rm -rf "$sl_lock" 2>/dev/null; sl_miss=0; continue; fi
+        ;;
+      *)
+        if kill -0 "$sl_pid" 2>/dev/null; then sl_miss=0
+        else rm -rf "$sl_lock" 2>/dev/null; continue
+        fi
+        ;;
+    esac
+    sl_n=$((sl_n + 1))
+    sleep 0.1 2>/dev/null || { sleep 1; sl_n=$((sl_n + 9)); }
+  done
+  refuse 2 ERR_STORAGE_LOCKED "the storage layer's namespace '$1' is locked (60 s timeout)"
+}
+
+# store_lock_held <namespace>: rc 0 while a writer holds the namespace lock. Held follows
+# the waiter's rule: a pid-less lock is held, a lock whose pid is gone is not, since the
+# next writer removes it.
+store_lock_held() {
+  lh_lock="$LOCK_BASE/locks/store-$1.lock"
+  [ -d "$lh_lock" ] || return 1
+  lh_pid=$(cat "$lh_lock/pid" 2>/dev/null)
+  case "$lh_pid" in
+    ""|*[!0-9]*) return 0 ;;
+  esac
+  kill -0 "$lh_pid" 2>/dev/null
+}
+
+# store_data <function> <namespace>: the namespace, its suffix, its key pattern, and its
+# data file from the namespace's declaration in SD_NS, SD_SUFFIX, SD_KEYPAT, and SD_FILE
+# (lines 1, 3, 4, and 5 of the storage core's store-data answer, which owns the grammar;
+# the core is base, never the docs module: no module's parser enters base). The reader's
+# stderr file is named in STORE_SDERR while it exists, so the exit cleanup a HUP, INT, or
+# TERM runs removes it. A scratch file that cannot be made refuses as a write, and for the
+# health probe, which writes nothing, as a read.
+store_data() {
+  FN=$1
+  sd_ns=$2
+  case "$FN" in
+    storage.health) sd_scratch_code=ERR_STORAGE_READ ;;
+    *) sd_scratch_code=ERR_STORAGE_WRITE ;;
+  esac
+  sd_script=""
+  for sd_c in "$MODULE_DIR/../../storage/scripts/store-data" \
+              "$ROOT/.contexture/storage/scripts/store-data" \
+              "$ROOT/base/.contexture/storage/scripts/store-data"; do
+    if [ -x "$sd_c" ]; then sd_script=$sd_c; break; fi
+  done
+  [ -n "$sd_script" ] || refuse 2 ERR_STORAGE_READ "the storage core data reader is not installed"
+  STORE_SDERR=$(mktemp "$(scratch_base)/store-data.XXXXXX" 2>/dev/null) || refuse 2 "$sd_scratch_code" "cannot create the driver's scratch file"
+  scratch_new "$STORE_SDERR" || refuse 2 "$sd_scratch_code" "$SCRATCH_FAILED"
+  sd_out=$(CTX_STORE_WORKSPACE="$ROOT" "$sd_script" "$sd_ns" 2>"$STORE_SDERR" </dev/null)
+  sd_rc=$?
+  sd_msg=$(head -n 1 "$STORE_SDERR" 2>/dev/null)
+  rm -f "$STORE_SDERR"
+  STORE_SDERR=""
+  case "$sd_msg" in store-data:\ *) sd_msg=${sd_msg#store-data: } ;; esac
+  [ -n "$sd_msg" ] || sd_msg="the namespace '$sd_ns' is not declared by a usable data file"
+  case "$sd_rc" in
+    0) ;;
+    3) refuse 1 ERR_ENTITY_NOT_FOUND "$sd_msg" ;;
+    2) refuse 2 ERR_STORAGE_READ "$sd_msg" ;;
+    *) refuse 1 ERR_INVALID_ARGUMENT "$sd_msg" ;;
+  esac
+  SD_NS=${sd_out%%"$NL"*}
+  sd_rest=${sd_out#*"$NL"}
+  sd_rest=${sd_rest#*"$NL"}
+  SD_SUFFIX=${sd_rest%%"$NL"*}
+  sd_rest=${sd_rest#*"$NL"}
+  SD_KEYPAT=${sd_rest%%"$NL"*}
+  sd_rest=${sd_rest#*"$NL"}
+  SD_FILE=${sd_rest%%"$NL"*}
+  kr_load
+}
+
+# kr_load: the storage core's one key rule (store-key.awk) in KR, read once per call; every
+# key check and the list and scan filter run its functions
+KR=""
+kr_load() {
+  [ -z "$KR" ] || return 0
+  for kr_c in "$MODULE_DIR/../../storage/scripts/store-key.awk" \
+              "$ROOT/.contexture/storage/scripts/store-key.awk" \
+              "$ROOT/base/.contexture/storage/scripts/store-key.awk"; do
+    [ -f "$kr_c" ] && [ -r "$kr_c" ] || continue
+    while IFS= read -r kr_l || [ -n "$kr_l" ]; do KR="$KR$kr_l$NL"; done < "$kr_c"
+    return 0
+  done
+  refuse 2 ERR_STORAGE_READ "the storage core key rule is not installed"
+}
+
+# store_prefix_ok <prefix>: the optional store.list prefix (whole segments, then a part of
+# one, or a slash) under the key rule (a prefix is a filter, not a stored key)
+store_prefix_ok() {
+  kr_load
+  SP_PREFIX="$1" LC_ALL=C awk "$KR"'BEGIN { exit !kr_list_prefix(ENVIRON["SP_PREFIX"], "", 0) }'
+}
+
+# store_key_check <key>: malformed when the key rule refuses the key (the namespace's suffix
+# clause included), pattern when the module pattern does not admit it, else nothing
+store_key_check() {
+  kr_load
+  SK_KEY="$1" SSP_P="$SD_KEYPAT" SK_SFX="$SD_SUFFIX" LC_ALL=C awk "$KR"'BEGIN {
+    s = ENVIRON["SK_KEY"]
+    if (!kr_key(s, ENVIRON["SK_SFX"], kr_multi(ENVIRON["SSP_P"]))) { print "malformed"; exit }
+    n = split(s, k, /\//)
+    m = split(ENVIRON["SSP_P"], p, /\//)
+    if (m < 1) { print "pattern"; exit }
+    multi = (p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+    if (multi) { if (n < m) { print "pattern"; exit } } else if (n != m) { print "pattern"; exit }
+    for (i = 1; i < m; i++) if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) { print "pattern"; exit }
+    if (!multi && p[m] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) print "pattern"
+  }'
+}
+
+# store_keys_admit <keys file> [<prefix>]: the stored keys the key rule and the module
+# pattern admit (and that start with the prefix), in one pass, so a listing never names a
+# key a read refuses
+store_keys_admit() {
+  SK_PAT="$SD_KEYPAT" SK_SFX="$SD_SUFFIX" SK_PRE="${2:-}" LC_ALL=C awk "$KR"'
+    BEGIN {
+      m = split(ENVIRON["SK_PAT"], p, /\//); sfx = ENVIRON["SK_SFX"]; pre = ENVIRON["SK_PRE"]
+      multi = (m >= 1 && p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+    }
+    {
+      if (m < 1 || !kr_key($0, sfx, multi)) next
+      n = split($0, k, /\//)
+      if (multi) { if (n < m) next } else if (n != m) next
+      if (pre != "" && substr($0, 1, length(pre)) != pre) next
+      print
+    }' "$1"
+}
+
+# store_key_for <function> <namespace> <key>: the key rule and the module pattern before a
+# key reaches the database
+store_key_for() {
+  FN=$1
+  sk_key=$3
+  kr_load
+  case "$(store_key_check "$sk_key")" in
+    malformed) refuse 1 ERR_INVALID_ARGUMENT "malformed key '$sk_key'" ;;
+    pattern) refuse 1 ERR_INVALID_ARGUMENT "key '$sk_key' does not match the namespace pattern '$SD_KEYPAT'" ;;
+  esac
+}
+
+# store_exists <namespace> <key>: the exact key the store holds (a case twin is absent)
+store_exists() {
+  [ "$(sq "$DB_PATH" "SELECT count(*) FROM store WHERE namespace = '$(sql_escape "$1")' AND key = '$(sql_escape "$2")';" 2>/dev/null)" = "1" ]
+}
+
+# store_live <namespace> <file>: the namespace's stored keys, bytewise, one per line
+store_live() {
+  { sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = $(store_sqlq "$1") ORDER BY key COLLATE BINARY;" > "$2"; } 2>/dev/null
+}
+
+# store_twin_pass <live keys file> <actions file>: the leading run twin pass of the key rule
+# (kr_pass_line) over the live key list, folded once, and the actions in order: nothing, or
+# the first failure's line (twin or missing)
+store_twin_pass() {
+  LC_ALL=C awk "$KR"'{ if (kr_pass_line($0)) exit }' "$1" "$2"
+}
+
+# store_twin_refuse <namespace> <line>: the refusal of a twin pass failure, ERR_ENTITY_EXISTS
+# for a put whose leading run of segments folds onto a stored run of another spelling (the
+# whole key's line kept when the run is the whole key), ERR_ENTITY_NOT_FOUND for a delete of
+# an absent key; a batch frames it with its action line
+store_twin_refuse() {
+  stf_ns=$1; stf_r=$2
+  stf_kind=${stf_r%%	*}; stf_r=${stf_r#*	}
+  stf_n=${stf_r%%	*}; stf_r=${stf_r#*	}
+  stf_key=${stf_r%%	*}; stf_r=${stf_r#*	}
+  if [ "$stf_kind" = missing ]; then
+    stf_code=ERR_ENTITY_NOT_FOUND; stf_op=delete
+    stf_msg="key '$stf_key' not found in namespace '$stf_ns'"
+  else
+    stf_code=ERR_ENTITY_EXISTS; stf_op=put
+    stf_twin=${stf_r%%	*}; stf_r=${stf_r#*	}
+    stf_at=${stf_r%%	*}; stf_whole=${stf_r#*	}
+    if [ "$stf_whole" = 1 ]; then
+      stf_msg="key '$stf_key' folds onto '$stf_twin' under ASCII case; keys differing only by case never coexist in namespace '$stf_ns'"
+    else
+      stf_msg="key '$stf_key' folds onto '$stf_twin' under ASCII case at its leading segments '$stf_at'; keys whose leading segments differ only by case never coexist in namespace '$stf_ns'"
+    fi
+  fi
+  [ "$FN" = store.batch ] && batch_refuse 1 "$stf_n" "$stf_op" "$stf_key" "$stf_code" "$stf_msg"
+  store_cleanup
+  refuse 1 "$stf_code" "$stf_msg"
+}
+
+# store_json <value>: a JSON string body for the bounded store identifiers (a key may hold
+# a double quote; the namespace and op are tokens; no key holding a backslash or a control
+# character is ever admitted, and a planted one is filtered out of list)
+store_json() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+store_json_lines() {
+  awk '
+    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
+    function sjoin(s, sep, lit,    n, p, i, o) { n = split(s, p, sep); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o lit p[i]; return o }
+    BEGIN { ORS = ""; first = 1 }
+    {
+      if (!first) printf ","
+      first = 0
+      s = bs_double($0)
+      s = sjoin(s, "[\"]", "\\" "\"")
+      printf "\"%s\"", s
+    }
+  ' "$1"
+}
+
+store_list() {
+  FN=store.list
+  [ $# -ge 1 ] && [ $# -le 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.list takes the namespace and an optional key prefix"
+  sn_ns=$1
+  sn_prefix=${2:-}
+  if [ -n "$sn_prefix" ]; then
+    store_prefix_ok "$sn_prefix" || refuse 1 ERR_INVALID_ARGUMENT "malformed key prefix '$sn_prefix'"
+  fi
+  store_data store.list "$sn_ns"
+  sn_tmp=$(mktemp "$(scratch_base)/store-keys.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+  store_temp "$sn_tmp"
+  if [ -f "$DB_PATH" ]; then
+    db_init
+    if ! { sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = '$(sql_escape "$sn_ns")' ORDER BY key COLLATE BINARY;" > "$sn_tmp"; } 2>/dev/null; then
+      rm -f "$sn_tmp"
+      refuse 2 ERR_STORAGE_READ "the storage read failed"
+    fi
+  else
+    scratch_new "$sn_tmp" || { rm -f "$sn_tmp"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
+  fi
+  sn_filtered=$(mktemp "$(scratch_base)/store-keys-out.XXXXXX" 2>/dev/null) || { rm -f "$sn_tmp"; refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"; }
+  store_temp "$sn_filtered"
+  { store_keys_admit "$sn_tmp" "$sn_prefix" > "$sn_filtered"; } 2>/dev/null || { rm -f "$sn_tmp" "$sn_filtered"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
+  printf '{"namespace":"%s","keys":[' "$(store_json "$sn_ns")"
+  store_json_lines "$sn_filtered"
+  rm -f "$sn_tmp" "$sn_filtered"
+  printf ']}\n'
+  exit 0
+}
+
+# store_get_many <namespace> <key> <key>...: the batched read, one compact JSON line
+# {namespace, items} packed by the storage core's codec, one item per asked key in the asked
+# order: every key passes the key rule and the pattern first (the first failure refuses with
+# the one key form's line), one sqlite3 call writes each present key's value into the
+# call's scratch, and an absent key is an item marked missing
+store_get_many() {
+  gm_ns=$1
+  shift
+  store_data store.get "$gm_ns"
+  gm_bad=$(GM_PAT="$SD_KEYPAT" GM_SFX="$SD_SUFFIX" LC_ALL=C awk "$KR"'BEGIN {
+    m = split(ENVIRON["GM_PAT"], p, /\//)
+    multi = (m >= 1 && p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+    for (a = 1; a < ARGC; a++) {
+      s = ARGV[a]
+      if (!kr_key(s, ENVIRON["GM_SFX"], multi)) { printf "malformed\t%s", s; exit }
+      n = split(s, k, /\//)
+      shape = (m >= 1)
+      if (shape) { if (multi) { if (n < m) shape = 0 } else if (n != m) shape = 0 }
+      for (i = 1; shape && i < m; i++) if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/ || k[i] == "") shape = 0
+      if (shape && !multi && (p[m] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/ || k[m] == "")) shape = 0
+      if (!shape) { printf "pattern\t%s", s; exit }
+    }
+  }' "$@")
+  case "$gm_bad" in
+    malformed*) refuse 1 ERR_INVALID_ARGUMENT "malformed key '${gm_bad#*	}'" ;;
+    pattern*) refuse 1 ERR_INVALID_ARGUMENT "key '${gm_bad#*	}' does not match the namespace pattern '$SD_KEYPAT'" ;;
+  esac
+  gm_pack=""
+  for gm_c in "$MODULE_DIR/../../storage/scripts/store-pack" \
+              "$ROOT/.contexture/storage/scripts/store-pack" \
+              "$ROOT/base/.contexture/storage/scripts/store-pack"; do
+    if [ -x "$gm_c" ]; then gm_pack=$gm_c; break; fi
+  done
+  [ -n "$gm_pack" ] || refuse 2 ERR_STORAGE_READ "the storage core codec is not installed"
+  scratch
+  { printf '%s\n' "$@" > "$SCRATCH/keys" && true > "$SCRATCH/present"; } 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  if [ -f "$DB_PATH" ]; then
+    db_init
+    GM_NS="$gm_ns" GM_DIR="$SCRATCH" LC_ALL=C awk '
+      function q(s,   n, p, i, o) { n = split(s, p, "'\''"); o = p[1]; for (i = 2; i <= n; i++) o = o "'\'''\''" p[i]; return "'\''" o "'\''" }
+      { printf "SELECT %d, writefile(%s, value) FROM store WHERE namespace = %s AND key = %s;\n", NR, q(ENVIRON["GM_DIR"] "/value." NR), q(ENVIRON["GM_NS"]), q($0) }
+    ' "$SCRATCH/keys" > "$SCRATCH/read.sql" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+    sq -bail -separator '	' "$DB_PATH" < "$SCRATCH/read.sql" > "$SCRATCH/present" 2>/dev/null \
+      || refuse 2 ERR_STORAGE_READ "the batched read of namespace '$gm_ns' failed"
+  fi
+  GM_DIR="$SCRATCH" LC_ALL=C awk -F '\t' '
+    FILENAME == ARGV[1] { P[$1 + 0] = 1; next }
+    { print $0 "\t" ((FNR in P) ? ENVIRON["GM_DIR"] "/value." FNR : "") }
+  ' "$SCRATCH/present" "$SCRATCH/keys" > "$SCRATCH/man" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  "$gm_pack" pack "$gm_ns" "$SCRATCH/man" > "$SCRATCH/answer" 2> "$SCRATCH/pack.err"
+  case $? in
+    0) ;;
+    3) refuse 2 ERR_STORAGE_READ "cannot read key '$(head -n 1 "$SCRATCH/pack.err")' in namespace '$gm_ns'" ;;
+    *) refuse 2 ERR_STORAGE_READ "the batched read of namespace '$gm_ns' failed" ;;
+  esac
+  cat "$SCRATCH/answer" 2>/dev/null || refuse 2 ERR_STORAGE_READ "the batched read of namespace '$gm_ns' failed"
+  exit 0
+}
+
+store_get() {
+  FN=store.get
+  [ $# -ge 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.get takes the namespace and the key"
+  [ $# -eq 2 ] || store_get_many "$@"
+  sg_ns=$1; sg_key=$2
+  store_data store.get "$sg_ns"
+  store_key_for store.get "$sg_ns" "$sg_key"
+  if [ ! -f "$DB_PATH" ]; then
+    refuse 1 ERR_ENTITY_NOT_FOUND "key '$sg_key' not found in namespace '$sg_ns'"
+  fi
+  db_init
+  if ! store_exists "$sg_ns" "$sg_key"; then
+    refuse 1 ERR_ENTITY_NOT_FOUND "key '$sg_key' not found in namespace '$sg_ns'"
+  fi
+  scratch
+  scratch_new "$SCRATCH/key" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  sq -bail "$DB_PATH" "SELECT writefile('$(sql_escape "$SCRATCH/key")', value) FROM store WHERE namespace = '$(sql_escape "$sg_ns")' AND key = '$(sql_escape "$sg_key")';" > /dev/null 2>&1 || {
+    refuse 2 ERR_STORAGE_READ "cannot read key '$sg_key' in namespace '$sg_ns'"
+  }
+  # the value's write is the answer: a short write exits rc 2, never a short value at rc 0
+  cat "$SCRATCH/key" 2>/dev/null || refuse 2 ERR_STORAGE_READ "cannot read key '$sg_key' in namespace '$sg_ns'"
+  exit 0
+}
+
+store_put() {
+  FN=store.put
+  [ $# -ge 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.put takes the namespace and the key"
+  [ $# -eq 2 ] || refuse 1 ERR_INVALID_ARGUMENT "unknown argument '$3'"
+  sp_ns=$1; sp_key=$2
+  store_data store.put "$sp_ns"
+  store_key_for store.put "$sp_ns" "$sp_key"
+  trap 'store_cleanup' EXIT
+  trap 'store_cleanup; exit 129' HUP
+  trap 'store_cleanup; exit 130' INT
+  trap 'store_cleanup; exit 143' TERM
+  store_lock "$sp_ns"
+  scratch
+  store_stage "$SCRATCH/value" || {
+    store_cleanup
+    refuse 2 ERR_STORAGE_READ "cannot read the value"
+  }
+  db_init
+  if ! store_live "$sp_ns" "$SCRATCH/live"; then
+    store_cleanup
+    refuse 2 ERR_STORAGE_READ "the storage read failed"
+  fi
+  if ! scratch_new "$SCRATCH/act" || ! scratch_add "$SCRATCH/act" '1\tput\t%s\n' "$sp_key" || ! sp_twin=$(store_twin_pass "$SCRATCH/live" "$SCRATCH/act"); then
+    store_cleanup
+    refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  fi
+  [ -z "$sp_twin" ] || store_twin_refuse "$sp_ns" "$sp_twin"
+  if ! { {
+    printf 'BEGIN IMMEDIATE;\n' &&
+    printf "INSERT INTO store (namespace, key, value) VALUES ('%s', '%s', readfile('%s')) ON CONFLICT(namespace, key) DO UPDATE SET value = excluded.value;\n" \
+      "$(sql_escape "$sp_ns")" "$(sql_escape "$sp_key")" "$(sql_escape "$SCRATCH/value")" &&
+    printf 'COMMIT;\n'
+  } > "$SCRATCH/store.sql"; } 2>/dev/null; then
+    store_cleanup
+    refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  fi
+  if ! sq -bail "$DB_PATH" < "$SCRATCH/store.sql" > /dev/null 2>&1; then
+    store_cleanup
+    refuse 2 ERR_STORAGE_WRITE "the storage write of key '$sp_key' failed"
+  fi
+  store_cleanup
+  printf '{"namespace":"%s","key":"%s"}\n' "$(store_json "$sp_ns")" "$(store_json "$sp_key")"
+  exit 0
+}
+
+store_delete() {
+  FN=store.delete
+  [ $# -ge 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.delete takes the namespace and the key"
+  [ $# -eq 2 ] || refuse 1 ERR_INVALID_ARGUMENT "unknown argument '$3'"
+  sx_ns=$1; sx_key=$2
+  store_data store.delete "$sx_ns"
+  store_key_for store.delete "$sx_ns" "$sx_key"
+  trap 'store_cleanup' EXIT
+  trap 'store_cleanup; exit 129' HUP
+  trap 'store_cleanup; exit 130' INT
+  trap 'store_cleanup; exit 143' TERM
+  store_lock "$sx_ns"
+  if [ ! -f "$DB_PATH" ]; then
+    store_cleanup
+    refuse 1 ERR_ENTITY_NOT_FOUND "key '$sx_key' not found in namespace '$sx_ns'"
+  fi
+  db_init
+  if ! store_exists "$sx_ns" "$sx_key"; then
+    store_cleanup
+    refuse 1 ERR_ENTITY_NOT_FOUND "key '$sx_key' not found in namespace '$sx_ns'"
+  fi
+  scratch
+  if ! { {
+    printf 'BEGIN IMMEDIATE;\n' &&
+    printf "DELETE FROM store WHERE namespace = '%s' AND key = '%s';\n" "$(sql_escape "$sx_ns")" "$(sql_escape "$sx_key")" &&
+    printf 'COMMIT;\n'
+  } > "$SCRATCH/store.sql"; } 2>/dev/null; then
+    store_cleanup
+    refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  fi
+  if ! sq -bail "$DB_PATH" < "$SCRATCH/store.sql" > /dev/null 2>&1; then
+    store_cleanup
+    refuse 2 ERR_STORAGE_WRITE "the storage remove of key '$sx_key' failed"
+  fi
+  store_cleanup
+  printf '{"namespace":"%s","key":"%s"}\n' "$(store_json "$sx_ns")" "$(store_json "$sx_key")"
+  exit 0
+}
+
+# store_sqlq <value>: a single-quoted SQL string
+store_sqlq() {
+  printf "'%s'" "$(sql_escape "$1")"
+}
+
+# ==============================================================================
+# The transactional batch and the scan
+# ==============================================================================
+# The batch wire (stdin, the escaped payload format): an action=put or action=delete line
+# opens an action, then key=<escaped key> and, for a put, value_b64=<base64>; any other line
+# refuses. The action list is validated whole under the namespace lock, then every action
+# runs in one BEGIN IMMEDIATE transaction; the first failure prints store.batch: error: action <n> (<op> '<key>'): <message>
+# (<CODE>), 1-based, and the transaction leaves nothing written.
+batch_unescape() {
+  BU_RAW="$1" LC_ALL=C awk 'BEGIN {
+    s = ENVIRON["BU_RAW"]; out = ""
+    for (i = 1; i <= length(s); i++) {
+      c = substr(s, i, 1)
+      if (c == "\\") {
+        i++
+        c = substr(s, i, 1)
+        if (c == "n") out = out "\n"
+        else if (c == "t") out = out "\t"
+        else if (c == "r") out = out "\r"
+        else out = out c
+      } else out = out c
+    }
+    printf "%s", out
+  }'
+}
+
+# batch_decode <base64> <out>: decode one value: rc 0 staged, 1 not base64 (the caller's
+# input), 2 the decoded value cannot be written (a storage failure). The value is decoded
+# into /dev/null first, so a write failure never reads as bad input; the base64 command
+# differs only in its decode flag, so the GNU/Darwin spelling is tried first and the BSD
+# one second
+batch_decode() {
+  bd_flag=""
+  for bd_f in -d -D; do
+    if printf '%s' "$1" | base64 "$bd_f" > /dev/null 2>&1; then bd_flag=$bd_f; break; fi
+  done
+  [ -n "$bd_flag" ] || return 1
+  printf '%s' "$1" | { base64 "$bd_flag" > "$2"; } 2>/dev/null && return 0
+  rm -f "$2" 2>/dev/null
+  return 2
+}
+
+# batch_refuse <rc> <n> <op> <key> <CODE> <message>: the batch's one failure line
+batch_refuse() {
+  printf 'store.batch: error: action %s (%s '\''%s'\''): %s (%s)\n' "$2" "$3" "$4" "$6" "$5" >&2
+  exit "$1"
+}
+
+# batch_key_for <n> <op> <key>: the key rule and the module pattern, framed by the action
+batch_key_for() {
+  bk_key=$3
+  case "$(store_key_check "$bk_key")" in
+    malformed) batch_refuse 1 "$1" "$2" "$bk_key" ERR_INVALID_ARGUMENT "malformed key '$bk_key'" ;;
+    pattern) batch_refuse 1 "$1" "$2" "$bk_key" ERR_INVALID_ARGUMENT "key '$bk_key' does not match the namespace pattern '$SD_KEYPAT'" ;;
+  esac
+}
+
+# batch_close_action: validate the action being parsed and append it to the manifest
+# (n, op, key, value path, tab separated; a key never holds a tab)
+batch_close_action() {
+  [ "$sb_open" -eq 1 ] || return 0
+  sb_open=0
+  sb_n=$((sb_n + 1))
+  [ "$sb_seen_key" -eq 1 ] && [ -n "$sb_key" ] || batch_refuse 1 "$sb_n" "$sb_op" "?" ERR_INVALID_ARGUMENT "the action carries no key"
+  batch_key_for "$sb_n" "$sb_op" "$sb_key"
+  case "$sb_op" in
+    put)
+      [ "$sb_seen_val" -eq 1 ] || batch_refuse 1 "$sb_n" put "$sb_key" ERR_INVALID_ARGUMENT "a put carries no value"
+      sb_v="$SCRATCH/batch-val.$sb_n"
+      batch_decode "$sb_val" "$sb_v"
+      case $? in
+        0) ;;
+        1) batch_refuse 1 "$sb_n" put "$sb_key" ERR_INVALID_ARGUMENT "malformed base64 value" ;;
+        *) batch_refuse 2 "$sb_n" put "$sb_key" ERR_STORAGE_WRITE "cannot stage the value" ;;
+      esac
+      scratch_add "$SCRATCH/man" '%s\t%s\t%s\t%s\n' "$sb_n" put "$sb_key" "$sb_v" \
+        || batch_refuse 2 "$sb_n" put "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
+      ;;
+    delete)
+      [ "$sb_seen_val" -eq 0 ] || batch_refuse 1 "$sb_n" delete "$sb_key" ERR_INVALID_ARGUMENT "a delete carries no value"
+      scratch_add "$SCRATCH/man" '%s\t%s\t%s\t\n' "$sb_n" delete "$sb_key" \
+        || batch_refuse 2 "$sb_n" delete "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
+      ;;
+  esac
+}
+
+# batch_parse <payload>: read the staged action payload into the manifest; values stage in
+# the per-call scratch folder
+batch_parse() {
+  scratch_new "$SCRATCH/man" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  sb_n=0
+  sb_open=0
+  sb_op=""; sb_key=""; sb_val=""; sb_seen_key=0; sb_seen_val=0
+  while IFS= read -r sb_l || [ -n "$sb_l" ]; do
+    case "$sb_l" in *"$cr_byte") sb_l=${sb_l%?} ;; esac
+    case "$sb_l" in
+      '') continue ;;
+      action=*)
+        batch_close_action
+        sb_open=1
+        sb_op=${sb_l#action=}
+        case "$sb_op" in
+          put|delete) ;;
+          *) batch_refuse 1 "$((sb_n + 1))" "$sb_op" "?" ERR_INVALID_ARGUMENT "unknown action '$sb_op' (put or delete)" ;;
+        esac
+        sb_key=""; sb_val=""; sb_seen_key=0; sb_seen_val=0
+        ;;
+      key=*)
+        [ "$sb_open" -eq 1 ] || batch_refuse 1 1 "?" "?" ERR_INVALID_ARGUMENT "a payload line outside an action"
+        [ "$sb_seen_key" -eq 0 ] || batch_refuse 1 "$((sb_n + 1))" "$sb_op" "${sb_key:-?}" ERR_INVALID_ARGUMENT "duplicate payload line 'key='"
+        sb_seen_key=1
+        sb_key=$(batch_unescape "${sb_l#key=}")
+        ;;
+      value_b64=*)
+        [ "$sb_open" -eq 1 ] || batch_refuse 1 1 "?" "?" ERR_INVALID_ARGUMENT "a payload line outside an action"
+        [ "$sb_seen_val" -eq 0 ] || batch_refuse 1 "$((sb_n + 1))" "$sb_op" "${sb_key:-?}" ERR_INVALID_ARGUMENT "duplicate payload line 'value_b64='"
+        sb_seen_val=1
+        sb_val=${sb_l#??????????}
+        ;;
+      *) batch_refuse 1 "$((sb_n + 1))" "${sb_op:-?}" "${sb_key:-?}" ERR_INVALID_ARGUMENT "unknown payload line '$sb_l'" ;;
+    esac
+  done < "$1"
+  if [ "$sb_open" -eq 1 ]; then batch_close_action; fi
+  [ "$sb_n" -gt 0 ] || batch_refuse 1 1 "?" "?" ERR_INVALID_ARGUMENT "the batch carries no actions"
+}
+
+# batch_validate: the whole action list against the live key set in one pass, under the
+# namespace lock: the live list folded once into its leading runs, a delete finding its key
+# live at its place in the order, a put never beside a leading run twin (both checked and
+# applied in action order, the first failing action named)
+batch_validate() {
+  scratch_new "$SCRATCH/live" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  if [ -f "$DB_PATH" ]; then
+    db_init
+    store_live "$sb_ns" "$SCRATCH/live" || refuse 2 ERR_STORAGE_READ "the storage read failed"
+  fi
+  sb_fail=$(store_twin_pass "$SCRATCH/live" "$SCRATCH/man") || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  [ -z "$sb_fail" ] || store_twin_refuse "$sb_ns" "$sb_fail"
+}
+
+# batch_sql: the one transaction script; each action's statement line is recorded so a
+# sqlite3 failure names the action that failed
+batch_sql() {
+  scratch_new "$SCRATCH/store.sql" "$SCRATCH/action-lines" \
+    && scratch_add "$SCRATCH/store.sql" 'BEGIN IMMEDIATE;\n' || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  sbs_line=1
+  while IFS='	' read -r sbs_i sbs_op sbs_key sbs_val; do
+    sbs_line=$((sbs_line + 1))
+    scratch_add "$SCRATCH/action-lines" '%s\t%s\n' "$sbs_line" "$sbs_i" \
+      || batch_refuse 2 "$sbs_i" "$sbs_op" "$sbs_key" ERR_STORAGE_WRITE "cannot stage the action"
+    case "$sbs_op" in
+      put)
+        scratch_add "$SCRATCH/store.sql" "INSERT INTO store (namespace, key, value) VALUES ('%s', '%s', readfile('%s')) ON CONFLICT(namespace, key) DO UPDATE SET value = excluded.value;\n" \
+          "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" "$(sql_escape "$sbs_val")" \
+          || batch_refuse 2 "$sbs_i" put "$sbs_key" ERR_STORAGE_WRITE "cannot stage the action"
+        ;;
+      delete)
+        scratch_add "$SCRATCH/store.sql" "DELETE FROM store WHERE namespace = '%s' AND key = '%s';\n" "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" \
+          || batch_refuse 2 "$sbs_i" delete "$sbs_key" ERR_STORAGE_WRITE "cannot stage the action"
+        ;;
+    esac
+  done < "$SCRATCH/man"
+  scratch_add "$SCRATCH/store.sql" 'COMMIT;\n' || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+}
+
+store_batch() {
+  FN=store.batch
+  [ $# -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "store.batch takes one argument, the namespace"
+  sb_ns=$1
+  store_data store.batch "$sb_ns"
+  trap 'store_cleanup' EXIT
+  trap 'store_cleanup; exit 129' HUP
+  trap 'store_cleanup; exit 130' INT
+  trap 'store_cleanup; exit 143' TERM
+  scratch
+  store_stage "$SCRATCH/payload" || refuse 2 ERR_STORAGE_READ "cannot read the batch payload"
+  batch_parse "$SCRATCH/payload"
+  store_lock "$sb_ns"
+  batch_validate
+  db_init
+  batch_sql
+  scratch_new "$SCRATCH/err" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  if ! sq -bail "$DB_PATH" < "$SCRATCH/store.sql" > /dev/null 2> "$SCRATCH/err"; then
+    sb_line=$(sed -n 's/.*near line \([0-9][0-9]*\):.*/\1/p' "$SCRATCH/err" | head -n 1)
+    [ -n "$sb_line" ] || sb_line=999999999
+    sb_act=$(awk -v n="$sb_line" '$1 <= n { a = $2 } END { if (a == "") a = 1; printf "%s", a }' "$SCRATCH/action-lines")
+    sb_meta=$(awk -F '	' -v a="$sb_act" '$1 == a { print $2 "\t" $3; exit }' "$SCRATCH/man")
+    sb_op=${sb_meta%%	*}
+    sb_key=${sb_meta#*	}
+    if [ "$sb_op" = delete ]; then
+      batch_refuse 2 "$sb_act" delete "$sb_key" ERR_STORAGE_WRITE "the storage remove of key '$sb_key' failed"
+    fi
+    batch_refuse 2 "$sb_act" put "$sb_key" ERR_STORAGE_WRITE "the storage write of key '$sb_key' failed"
+  fi
+  store_cleanup
+  printf '{"namespace":"%s","actions":%s}\n' "$(store_json "$sb_ns")" "$sb_n"
+  exit 0
+}
+
+# store_scan: every key the module pattern admits with its raw value in base64, bytewise,
+# one compact JSON answer; no limit (the module stops after the keys it needs). One sqlite3
+# call reads every key of the namespace with its value in hex, and one awk pass keeps the
+# keys the key rule and the pattern admit and encodes each value, so the call's process
+# count never grows with the key count. The answer is staged and printed whole, so a read
+# failure prints nothing on stdout: the refusal is the one stderr line and the call is all
+# or none.
+store_scan() {
+  FN=store.scan
+  [ $# -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "store.scan takes one argument, the namespace"
+  sns_ns=$1
+  store_data store.scan "$sns_ns"
+  scratch
+  if [ -f "$DB_PATH" ]; then
+    db_init
+    if ! { sq -bail -separator '	' "$DB_PATH" "SELECT key, hex(value) FROM store WHERE namespace = $(store_sqlq "$sns_ns") ORDER BY key COLLATE BINARY;" > "$SCRATCH/keys"; } 2>/dev/null; then
+      refuse 2 ERR_STORAGE_READ "the storage read failed"
+    fi
+  else
+    scratch_new "$SCRATCH/keys" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  fi
+  if ! { SC_NS=$(store_json "$sns_ns") SK_PAT="$SD_KEYPAT" SK_SFX="$SD_SUFFIX" LC_ALL=C awk -F '\t' "$KR"'
+    function b64(n) { return substr(B, n + 1, 1) }
+    function enc(h,    L, half, full, i, a, c) {
+      L = length(h)
+      if (L > 768) {
+        half = 6 * int(L / 12)
+        enc(substr(h, 1, half))
+        enc(substr(h, half + 1))
+        return
+      }
+      full = L - L % 6
+      for (i = 1; i <= full; i += 6) printf "%s%s", T[substr(h, i, 3)], T[substr(h, i + 3, 3)]
+      if (L - full == 2) {
+        a = V[substr(h, full + 1, 2)]
+        printf "%s%s==", b64(int(a / 4)), b64((a % 4) * 16)
+      } else if (L - full == 4) {
+        a = V[substr(h, full + 1, 2)]; c = V[substr(h, full + 3, 2)]
+        printf "%s%s%s=", b64(int(a / 4)), b64((a % 4) * 16 + int(c / 16)), b64((c % 16) * 4)
+      }
+    }
+    BEGIN {
+      m = split(ENVIRON["SK_PAT"], p, /\//); sfx = ENVIRON["SK_SFX"]
+      multi = (m >= 1 && p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+      B = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+      X = "0123456789ABCDEF"
+      for (i = 0; i < 4096; i++) T[substr(X, int(i / 256) + 1, 1) substr(X, int(i / 16) % 16 + 1, 1) substr(X, i % 16 + 1, 1)] = b64(int(i / 64)) b64(i % 64)
+      for (i = 0; i < 256; i++) V[substr(X, int(i / 16) + 1, 1) substr(X, i % 16 + 1, 1)] = i
+      printf "{\"namespace\":\"%s\",\"items\":[", ENVIRON["SC_NS"]
+      sep = ""
+    }
+    NF >= 2 {
+      h = $NF
+      k = substr($0, 1, length($0) - length(h) - 1)
+      if (m < 1 || !kr_key(k, sfx, multi)) next
+      n = split(k, s, /\//)
+      if (multi) { if (n < m) next } else if (n != m) next
+      printf "%s{\"key\":\"%s\",\"value_b64\":\"", sep, k
+      sep = ","
+      enc(h)
+      printf "\"}"
+    }
+    END { printf "]}\n" }' "$SCRATCH/keys" > "$SCRATCH/scan-out"; } 2>/dev/null; then
+    refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  fi
+  cat "$SCRATCH/scan-out"
+  exit 0
+}
+
+# store_search_core: the storage core's private search engine
+store_search_core() {
+  for ssc_c in "$MODULE_DIR/../../storage/scripts/store-search" \
+               "$ROOT/.contexture/storage/scripts/store-search" \
+               "$ROOT/base/.contexture/storage/scripts/store-search"; do
+    if [ -x "$ssc_c" ]; then printf '%s\n' "$ssc_c"; return 0; fi
+  done
+  return 1
+}
+
+# store_query_read <payload>: the query payload line, decoded, with a sentinel so a trailing
+# newline survives the command substitution
+cr_byte=$(printf '\r')
+store_query_read() {
+  sq_seen=0; sq_raw=""
+  while IFS= read -r sq_l || [ -n "$sq_l" ]; do
+    sq_l=${sq_l%"$cr_byte"}
+    case "$sq_l" in
+      query=*)
+        [ "$sq_seen" -eq 0 ] || refuse 1 ERR_INVALID_ARGUMENT "duplicate payload line 'query='"
+        sq_seen=1; sq_raw=${sq_l#query=} ;;
+      '') ;;
+      *) refuse 1 ERR_INVALID_ARGUMENT "unknown payload line '$sq_l' (query= only)" ;;
+    esac
+  done < "$1"
+  [ "$sq_seen" -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "missing the query payload"
+  SQ_RAW="$sq_raw" LC_ALL=C awk 'BEGIN {
+    s = ENVIRON["SQ_RAW"]; out = ""
+    for (i = 1; i <= length(s); i++) {
+      c = substr(s, i, 1)
+      if (c == "\\") {
+        i++
+        c = substr(s, i, 1)
+        if (c == "n") out = out "\n"
+        else if (c == "t") out = out "\t"
+        else if (c == "r") out = out "\r"
+        else out = out c
+      } else out = out c
+    }
+    printf "%sX", out
+  }'
+}
+
+# store_search <namespace> <mode> [<limit>]: exact over the raw stored values, the one mode;
+# one sqlite3 call writes every value of the namespace into the call's scratch, and the core
+# engine walks the keys the key rule and the module pattern admit, the keys list answers
+store_search() {
+  FN=store.search
+  [ $# -ge 2 ] && [ $# -le 3 ] || refuse 1 ERR_INVALID_ARGUMENT "store.search takes the namespace, the mode, and an optional limit"
+  ss_ns=$1; ss_mode=$2; ss_lim=${3:-20}
+  case "$ss_mode" in
+    ''|[!a-z]*|*[!a-z0-9_-]*) refuse 1 ERR_INVALID_ARGUMENT "malformed mode '$ss_mode'" ;;
+  esac
+  case "$ss_lim" in
+    ''|*[!0-9]*) refuse 1 ERR_INVALID_ARGUMENT "--limit takes a number, 0 for every result: '$ss_lim'" ;;
+  esac
+  store_data store.search "$ss_ns"
+  [ "$ss_mode" = exact ] || refuse 1 ERR_CAPABILITY_UNSUPPORTED "mode '$ss_mode' is not registered; registered modes: exact"
+  scratch
+  store_stage "$SCRATCH/payload" || refuse 2 ERR_STORAGE_READ "cannot read the query payload"
+  ss_q=$(store_query_read "$SCRATCH/payload") || exit $?
+  ss_q=${ss_q%X}
+  case "$ss_q" in *[![:space:]]*) ;; *) refuse 1 ERR_INVALID_ARGUMENT "the search query is empty" ;; esac
+  ss_core=$(store_search_core) || refuse 2 ERR_STORAGE_READ "the storage core search engine is not installed"
+  ss_err="$SCRATCH/search-err"
+  scratch_new "$SCRATCH/man" "$ss_err" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  if [ -f "$DB_PATH" ]; then
+    db_init
+    mkdir -p "$SCRATCH/values" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch folder"
+    if ! { sq -bail -separator '	' "$DB_PATH" "SELECT rowid, key, writefile($(store_sqlq "$SCRATCH/values/") || rowid, value) FROM store WHERE namespace = $(store_sqlq "$ss_ns") ORDER BY key COLLATE BINARY;" > "$SCRATCH/keys"; } 2>/dev/null; then
+      refuse 2 ERR_STORAGE_READ "cannot read the storage layer's values"
+    fi
+    SS_DIR="$SCRATCH/values" SK_PAT="$SD_KEYPAT" SK_SFX="$SD_SUFFIX" LC_ALL=C awk -F '\t' "$KR"'
+      BEGIN {
+        m = split(ENVIRON["SK_PAT"], p, /\//); sfx = ENVIRON["SK_SFX"]
+        multi = (m >= 1 && p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+      }
+      NF >= 3 {
+        k = substr($0, length($1) + 2, length($0) - length($1) - length($NF) - 2)
+        if (m < 1 || !kr_key(k, sfx, multi)) next
+        n = split(k, s, /\//)
+        if (multi) { if (n < m) next } else if (n != m) next
+        print k "\t" ENVIRON["SS_DIR"] "/" $1
+      }' "$SCRATCH/keys" > "$SCRATCH/man" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  fi
+  ss_out=$("$ss_core" exact "$SD_FILE" "$ss_ns" "$ss_q" "$ss_lim" "$SCRATCH/man" 2>"$ss_err")
+  ss_rc=$?
+  if [ "$ss_rc" -ne 0 ]; then
+    ss_msg=$(head -n 1 "$ss_err" 2>/dev/null)
+    case "$ss_msg" in store-search:\ error:\ *) ss_msg=${ss_msg#store-search: error: } ;; esac
+    [ -n "$ss_msg" ] || ss_msg="the storage layer search failed"
+    ss_code=""
+    case "$ss_msg" in
+      *' ('*')')
+        ss_code=${ss_msg##*' ('}
+        ss_code=${ss_code%)}
+        ss_msg=${ss_msg%' ('*}
+        ;;
+    esac
+    [ -n "$ss_code" ] || ss_code=ERR_STORAGE_READ
+    [ "$ss_rc" -eq 1 ] || ss_rc=2
+    refuse "$ss_rc" "$ss_code" "$ss_msg"
+  fi
+  printf '%s\n' "$ss_out"
+  exit 0
+}
+# ==============================================================================
+# The refusal, the descriptor, the health, and the dispatch
+# ==============================================================================
+# A refusal is one stderr line "<function>: error: <message> (<CODE>)" with nothing on
+# stdout.
+
+refuse() {
+  printf '%s: error: %s (%s)\n' "$CMD" "$3" "$2" >&2
+  exit "$1"
+}
+
+# capability: the contract 4 store-only card at driver version 4.0.0: the driver, the
+# version, contract 4, the six data names in the fixed order, the exact search mode, and the
+# optional token. The card carries no record function family; capability and
+# storage.health are the driver's own methods the handshake and the diagnose call.
+capability() {
+  printf '{"driver":"sqlite","version":"4.0.0","contract":"4","store":["list","get","put","delete","batch","scan"],"search_modes":[{"name":"exact","description":"a case-insensitive substring of one line, the first matching line as the snippet, alike on every driver"}],"optional":["store"]}\n'
+}
+
+# storage.health <namespace>: a probe of the named namespace's store, never a write, and the
+# backend's health alone (no record count: the record's active listing is the unit
+# module's). An absent database, or a file holding no table, reads degraded with the store
+# absent (an absent file is made by its first write, a file holding no table gets the
+# schema at its first store read or write); an unreadable file reads error with the store
+# absent, and a store at another schema error with it present; then presence counts the
+# namespace's keys alone, an unwritable file or a failed integrity check reads error with
+# that presence, and the namespace's store lock held reads locked in place of ok. No detail
+# names a folder.
+storage_health() {
+  store_data storage.health "$1"
+  # an sqlite3 older than the driver's minimum serves no function (db_init refuses each), so
+  # the probe reports error naming it, never ok
+  sh_sv=$(sq :memory: "SELECT sqlite_version();" 2>/dev/null)
+  sh_svn=$(printf '%s\n' "$sh_sv" | awk -F. '{ printf "%d", ($1 * 1000000) + ($2 * 1000) + $3 }')
+  if [ "${sh_svn:-0}" -lt "$DB_SQLITE_MIN" ]; then
+    sh_st=absent
+    [ -f "$DB_PATH" ] && sh_st=present
+    printf '{"driver":"sqlite","health":"error","detail":"sqlite3 %s is older than the 3.44 the driver needs","store":"%s"}\n' "${sh_sv:-unknown}" "$sh_st"
+    exit 0
+  fi
+  if [ ! -f "$DB_PATH" ]; then
+    printf '{"driver":"sqlite","health":"degraded","detail":"database not created yet (will be initialized on the first write)","store":"absent"}\n'
+    exit 0
+  fi
+  sh_p=$(sq "$DB_PATH" "SELECT (SELECT user_version FROM pragma_user_version) || '|' || (SELECT count(*) FROM sqlite_master WHERE type = 'table');" 2>/dev/null) || {
+    printf '{"driver":"sqlite","health":"error","detail":"database unreadable","store":"absent"}\n'
+    exit 0
+  }
+  sh_v=${sh_p%%|*}
+  sh_t=${sh_p#*|}
+  if [ "$sh_t" = 0 ]; then
+    printf '{"driver":"sqlite","health":"degraded","detail":"database present, its schema not laid yet (the first store read or write lays it)","store":"absent"}\n'
+    exit 0
+  fi
+  if [ "$sh_v" != "$DB_SCHEMA_VERSION" ]; then
+    # a store at another schema serves no function (db_init refuses each), so the probe
+    # reports error naming its version, never degraded or ok
+    printf '{"driver":"sqlite","health":"error","detail":"database at schema %s; this driver reads %s","store":"present"}\n' "$sh_v" "$DB_SCHEMA_VERSION"
+    exit 0
+  fi
+  sh_n=$(sq "$DB_PATH" "SELECT count(*) FROM store WHERE namespace = '$(sql_escape "$SD_NS")';" 2>/dev/null) || {
+    printf '{"driver":"sqlite","health":"error","detail":"database unreadable","store":"absent"}\n'
+    exit 0
+  }
+  sh_st=absent
+  [ "${sh_n:-0}" = 0 ] || sh_st=present
+  if [ ! -w "$DB_PATH" ]; then
+    printf '{"driver":"sqlite","health":"error","detail":"database file not writable","store":"%s"}\n' "$sh_st"
+  elif ! sq "$DB_PATH" "PRAGMA quick_check;" 2>/dev/null | grep -q '^ok$'; then
+    printf '{"driver":"sqlite","health":"error","detail":"database integrity check failed","store":"%s"}\n' "$sh_st"
+  elif store_lock_held "$SD_NS"; then
+    printf '{"driver":"sqlite","health":"locked","detail":"%s","store":"%s"}\n' "the storage layer's namespace '$SD_NS' is locked by a writer" "$sh_st"
+  elif [ "$sh_st" = present ]; then
+    printf '{"driver":"sqlite","health":"ok","detail":"database present and writable","store":"present"}\n'
+  else
+    printf '{"driver":"sqlite","health":"ok","detail":"database present and writable, no key of the namespace stored yet","store":"absent"}\n'
+  fi
+  exit 0
+}
+
+case "$CMD" in
+  capability) capability; exit 0 ;;
+  store.list) store_list "$@" ;;
+  store.get) store_get "$@" ;;
+  store.put) store_put "$@" ;;
+  store.delete) store_delete "$@" ;;
+  store.batch) store_batch "$@" ;;
+  store.scan) store_scan "$@" ;;
+  store.search) store_search "$@" ;;
+
+  storage.health)
+    [ $# -ge 1 ] || refuse 1 ERR_INVALID_ARGUMENT "storage.health takes the namespace"
+    [ $# -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "unexpected argument '$2'"
+    storage_health "$1"
+    ;;
+  *) refuse 2 ERR_CAPABILITY_UNSUPPORTED "unknown function '$CMD'" ;;
+esac
+exit 0

@@ -1,4 +1,4 @@
-# contexture v0.84.0: generated law layer; core cksum 3659456422-16073; sources 789817089-36166; never edit
+# contexture v0.84.0: generated law layer; core cksum 642701558-16360; sources 3111606303-36388; never edit
 @laws
   source-of-truth: the record is the work's durable memory, what a fresh context resumes from: the events that happened, the decisions made, and the state they left, across compaction, tool change, and break; because the work's continuity depends on it, it holds whatever else that continuity needs, the reasons, the open threads, and the evidence behind them; the workspace and the commands' results show what is, and the loaded layer and its sequences say what to do.
   load-only-needed: load only what you need: the active unit's live surfaces; closed units untouched unless the task needs them.
@@ -22,9 +22,9 @@
   AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
   .contexture/laws/ = the law sources: core.md the core law source
   workspace configuration = module-scoped settings, loaded at boot via .contexture/ctx config load (schemas via ctx config schema)
-  .contexture/ctx             = the runtime (run .contexture/ctx help; --help and -h are the same table): ctx unit <verb>, ctx run <cmd>, ctx compose [--check], ctx package install|uninstall|list|catalog|info (install and uninstall only on the human's explicit go at the act; the verb checks no go), ctx <module>
+  .contexture/ctx             = the runtime (run .contexture/ctx help; --help and -h are the same table): ctx unit <verb>, ctx run <cmd>, ctx compose [--check], ctx package install|uninstall|list|catalog|info (install and uninstall only on the human's explicit go at the act; the verb checks no go; the uninstall's keep or delete answer for a package's data and a driver package's backup or delete answer for the old copy its move leaves are the human's too, relayed and never defaulted), ctx <module>
   .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms
-  .contexture/storage/: the storage core, not a module: the driver resolver, the store-data reader, the module-facing library, the store contract, and the built-in posix driver; a driver serves only the store contract (contract 3), and the record's operations are the unit module's (ctx unit help)
+  .contexture/storage/: the storage core, not a module: the driver resolver, the store-data reader, the move engine (store-move, every namespace from one driver to another under the move's freeze), the module-facing library, the store contract, and the built-in posix driver; a driver serves only the store contract (contract 4), and the record's operations are the unit module's (ctx unit help)
 
 @module lane
   summary: subagent lane management: create, record, report, show
@@ -116,7 +116,7 @@
 
 @query
   surfaces: universal search, reference resolution, the journal + knowledge.
-  search: the record entities in the shared search syntax: ctx unit search "<query>" [--unit=<unit>] [--all] [--type=<t>] [--mode=<m>] [--limit=N]; the active units by default, --all every unit, --unit=<unit> any one, closed ones included; --mode defaults to exact (one rule on every backend), a ranked mode where the configured backend registers it (ctx search --modes lists them); every row names its address and its read, ctx unit get <path>; the unit state is never searched.
+  search: the record entities in the shared search syntax: ctx unit search "<query>" [--unit=<unit>] [--all] [--type=<t>] [--mode=<m>] [--limit=N]; the active units by default, --all every unit, --unit=<unit> any one, closed ones included; --mode takes exact, the one mode and the default (one rule on every backend); every row names its address and its read, ctx unit get <path>; the unit state is never searched.
   resolution: ctx unit get <path> reads one record entity whole, the path everything after unit# in its address (<unit>/task/<slug>, <unit>/entry/<slug>, <unit>/finding/<NAME>, <unit>/lane/<lane>/<recipe|journal|report>[/<SECTION or slug>]); another owner's address reads through ctx <owner> get <path>.
   journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, across all anchors. anchors are period ordering, never liveness. .contexture/ctx unit board streams active entries with complete bodies in one shot, then the open threads with their targets and the open task slugs with their nudge; no per-entry Read tool loops, no range spanning.
     command:

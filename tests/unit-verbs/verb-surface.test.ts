@@ -41,7 +41,7 @@ describe.concurrent('the unit and lane verb surface', () => {
   });
 
   it('V-b [the-engine-r17]: ctx unit migrate moves no record between backends: the backend flags are no unit and refuse rc 1', async () => {
-    const r = await unit(sb, 'migrate', '--from=posix', '--to=fts5');
+    const r = await unit(sb, 'migrate', '--from=posix', '--to=sqlite');
     expect([r.code, r.stdout, r.stderr]).toEqual([1, '', "migrate: error: unknown option '--from=posix' (ERR_INVALID_ARGUMENT)\n"]);
   });
 

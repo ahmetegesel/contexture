@@ -1,9 +1,9 @@
 #!/bin/sh
 # store-data: the storage core's private reader and validator of a module's data file
 # (no summary line, so discovery ignores it). It answers one namespace with the effective
-# store fields on eleven lines, in this order: namespace, root, suffix, key pattern,
-# changes, the data file path, the search form, the format, the fields, the title, and the
-# snippet. The search form's document rules follow, one per line, as four
+# store fields on ten lines, in this order: namespace, root, suffix, key pattern, the data
+# file path, the search form, the format, the fields, the title, and the snippet. The
+# search form's document rules follow, one per line, as four
 # tab-separated values: the key pattern, the section, the entity type, and the head marker
 # (or - for none).
 #
@@ -19,15 +19,13 @@
 #   fallback_root: <workspace-relative folder, inside the workspace, neither (optional;
 #         the root nor nested with it; a deprecated root a file store reads   no default)
 #         after the root and never writes>
-#   suffix: <suffix; may be empty>                                           (optional;
-#         default empty)
-#   changes: true|false                                                      (optional;
-#         default false)
+#   suffix: <suffix, at most 48 bytes; empty only beside a fixed depth key    (optional;
+#         pattern, one with no <name...> placeholder>                       default empty)
 #   search: flat|documents                                                   (optional)
 #   format: text|json                                                        (optional;
 #         flat only; default text)
 #   fields: <comma-separated field names>                                    (optional;
-#         flat only; the JSON fields the typed search extracts)
+#         flat only; validated, read by no search)
 #   title: <field name|key|head>                                             (optional;
 #         flat default key; documents default head)
 #   snippet: line                                                            (optional;
@@ -43,11 +41,19 @@
 #         module library's field grammar)
 # The namespace <ns> is served by the data file of the module folder named <ns>: the
 # workspace modules root first, then the extension root, as discovery resolves a module
-# name (a workspace module shadows an extension module of its name). The script validates
+# name (a workspace module shadows an extension module of its name), then the kept data: a
+# package uninstall answered keep retains a data carrying module's declaration in the
+# install record area under its installed name (`.contexture/extensions/.state/retained/
+# <ns>/`, a byte copy of the data file beside its origin, the package, version, and module
+# <installed name> <original name> lines), so the namespace stays declared, listed, and
+# movable while no module serves it; the origin's module line keeps an aliased namespace's
+# root its namespace, as an install record does. No file named module ever sits there, so
+# the module library's caller lookup never answers a kept namespace. The script validates
 # the fields before any store function maps a key to a path. A data file names no
-# namespace and no search modes: a namespace line refuses as an unknown field naming the fix
-# (the namespace is the folder's name), and so does a modes line (the modes are the
-# configured driver's registry).
+# namespace, no search modes, and no change log: a namespace line refuses as an unknown
+# field naming the fix (the namespace is the folder's name), and so do a modes line (the
+# modes are the configured driver's registry) and a changes line (the change log left the
+# storage contract).
 #
 # A root the data file declares applies only under the module's own name: an extension
 # module that an install record names as installed under an alias (its module line
@@ -57,10 +63,10 @@
 # never installed by a package, so never aliased. An install record area that exists but
 # cannot be read leaves an extension module's root unknown and refuses rc 2.
 #
-# The plain answer never carries the fallback root, so a parser that reads the eleven lines
-# by position ignores the field by construction. store-data <namespace> --with-fallback
-# answers the fallback root as line 12 (an empty line when none is declared) and the
-# document rules from line 13; a file store asks for it, a store with no root never does.
+# The plain answer never carries the fallback root, so a parser that reads the ten lines by
+# position ignores the field by construction. store-data <namespace> --with-fallback
+# answers the fallback root as line 11 (an empty line when none is declared) and the
+# document rules from line 12; a file store asks for it, a store with no root never does.
 #
 # A field line declares one field of the module's container in the module library's field
 # grammar, the clauses in their fixed order, one blank apart with none trailing: the
@@ -84,22 +90,27 @@
 # unsearched line, @unsearched TAB <pattern>, in declaration order; the leftovers probe and
 # the sweep ask for it, every other reader never sees the family.
 #
-# The listing mode, store-data --list, answers every valid declaration in both roots, one
-# line each, the namespace (the folder's name) and its root (the namespace when none is
-# declared, or when the module is installed under an alias) separated by a tab, then the
-# fallback root as a third column when one applies, sorted by namespace; a name both roots
-# hold answers the workspace module's. A module folder whose name is no namespace token and
-# a declaration that cannot be read (a malformed one, or one whose root is unknown) are left
-# out, each with one line on stderr, and the listing then exits 1, the rows it read still
-# answered, so a reader never takes a partial listing for the whole.
+# The listing mode, store-data --list, answers every valid declaration in both roots and the
+# kept data, one line each, the namespace (the folder's name) and its root (the namespace
+# when none is declared, or when the module is installed under an alias) separated by a
+# tab, then the fallback root as a third column when one applies, sorted by namespace; a
+# name both roots hold answers the workspace module's. A module folder whose name is no
+# namespace token, a declaration that cannot be read (a malformed one, or one whose root is
+# unknown), kept data a module root's name shadows, and kept data that cannot be walked are
+# left out, each with one line on stderr, and the listing then exits 1, the rows it read
+# still answered, so a reader never takes a partial listing for the whole. The kept data
+# listing, store-data --retained, answers one line per kept declaration no module root
+# shadows, the namespace, the package that kept it, and the module's original name separated
+# by tabs, sorted by namespace, leaving out a shadowed one or an unreadable origin with one
+# stderr line each and then exiting 1.
 #
 # Exit codes: 0 the answer; 1 a malformed declaration, a malformed namespace, an argument
-# beyond the namespace, --with-fallback, --with-fields, and --with-unsearched or beyond the listing flag, or a
-# listing that left a module out; 2 the
-# module drawer is absent or unreadable, the install record area an extension module's
-# root needs cannot be read, or the field validator a field line needs is missing or its
-# scratch copy of the field lines cannot be written; 3 no module folder of that name holds a
-# data file. The one-line reason goes to stderr.
+# beyond the namespace, --with-fallback, --with-fields, and --with-unsearched or beyond a
+# listing flag, or a listing that left a declaration out; 2 the module drawer is absent or
+# unreadable, the install record area an extension module's root or a kept namespace needs
+# cannot be read, or the field validator a field line needs is missing or its scratch copy
+# of the field lines cannot be written; 3 no module folder of that name and no kept data
+# holds a data file. The one-line reason goes to stderr.
 
 set -u
 LC_ALL=C
@@ -116,14 +127,15 @@ sd_env() {
 }
 
 SD_LIST=0
+SD_RETAINED=0
 SD_WITH_FB=0
 SD_WITH_FIELDS=0
 SD_WITH_UNSEARCHED=0
 SD_NAMESPACE="${1:-}"
 case "$SD_NAMESPACE" in
-  --list)
-    [ $# -le 1 ] || sd_fail "unexpected argument '$2' (store-data --list takes no argument)"
-    SD_LIST=1
+  --list|--retained)
+    [ $# -le 1 ] || sd_fail "unexpected argument '$2' (store-data $SD_NAMESPACE takes no argument)"
+    if [ "$SD_NAMESPACE" = --list ]; then SD_LIST=1; else SD_RETAINED=1; fi
     ;;
   *)
     while [ $# -ge 2 ]; do
@@ -134,7 +146,7 @@ case "$SD_NAMESPACE" in
       elif [ "$2" = --with-unsearched ] && [ "$SD_WITH_UNSEARCHED" -eq 0 ]; then
         SD_WITH_UNSEARCHED=1
       else
-        sd_fail "unexpected argument '$2' (store-data <namespace> [--with-fallback] [--with-fields] [--with-unsearched], or store-data --list)"
+        sd_fail "unexpected argument '$2' (store-data <namespace> [--with-fallback] [--with-fields] [--with-unsearched], store-data --list, or store-data --retained)"
       fi
       shift
     done
@@ -161,6 +173,7 @@ fi
 sd_modules="$SD_WS/.contexture/modules"
 sd_extension_modules="$SD_WS/.contexture/extensions/modules"
 sd_state="$SD_WS/.contexture/extensions/.state"
+sd_retained="$sd_state/retained"
 # the storage core's scripts folder this reader sits in, beside the module library and its
 # field validator engine
 case "$0" in */*) sd_dir=${0%/*} ;; *) sd_dir=. ;; esac
@@ -168,7 +181,7 @@ case "$0" in */*) sd_dir=${0%/*} ;; *) sd_dir=. ;; esac
 # sd_parse <namespace> <data file>: the parse and the rule checks, one awk pass over the
 # owner file and, for an extension module, every install record after it, whose module
 # line naming the namespace under an alias drops the declared roots; the answer is the
-# eleven lines plus the document rules, a refusal is the one prefixed line and exit 1, an
+# ten lines plus the document rules, a refusal is the one prefixed line and exit 1, an
 # install record area that cannot be read exit 2. A data file holding a field line takes
 # two passes more: the pass that finds one exits 4 with nothing printed, the field lines
 # are read and checked, and a last pass prints the answer.
@@ -192,6 +205,14 @@ case "$sd_ppath" in
         set -- "$@" "$sd_rec"
       done
     fi
+    ;;
+  "$sd_retained"/*)
+    sd_origin=${sd_ppath%/data}/origin
+    if [ ! -f "$sd_origin" ] || [ ! -r "$sd_origin" ]; then
+      printf 'store-data: the origin of the kept data of namespace '\''%s'\'' cannot be read, so its storage root is unknown\n' "$sd_pns" >&2
+      return 2
+    fi
+    set -- "$sd_origin"
     ;;
 esac
 sd_awk_run answer 0 "$sd_ppath" "$@"
@@ -332,9 +353,9 @@ BEGIN {
   want = ENVIRON["SD_WANT_NS"]
   path = ENVIRON["SD_PATH"]
   fname = ENVIRON["SD_FNAME"]
-  seen_root = seen_suffix = seen_key = seen_changes = seen_fb = 0
+  seen_root = seen_suffix = seen_key = seen_fb = 0
   seen_search = seen_format = seen_fields = seen_title = seen_snippet = 0
-  ns = root = suffix = key = changes = search = format = fields = title = snippet = fb = ""
+  ns = root = suffix = key = search = format = fields = title = snippet = fb = ""
   docs = ""
   uns = ""
   doc_count = 0
@@ -366,13 +387,12 @@ FILENAME != path {
     seen_fb = 1; fb = value
   } else if (field == "suffix") {
     if (seen_suffix) fail("duplicate field '\''suffix'\'' in the data file")
-    seen_suffix = 1; suffix = value
+    seen_suffix = 1; suffix = value; suffix_line = lineno
   } else if (field == "key") {
     if (seen_key) fail("duplicate field '\''key'\'' in the data file")
-    seen_key = 1; key = value
+    seen_key = 1; key = value; key_line = lineno
   } else if (field == "changes") {
-    if (seen_changes) fail("duplicate field '\''changes'\'' in the data file")
-    seen_changes = 1; changes = value
+    fail("unknown field '\''changes'\'' in the data file: the change log left the storage contract, so remove the changes line")
   } else if (field == "search") {
     if (seen_search) fail("duplicate field '\''search'\'' in the data file")
     seen_search = 1; search = value
@@ -422,7 +442,6 @@ END {
   if (!seen_key) fail("the data file declares no key pattern")
   if (!seen_root) root = ns
   if (!seen_suffix) suffix = ""
-  if (!seen_changes) changes = "false"
 
   if (!ns_ok(ns)) fail("malformed namespace '\''" ns "'\''")
   if (!root_ok(root)) fail("malformed root '\''" root "'\'' (a workspace-relative folder inside the workspace)")
@@ -434,7 +453,8 @@ END {
   if (aliased) { root = ns; fb = "" }
   if (!suffix_ok(suffix)) fail("malformed suffix '\''" suffix "'\''")
   if (!key_pattern_ok(key)) fail("malformed key pattern '\''" key "'\'' (a <name> placeholder per slash-separated segment, the last optionally <name...>)")
-  if (changes != "true" && changes != "false") fail("malformed changes flag '\''" changes "'\'' (true or false)")
+  if (length(suffix) > 48) fail("line " suffix_line ": the suffix '\''" suffix "'\'' is longer than 48 bytes (a 200 byte key segment, the suffix, and the write temp'\''s 7 bytes fit a 255 byte file name)")
+  if (suffix == "" && key ~ /\.\.\.>$/) fail("line " key_line ": the key pattern '\''" key "'\'' ends in a <name...> placeholder while the suffix is empty, so one key could be another key'\''s folder (declare a suffix, or a fixed depth pattern)")
 
   form = ""
   if (seen_search) {
@@ -485,7 +505,6 @@ END {
   print root
   print suffix
   print key
-  print changes
   print path
   print form
   print format
@@ -503,18 +522,86 @@ END {
 # workspace modules first so an extension module of a name the workspace holds is left out
 # as discovery shadows it, each declaration parsed whole and its root and any fallback root
 # answered, in namespace order; any module left out makes the exit 1
+sd_tab=$(printf '\t')
+
+# sd_retained_ok: rc 0 when the kept data's folder can be walked or does not exist; else one
+# stderr line and rc 1, the kept declarations left unread
+sd_retained_ok() {
+  if [ -e "$sd_state" ] && { [ ! -d "$sd_state" ] || [ ! -r "$sd_state" ] || [ ! -x "$sd_state" ]; }; then
+    printf 'store-data: the install record area cannot be read, so the kept data declarations are unknown\n' >&2
+    return 1
+  fi
+  if [ -e "$sd_retained" ] && { [ ! -d "$sd_retained" ] || [ ! -r "$sd_retained" ] || [ ! -x "$sd_retained" ]; }; then
+    printf 'store-data: the kept data declarations cannot be read\n' >&2
+    return 1
+  fi
+  return 0
+}
+
+# sd_shadowed <namespace>: rc 0 when a module root holds a module folder of that name with a
+# data file, which then serves the name, the kept declaration of it shadowed
+sd_shadowed() {
+  [ -f "$sd_modules/$1/data" ] || [ -f "$sd_extension_modules/$1/data" ]
+}
+
+# the kept data listing: every kept declaration no module root shadows, namespace TAB the
+# package that kept it TAB the module's original name, read from its origin, in namespace
+# order; a shadowed one, an origin that cannot be read, and a folder name that is no
+# namespace are left out, each with one stderr line, and the listing then exits 1
+if [ "$SD_RETAINED" -eq 1 ]; then
+  sd_left=0
+  sd_retained_ok || exit 1
+  sd_rows=""
+  for sd_file in "$sd_retained"/*/data; do
+    [ -f "$sd_file" ] || continue
+    sd_ns=${sd_file%/*}
+    sd_ns=${sd_ns##*/}
+    case "$sd_ns" in
+      [!a-z0-9]*|*[!a-z0-9._-]*)
+        printf 'store-data: the kept data folder '\''%s'\'' names no namespace\n' "$sd_ns" >&2
+        sd_left=1
+        continue
+        ;;
+    esac
+    if sd_shadowed "$sd_ns"; then
+      printf 'store-data: the kept data of namespace '\''%s'\'' is shadowed by a module of that name, so it is left out\n' "$sd_ns" >&2
+      sd_left=1
+      continue
+    fi
+    sd_o=$(awk -v ns="$sd_ns" '
+      $1 == "package" && NF == 2 && p == "" { p = $2 }
+      $1 == "module" && NF == 3 && $2 == ns && m == "" { m = $3 }
+      END { if (p != "" && m != "") print p "\t" m; else exit 1 }' "${sd_file%/data}/origin" 2>/dev/null) || {
+      printf 'store-data: the origin of the kept data of namespace '\''%s'\'' cannot be read\n' "$sd_ns" >&2
+      sd_left=1
+      continue
+    }
+    sd_rows="$sd_rows$sd_ns$sd_tab$sd_o
+"
+  done
+  [ -z "$sd_rows" ] || printf '%s' "$sd_rows" | LC_ALL=C sort || sd_env "the kept data listing cannot be sorted"
+  exit "$sd_left"
+fi
+
 if [ "$SD_LIST" -eq 1 ]; then
   SD_WITH_FB=1
-  sd_tab=$(printf '\t')
   sd_seen=" "
   sd_rows=""
   sd_left=0
-  for sd_file in "$sd_modules"/*/data "$sd_extension_modules"/*/data; do
+  for sd_file in "$sd_modules"/*/data "$sd_extension_modules"/*/data "$sd_retained"/*/data; do
     [ -f "$sd_file" ] || continue
     sd_ns=${sd_file%/*}
     sd_ns=${sd_ns##*/}
     case "$sd_seen" in
-      *" $sd_ns "*) continue ;;
+      *" $sd_ns "*)
+        case "$sd_file" in
+          "$sd_retained"/*)
+            printf 'store-data: the kept data of namespace '\''%s'\'' is shadowed by a module of that name, so it is left out\n' "$sd_ns" >&2
+            sd_left=1
+            ;;
+        esac
+        continue
+        ;;
     esac
     sd_seen="$sd_seen$sd_ns "
     case "$sd_ns" in
@@ -531,7 +618,7 @@ if [ "$SD_LIST" -eq 1 ]; then
   while IFS="$sd_tab" read -r sd_ns sd_file; do
     [ -n "$sd_ns" ] || continue
     if sd_out=$(sd_parse "$sd_ns" "$sd_file" 2>&1); then
-      sd_fb=$(printf '%s\n' "$sd_out" | sed -n '12p')
+      sd_fb=$(printf '%s\n' "$sd_out" | sed -n '11p')
       printf '%s\t%s%s\n' "$sd_ns" "$(printf '%s\n' "$sd_out" | sed -n '2p')" "${sd_fb:+$sd_tab$sd_fb}"
     else
       printf 'store-data: namespace '\''%s'\'': %s\n' "$sd_ns" "${sd_out#store-data: }" >&2
@@ -540,11 +627,15 @@ if [ "$SD_LIST" -eq 1 ]; then
   done <<EOF
 $sd_sorted
 EOF
+  # kept declarations that cannot be walked leave the listing partial, named only when no
+  # other line already made the exit 1
+  [ "$sd_left" -ne 0 ] || sd_retained_ok || sd_left=1
   exit "$sd_left"
 fi
 
 # the owner lookup: the data file of the module folder named after the namespace, the
-# workspace modules root first, then the extension root
+# workspace modules root first, then the extension root, then the kept data a package
+# uninstall retained under that name
 sd_found=""
 for sd_file in "$sd_modules/$SD_NAMESPACE/data" "$sd_extension_modules/$SD_NAMESPACE/data"; do
   if [ -f "$sd_file" ]; then
@@ -552,6 +643,13 @@ for sd_file in "$sd_modules/$SD_NAMESPACE/data" "$sd_extension_modules/$SD_NAMES
     break
   fi
 done
+if [ -z "$sd_found" ]; then
+  if ! sd_retained_ok 2>/dev/null; then
+    printf 'store-data: the install record area cannot be read, so whether namespace '\''%s'\'' is kept data is unknown\n' "$SD_NAMESPACE" >&2
+    exit 2
+  fi
+  [ -f "$sd_retained/$SD_NAMESPACE/data" ] && sd_found=$sd_retained/$SD_NAMESPACE/data
+fi
 
 if [ -z "$sd_found" ]; then
   printf 'store-data: namespace '\''%s'\'' is declared by no module data file\n' "$SD_NAMESPACE" >&2

@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { describe, expect, it } from 'vitest';
@@ -44,7 +44,7 @@ async function until(test: () => boolean, ms = 30_000): Promise<void> {
 function fakeDriver(sb: string, relDir: string, name: string, valid = true): string {
   const path = join(sb, '.contexture', relDir, name, 'driver');
   const card = valid
-    ? `{"driver":"${name}","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":[{"name":"exact","description":"exact match"}],"optional":["store"]}`
+    ? `{"driver":"${name}","version":"4.0.0","contract":"4","store":["list","get","put","delete","batch","scan"],"search_modes":[{"name":"exact","description":"exact match"}],"optional":["store"]}`
     : '{"driver":"broken","version":"2.0.0","contract":"2","store":[]}';
   put(
     path,
@@ -79,7 +79,7 @@ describe.concurrent('config-lib: core storage schema and unified config reader',
         '  storage.driver.extra: wrong',
         'storage.driver: "" # empty quoted skipped',
         'storage.driver:   # empty unquoted skipped',
-        '  storage.driver  =  "fts5"  # inline comment\r',
+        '  storage.driver  =  "sqlite"  # inline comment\r',
         'storage.driver: posix # later value loses',
         "hash.single: 'keep # hash' # trailing comment",
         'hash.double: "keep \\"quotes\\" and \\\\slash # hash" # note',
@@ -89,7 +89,7 @@ describe.concurrent('config-lib: core storage schema and unified config reader',
       ].join('\n'),
     );
 
-    expect((await runLib(sb, 'cfg_get_file', [conf, 'storage.driver'])).stdout).toBe('fts5\n');
+    expect((await runLib(sb, 'cfg_get_file', [conf, 'storage.driver'])).stdout).toBe('sqlite\n');
     expect((await runLib(sb, 'cfg_get_file', [conf, 'storage.driver.extra'])).stdout).toBe('wrong\n');
     expect((await runLib(sb, 'cfg_get_file', [conf, 'hash.single'])).stdout).toBe('keep # hash\n');
     expect((await runLib(sb, 'cfg_get_file', [conf, 'hash.double'])).stdout).toBe('keep "quotes" and \\slash # hash\n');
@@ -104,7 +104,7 @@ describe.concurrent('config-lib: core storage schema and unified config reader',
     expect(list.stdout).toBe(
       [
         'storage.driver.extra\twrong',
-        'storage.driver\tfts5',
+        'storage.driver\tsqlite',
         'hash.single\tkeep # hash',
         'hash.double\tkeep "quotes" and \\slash # hash',
         'url.val\thttps://example.com:8443/path=1',
@@ -491,7 +491,7 @@ describe.concurrent('config-lib: schema discovery, driver collisions, and --as a
     const ctxDir = join(sb, '.contexture');
 
     // Driver configs in extensions/storage/drivers and storage/drivers
-    put(join(ctxDir, 'extensions/storage/drivers/fts5/config'), 'database: optional path\n  SQLite database path.\n');
+    put(join(ctxDir, 'extensions/storage/drivers/sqlite/config'), 'database: optional path\n  SQLite database path.\n');
     put(join(ctxDir, 'storage/drivers/posix/config'), 'sync_mode: optional string one-of fast|safe default safe\n  Sync policy.\n');
 
     // Manifestless hook/filter workspace module with config
@@ -537,7 +537,7 @@ describe.concurrent('config-lib: schema discovery, driver collisions, and --as a
     }
   });
 
-  it('refuses driver schema key colliding with core storage.driver or another driver, while earlier tiers shadow later tiers', async () => {
+  it('refuses driver schema key colliding with core storage.driver or another driver, and reads no driver config outside the two places the resolver finds a driver', async () => {
     const sb = stage('posix', 'cfg-driver-collision');
     const ctxDir = join(sb, '.contexture');
     put(join(ctxDir, 'extensions/storage/drivers/bad/config'), 'driver: optional string\n');
@@ -554,15 +554,19 @@ describe.concurrent('config-lib: schema discovery, driver collisions, and --as a
     expect(dup.code).toBe(1);
     expect(dup.stderr).toContain('collides with an existing storage key');
 
-    // Core tier driver shadows extension tier driver of the same name without collision
-    const sb3 = stage('posix', 'cfg-driver-shadow');
+    // A storage core driver other than posix, a workspace driver, and an extension folder named posix are no driver the resolver finds, so their configs are never read
+    const sb3 = stage('posix', 'cfg-driver-retired');
     const ctx3 = join(sb3, '.contexture');
     put(join(ctx3, 'storage/drivers/alt/config'), 'core_opt: optional string default one\n');
-    put(join(ctx3, 'extensions/storage/drivers/alt/config'), 'ext_opt: optional string default two\n');
+    put(join(ctx3, 'drivers/wsd/config'), 'ws_opt: optional string default two\n');
+    put(join(ctx3, 'extensions/storage/drivers/alt/config'), 'ext_opt: optional string default three\n');
+    put(join(ctx3, 'extensions/storage/drivers/posix/config'), 'ext_posix_opt: optional string default four\n');
     const shd = await runLib(sb3, 'cfg_discover_schemas', [ctx3, 'storage']);
     expect([shd.code, shd.stderr]).toEqual([0, '']);
-    expect(shd.stdout).toContain('storage\tcore_opt\t');
-    expect(shd.stdout).not.toContain('ext_opt');
+    expect(shd.stdout).toContain('storage\text_opt\t');
+    expect(shd.stdout).not.toContain('core_opt');
+    expect(shd.stdout).not.toContain('ws_opt');
+    expect(shd.stdout).not.toContain('ext_posix_opt');
   });
 
   it('treats help as reserved, handles spaces in workspace paths, and preserves --as aliases under modified IFS', async () => {
@@ -691,61 +695,40 @@ describe.concurrent('config-lib: assembly, owner config-verb helper, and storage
     expect((await runLib(sb, 'config_owner_verb', ['sample', 'ctx sample config', '', 'get', 'count'], { env })).stdout).toBe('2\n');
   });
 
-  it('validates storage driver via driver-resolver check and emits migration notice only on effective driver change', async () => {
+  it('[store-r-0s40c] refuses a hand switch of the driver on set and unset before any write while the installer\'s locked writer writes pass, and lands the unset of a driver that resolves nothing', async () => {
     const sb = stage('posix', 'cfg-storage-driver');
     const ctxDir = join(sb, '.contexture');
     const env = { CTX_DIR: ctxDir, CTX_ROOT: sb };
-
+    const conf = join(ctxDir, 'config');
+    const shape = (r: Run) => [r.code, r.stdout, r.stderr];
+    const verb = (...args: string[]) => runLib(sb, 'config_owner_verb', ['storage', 'ctx store config', 'cfg_validate_storage_driver', ...args], { env });
+    const refusal = 'ctx store config: error: storage.driver belongs to the driver package lifecycle: install a driver package (ctx package install <package>) or uninstall it (ctx package uninstall <package>) to change it (ERR_INVALID_ARGUMENT)\n';
     fakeDriver(sb, 'extensions/storage/drivers', 'alt', true);
-    fakeDriver(sb, 'extensions/storage/drivers', 'broken', false);
 
-    // Missing driver refuses rc 2 without writing
-    const miss = await runLib(sb, 'config_owner_verb', ['storage', 'ctx store config', 'cfg_validate_storage_driver', 'set', 'driver', 'nosuch'], { env });
-    expect(miss.code).toBe(2);
-    expect(miss.stdout).toBe('');
-    expect(miss.stderr).toContain('ERR_DRIVER_NOT_FOUND');
-    expect(existsSync(join(ctxDir, 'config'))).toBe(false);
+    for (const value of ['posix', 'alt', 'nosuch', '-bad']) expect(shape(await verb('set', 'driver', value)), value).toEqual([1, '', refusal]);
+    expect(shape(await verb('unset', 'driver'))).toEqual([1, '', refusal]);
+    expect(existsSync(conf)).toBe(false);
 
-    // Broken Contract 3 driver refuses rc 2 without writing
-    const bad = await runLib(sb, 'config_owner_verb', ['storage', 'ctx store config', 'cfg_validate_storage_driver', 'set', 'driver', 'broken'], { env });
-    expect(bad.code).toBe(2);
-    expect(bad.stdout).toBe('');
-    expect(bad.stderr).toContain('ERR_DRIVER_PROTOCOL');
-    expect(existsSync(join(ctxDir, 'config'))).toBe(false);
+    // the installer's locked writer runs no hook, so its writes pass while the verb refuses
+    expect((await runLib(sb, 'cfg_set', ['storage.driver', 'alt', ctxDir], { env })).code).toBe(0);
+    expect(readFileSync(conf, 'utf8')).toBe('storage.driver: alt\n');
+    for (const args of [['set', 'driver', 'posix'], ['unset', 'driver']]) expect(shape(await verb(...args)), args.join(' ')).toEqual([1, '', refusal]);
+    expect(readFileSync(conf, 'utf8')).toBe('storage.driver: alt\n');
+    expect((await runLib(sb, 'cfg_unset', ['storage.driver', ctxDir], { env })).code).toBe(0);
+    expect(readFileSync(conf, 'utf8')).not.toContain('storage.driver');
 
-    // Setting posix when already effectively posix emits no migration notice
-    const same = await runLib(sb, 'config_owner_verb', ['storage', 'ctx store config', 'cfg_validate_storage_driver', 'set', 'driver', 'posix'], { env });
-    expect([same.code, same.stdout, same.stderr]).toEqual([0, '', '']);
-
-    // Switching posix -> alt emits migration notice and discards driver-resolver stdout
-    const sw = await runLib(sb, 'config_owner_verb', ['storage', 'ctx store config', 'cfg_validate_storage_driver', 'set', 'driver', 'alt'], { env });
-    expect([sw.code, sw.stdout]).toEqual([0, '']);
-    expect(sw.stderr).toContain("changed from 'posix' to 'alt'");
-    for (const line of sw.stderr.split('\n')) expect(leaks(line)).toBe(false);
-
-    // Setting alt -> alt emits no migration notice
-    const again = await runLib(sb, 'config_owner_verb', ['storage', 'ctx store config', 'cfg_validate_storage_driver', 'set', 'driver', 'alt'], { env });
-    expect([again.code, again.stdout, again.stderr]).toEqual([0, '', '']);
-
-    // Unsetting driver reverts alt -> posix and emits migration notice
-    const rev = await runLib(sb, 'config_owner_verb', ['storage', 'ctx store config', 'cfg_validate_storage_driver', 'unset', 'driver'], { env });
-    expect([rev.code, rev.stdout]).toEqual([0, '']);
-    expect(rev.stderr).toContain("changed from 'alt' to 'posix'");
-
-    // Second unset (already posix) emits no notice
-    const rev2 = await runLib(sb, 'config_owner_verb', ['storage', 'ctx store config', 'cfg_validate_storage_driver', 'unset', 'driver'], { env });
-    expect([rev2.code, rev2.stdout, rev2.stderr]).toEqual([0, '', '']);
-
-    // Transitioning from legacy storage.conf or session.storage.driver detects old driver
+    // a legacy line is no way around it
     writeFileSync(join(ctxDir, 'storage.conf'), 'storage.driver: alt\n');
-    const fromConf = await runLib(sb, 'config_owner_verb', ['storage', 'ctx store config', 'cfg_validate_storage_driver', 'set', 'driver', 'posix'], { env });
-    expect([fromConf.code, fromConf.stdout]).toEqual([0, '']);
-    expect(fromConf.stderr).toContain("changed from 'alt' to 'posix'");
+    expect(shape(await verb('set', 'driver', 'posix'))).toEqual([1, '', refusal]);
+    rmSync(join(ctxDir, 'storage.conf'));
 
-    writeFileSync(join(ctxDir, 'config'), 'session.storage.driver: alt\n');
-    const fromLegacy = await runLib(sb, 'config_owner_verb', ['storage', 'ctx store config', 'cfg_validate_storage_driver', 'set', 'driver', 'posix'], { env });
-    expect([fromLegacy.code, fromLegacy.stdout]).toEqual([0, '']);
-    expect(fromLegacy.stderr).toContain("changed from 'alt' to 'posix'");
+    // a configured driver that resolves nothing holds nothing reachable, so its unset lands
+    for (const gone of ['gone', '../gone']) {
+      writeFileSync(conf, `storage.driver: ${gone}\n`);
+      const r = await verb('unset', 'driver');
+      expect([r.code, r.stdout, r.stderr], gone).toEqual([0, '', `notice: storage.driver named '${gone}', which resolves nothing, so it is unset and the record reads from posix again\n`]);
+      expect(readFileSync(conf, 'utf8')).not.toContain('storage.driver');
+    }
   });
 
   it('rejects empty --module=, avoids dotted-module false warnings, formats text schemas with quoted defaults, covers owner load --json/schema/help, and passes set -u', async () => {

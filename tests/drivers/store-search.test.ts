@@ -70,28 +70,9 @@ describe.concurrent('store-search exact, the shared search rule', () => {
     wants('jsondoc', 'needle', 20, searchAnswer('jsondoc', 'needle', 1, [row('j1/x', 'document', 'j1/x', 'body', '{"title":"Needle title","body":"body needle"}')])));
 });
 
-describe.concurrent('store-search docs, the derived documents of the fts5 index', () => {
-  const docs = (ns: string, i: number) =>
-    exec(STORE_SEARCH, ['docs', files[ns].data, ns, SEARCH_VALUES[ns][i][0], join(dir, `${ns}-${i}.value`), 'sig-1'], { cwd: dir });
-
-  it('[plugins-r8] replaces a key\'s rows: one DELETE, then one INSERT per derived document carrying the signature', async () => {
-    const r = await docs('searchdoc', 0);
-    expect(r.code).toBe(0);
-    expect(r.stderr).toBe('');
-    const statements = r.stdout.split(';\n').filter((s) => s.trim() !== '');
-    expect(statements[0]).toMatch(/^DELETE FROM store_docs WHERE .*'searchdoc'.*'u1\/backlog'/s);
-    const inserts = statements.slice(1);
-    expect(inserts.length).toBe(3);
-    for (const s of inserts) expect(s).toMatch(/^INSERT INTO store_docs\b.*'sig-1'/s);
-    expect(inserts.map((s) => /'(alpha|beta)'/.exec(s)?.[1] ?? 'session')).toEqual(['session', 'alpha', 'beta']);
-  });
-
-  it('[plugins-r8] derives one body document for a flat value, its id and title the key', async () => {
-    const r = await docs('flatdoc', 0);
-    expect(r.code).toBe(0);
-    expect(r.stdout).toBe(
-      "DELETE FROM store_docs WHERE namespace = 'flatdoc' AND key = 'f1/x';\n" +
-        "INSERT INTO store_docs (namespace, key, section, entity_type, entity_id, title, body, ord, sig) VALUES ('flatdoc', 'f1/x', 'body', 'document', 'f1/x', 'f1/x', 'flat needle value', 1, 'sig-1');\n",
-    );
+describe.concurrent('store-search modes', () => {
+  it('[the-engine-r27] answers exact alone: the retired document derivation refuses rc 1 as an unknown mode, printing nothing', async () => {
+    const r = await exec(STORE_SEARCH, ['docs', files.flatdoc.data, 'flatdoc', 'f1/x', join(dir, 'flatdoc-0.value'), 'sig-1'], { cwd: dir });
+    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', 'store-search: error: unknown mode docs (ERR_INVALID_ARGUMENT)\n']);
   });
 });

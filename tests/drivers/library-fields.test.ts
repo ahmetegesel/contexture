@@ -8,7 +8,7 @@ import { exec } from '../support/exec';
 import { holdLock, sleepShim } from '../support/locks';
 import { moduleCall, moduleScript, shFunction } from '../support/sh';
 import { fresh, seed } from '../support/snapshot';
-import { DRIVERS, fts5Available } from '../support/stage';
+import { DRIVERS, sqliteAvailable } from '../support/stage';
 import { latin1 } from '../unit-verbs/inputs';
 
 const LIBRARY = '.contexture/storage/scripts/library';
@@ -267,7 +267,7 @@ const FIELD_DATA = ['root: fieldprobe-root', 'key: <id>', ...IDEAS.map((l) => `f
 const NF = 'ERR_ENTITY_NOT_FOUND';
 
 for (const driver of DRIVERS) {
-  describe.skipIf(driver === 'fts5' && !fts5Available())(`the checked record entry: a module declaring its fields in its data file, on ${driver}`, { concurrent: true }, () => {
+  describe.skipIf(driver === 'sqlite' && !sqliteAvailable())(`the checked record entry: a module declaring its fields in its data file, on ${driver}`, { concurrent: true }, () => {
     let entrySnap: string;
     beforeAll(async () => {
       entrySnap = await seed(async (sb) => {

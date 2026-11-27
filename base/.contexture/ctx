@@ -21,10 +21,10 @@
 # "# version: <token>" (the installer's), and a "# description:" hash block
 # last (the compose's preamble); a "# requires:" line is reserved and refused.
 # The private reader ctx _module <file> validate|summary|version|description
-# is the one module-file parser; ctx _package <file> validate|summary|version|kind|parts|driver|category|pitch|when|needs|tags|description
+# is the one module-file parser; ctx _package <file> validate|summary|version|kind|parts|driver|format|category|pitch|when|needs|tags|description
 # is the one package-manifest parser (the package root's manifest: summary, version,
-# kind feature|driver, the repeated part lines, a driver name for the driver kind,
-# and optional category, pitch, when, needs, tags, and trailing description block;
+# kind feature|driver, the repeated part lines, a driver name and a storage format
+# version for the driver kind, and optional category, pitch, when, needs, tags, and trailing description block;
 # requires is reserved and refused); ctx _reserved <name> answers the engine's reserved set
 # (rc0 reserved, rc1 not) for the package installer and the composer; ctx _builtin <name>
 # answers the engine's builtin set (unit, run, lane, rhythm, store; rc0 builtin, rc1 not) for the
@@ -289,7 +289,8 @@ module_reader() {
 #   # kind: feature|driver             required; the two package kinds
 #   # part: <type> <path>              repeatable; at least one
 #   # driver: <name>                   required exactly when kind is driver
-#   # category: <token>                optional; lowercase slug [a-z][a-z0-9-]*
+#   # format: <positive whole number>  required exactly when kind is driver; the storage format version
+#   # category: <token>               optional; lowercase slug [a-z][a-z0-9-]*
 #   # pitch: <one line>                optional; adopter-facing value pitch
 #   # when: <one line>                 optional; when to install
 #   # needs: <one line>                optional; host prerequisites summary
@@ -301,8 +302,8 @@ module_reader() {
 # module part is one folder under modules/, a driver part is storage/drivers/<name>,
 # and a rhythms part is under rhythms/. A bare # line is a comment; any other
 # "# <key>:" line is an unknown field and refuses. ctx _package answers validate,
-# summary, version, kind, parts, driver, category, pitch, when, needs, tags, and
-# description.
+# summary, version, kind, parts, driver, format, category, pitch, when, needs, tags,
+# and description.
 
 package_file_parse() {
   pf_file=$1
@@ -310,6 +311,8 @@ package_file_parse() {
   pf_version=""
   pf_kind=""
   pf_driver=""
+  pf_format=""
+  pf_format_line=0
   pf_parts=""
   pf_category=""
   pf_pitch=""
@@ -469,6 +472,21 @@ package_file_parse() {
         PF_ERROR="line $pf_lineno: the driver name is empty"
         return 1
         ;;
+      '# format: '*)
+        [ "$pf_format_line" -eq 0 ] || { PF_ERROR="line $pf_lineno: duplicate # format:"; return 1; }
+        pf_format=${pf_line#'# format: '}
+        pf_format=$(printf '%s' "$pf_format" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        case "$pf_format" in
+          '') PF_ERROR="line $pf_lineno: the format is empty"; return 1 ;;
+          *[!0-9]*|0*[1-9]*) PF_ERROR="line $pf_lineno: malformed format '$pf_format' (a positive whole number)"; return 1 ;;
+          0*) PF_ERROR="line $pf_lineno: the format is zero (a positive whole number)"; return 1 ;;
+        esac
+        pf_format_line=$pf_lineno
+        ;;
+      '# format:')
+        PF_ERROR="line $pf_lineno: the format is empty"
+        return 1
+        ;;
       '# category: '*)
         [ "$pf_seen_category" -eq 0 ] || { PF_ERROR="line $pf_lineno: duplicate # category:"; return 1; }
         pf_category=${pf_line#'# category: '}
@@ -564,7 +582,7 @@ package_file_parse() {
         PF_ERROR="line $pf_lineno: requires is reserved and refused"
         return 1
         ;;
-      '# summary:'*|'# version:'*|'# kind:'*|'# part:'*|'# driver:'*|'# category:'*|'# pitch:'*|'# when:'*|'# needs:'*|'# tags:'*|'# description:'*)
+      '# summary:'*|'# version:'*|'# kind:'*|'# part:'*|'# driver:'*|'# format:'*|'# category:'*|'# pitch:'*|'# when:'*|'# needs:'*|'# tags:'*|'# description:'*)
         PF_ERROR="line $pf_lineno: malformed field line (expected '# <field>: <value>')"
         return 1
         ;;
@@ -595,12 +613,16 @@ package_file_parse() {
   [ "$pf_part_count" -ge 1 ] || { PF_ERROR="the package manifest declares no # part: line"; return 1; }
   if [ "$pf_kind" = driver ]; then
     [ "$pf_seen_driver" -eq 1 ] || { PF_ERROR="a driver package carries no # driver: line"; return 1; }
+    [ "$pf_format_line" -gt 0 ] || { PF_ERROR="a driver package carries no # format: line"; return 1; }
     pf_dcount=$(printf '%s\n' "$pf_parts" | awk '$1 == "driver" { n++ } END { print n + 0 }')
     [ "$pf_dcount" -eq 1 ] || { PF_ERROR="a driver package declares exactly one driver part"; return 1; }
     pf_dpath=$(printf '%s\n' "$pf_parts" | awk '$1 == "driver" { print $2; exit }')
     [ "$pf_dpath" = "storage/drivers/$pf_driver" ] || { PF_ERROR="the driver part is storage/drivers/$pf_driver"; return 1; }
+    pf_mcount=$(printf '%s\n' "$pf_parts" | awk '$1 == "module" { n++ } END { print n + 0 }')
+    [ "$pf_mcount" -eq 0 ] || { PF_ERROR="a driver package carries no module part (its install and uninstall move the record)"; return 1; }
   else
     [ "$pf_seen_driver" -eq 0 ] || { PF_ERROR="a feature package carries no # driver: line"; return 1; }
+    [ "$pf_format_line" -eq 0 ] || { PF_ERROR="line $pf_format_line: a feature package carries no # format: line"; return 1; }
     pf_dcount=$(printf '%s\n' "$pf_parts" | awk '$1 == "driver" { n++ } END { print n + 0 }')
     [ "$pf_dcount" -eq 0 ] || { PF_ERROR="a feature package carries no driver part"; return 1; }
   fi
@@ -609,7 +631,7 @@ package_file_parse() {
 
 package_reader() {
   if [ $# -ne 2 ]; then
-    ctx_err "_package: usage: ctx _package <file> validate|summary|version|kind|parts|driver|category|pitch|when|needs|tags|description"
+    ctx_err "_package: usage: ctx _package <file> validate|summary|version|kind|parts|driver|format|category|pitch|when|needs|tags|description"
     exit 1
   fi
   if ! package_file_parse "$1"; then
@@ -622,6 +644,7 @@ package_reader() {
     version) printf '%s\n' "$pf_version" ;;
     kind) printf '%s\n' "$pf_kind" ;;
     driver) printf '%s\n' "$pf_driver" ;;
+    format) printf '%s\n' "$pf_format" ;;
     parts) printf '%s' "$pf_parts" ;;
     category) printf '%s\n' "$pf_category" ;;
     pitch) printf '%s\n' "$pf_pitch" ;;
@@ -2078,11 +2101,12 @@ EOF
 # line, and runs the private script from the workspace root with CTX_ROOT set
 # to this engine's root, so every line, exit code, and record passes through;
 # on success it writes (install) or removes (uninstall) the package's line in the
-# workspace configuration, and the bare install installs every declared package
+# workspace configuration, and the bare install installs every declared package but the
+# driver packages, which install only by name
 
-package_install_line="  ctx package install [<package>]  install or update a package (a catalog name or a package root path; --as=<module>=<alias> renames a module), or bare every declared one, on the human's explicit go at the act"
-package_uninstall_line="  ctx package uninstall <package>  remove an installed package (its name or its package root path), on the human's explicit go at the act"
-package_list_line="  ctx package list                 the declared packages against the installed ones: versions, modules, aliases, and drift; read only"
+package_install_line="  ctx package install [<package>]  install or update a package (a catalog name or a package root path; --as=<module>=<alias> renames a module; a driver package moves the record into its driver, --backup-old|--delete-old answering for the old copy and --driver-config=<key>=<value> setting the driver), or bare every declared one but the driver packages, on the human's explicit go at the act"
+package_uninstall_line="  ctx package uninstall <package> [--keep-data|--delete-data] [--backup-old|--delete-old]  remove an installed package (its name or its package root path), its modules' data kept or deleted and a driver's old copy backed up or deleted as the human answers, the configured driver's record moved back into posix, on the human's explicit go at the act"
+package_list_line="  ctx package list                 the declared packages against the installed ones: versions, modules, aliases, drift, and kept data; read only"
 package_catalog_line="  ctx package catalog [--names] [--no-probe] [--json]  list available catalog packages with value, install status, and host readiness; read only"
 package_info_line="  ctx package info <package> [--no-probe] [--json]     show one package's metadata, parts, install status, and host readiness; read only"
 
@@ -2096,23 +2120,30 @@ show_package_verb_help() {
   case "$1" in
     install)
       cat <<'EOF'
-usage: ctx package install [<package>] [--as=<module>=<alias>]...
+usage: ctx package install [<package>] [--as=<module>=<alias>]... [--backup-old|--delete-old] [--driver-config=<key>=<value>]...
 installs or updates the package into this workspace's extension root through the core package installer, records it, runs its lifecycle actions, and recomposes the law layer
+a driver package moves the record: installed while posix is configured, its driver passes the storage core's behavior test and every namespace is copied from posix into it under the storage moving freeze, verified, and switched to; reinstalled at the same storage format, the files update only when every namespace dumps the same before and after; at another format, the record moves out through posix with the installed version and back in with the new one; any failure through the verify unwinds the whole run, a hangup, interrupt, or termination included, and a crashed move found at the next driver package run is recovered first; one driver package is installed at a time
+--backup-old, --delete-old: the answer for the old copy the move leaves (the posix records on an install, the driver's own storage on a format change's move out): backed up into the drawer's backups, named by the run's stamp alone, or deleted; with neither, a terminal is asked once when the old copy holds a record, and a run with no terminal (an agent's, or any run under ctx run) refuses naming both flags, so the agent relays the question and never picks one; either flag changes nothing where no old copy holds a record or on a feature package
+--driver-config=<key>=<value> (repeatable): a setting the driver's config schema declares, checked against its type and written as storage.<key> before the move; a required setting with no default is asked like the old copy or refused naming this flag; a feature package, a bare install, an undeclared key, or a bad value refuses before anything is written, and so does a changed setting on a reinstall at the same format
 <package>: a catalog name (letters, digits, dot, underscore, hyphen; not starting with a dot) resolves .contexture/plugins/<name> (falling back to plugins/<name>) at the workspace root; a value holding a slash is a package root path, read from the working folder; either way the package lands in the workspace this engine serves
-bare: ctx package install with no package installs every package the workspace configuration declares (one package.<name>: <source> [--as=<module>=<alias>]... line each) and the install record lacks, each with its declared flags; nothing pending prints one line rc 0; a configuration line is never a go, the bare install is itself the act
+bare: ctx package install with no package installs every package the workspace configuration declares (one package.<name>: <source> [--as=<module>=<alias>]... line each) and the install record lacks, each with its declared flags; a declared driver package is left out with one line naming it, since its install moves the record, so it installs only by name (ctx package install <name>) and ctx package list keeps it declared and not installed; nothing pending prints one line rc 0; a configuration line is never a go, the bare install is itself the act
 an install writes its package.<name> line (the source as given, a path inside the workspace relative to its root, and every alias the record holds), and an uninstall removes it
 --as=<module>=<alias> (repeatable, one per module): installs that module of the package under the alias, its folder, laws, lifecycle scripts, namespace, and storage root taking the alias (a root its data file declares applies only under its own name), recorded so a re-install without the flag keeps it; a module name, or a storage root another installed module resolves to, that collides refuses naming --as, and the installer never picks a name itself
 an install runs only on the human's explicit go at the act; this verb checks no go: the gate binds the act, never the doorway
-exit codes: 0 installed or updated; 1 a refusal (a usage error, a malformed name, no such package, a collision); 2 an environment or I/O failure (a missing installer, a read-only extension root, a failed lifecycle action or recompose)
+exit codes: 0 installed or updated (for a driver package the move verified; an old copy step, driver finish, package install hook, or recompose that then fails only warns, naming how to finish it); 1 a refusal (a usage error, a malformed name, no such package, a collision, a missing answer); 2 an environment or I/O failure (a missing installer, a read-only extension root, a failed lifecycle action or recompose, a driver run that failed and was unwound); 129, 130, 143 a driver run stopped by a hangup, interrupt, or termination and unwound (one the engine receives is relayed to the run, whose unwind it waits for)
 EOF
       ;;
     uninstall)
       cat <<'EOF'
-usage: ctx package uninstall <package>
+usage: ctx package uninstall <package> [--keep-data|--delete-data] [--backup-old|--delete-old]
 removes an installed package from this workspace's extension root through the core package uninstaller, running its uninstall actions first and preserving a file changed after install, then recomposes the law layer and removes the package's package.<name> line from the workspace configuration
+a driver package that is the configured driver first moves the record back into posix under the storage moving freeze, verified, and switched to, then its driver backs up or deletes its own storage, the old copy, as the human answers with --backup-old or --delete-old (asked or refused as at an install), and its settings are unset; any failure through the verify leaves the driver installed and configured; a driver package installed and not configured moves nothing, its old storage backed up or deleted the same way when it still holds a record
 <package>: the installed package's name (its .contexture/plugins/<name> or plugins/<name> folder, when present, passes as the package root); a value holding a slash is a package root path, read from the working folder; either way the package leaves the workspace this engine serves
+the data answer: a module of the package that declares data and holds a key needs the human's answer before anything is removed: keep retains its data declaration, so its data stays reachable, moves with the record, and returns when the same package is installed again; delete removes every key it holds, which cannot be undone
+--keep-data, --delete-data: the answer given ahead; with neither, a terminal is asked once, and a run with no terminal (an agent's, or any run under ctx run) refuses naming each namespace with its key count and both flags, so the agent relays the question to the human and never picks one; either flag on a package holding no data changes nothing
+kept data whose package is not installed: --delete-data deletes it by the package's name, --keep-data leaves it; ctx package list names each kept namespace
 an uninstall runs only on the human's explicit go at the act; this verb checks no go: the gate binds the act, never the doorway
-exit codes: 0 removed; 1 a refusal (a usage error, a malformed name, a package not installed); 2 an environment or I/O failure (a missing uninstaller, a read-only root, a failed lifecycle action or recompose)
+exit codes: 0 removed; 1 a refusal (a usage error, a malformed name, a package not installed, both data flags, both old copy flags, no answer); 2 an environment or I/O failure (a missing uninstaller, a read-only root, a failed lifecycle action, delete, or recompose, a driver's move back that failed and was unwound, or a driver finish that failed after the move, the package then kept installed and not configured); 129, 130, 143 a driver run stopped by a hangup, interrupt, or termination and unwound (one the engine receives is relayed to the run, whose unwind it waits for)
 EOF
       ;;
     list)
@@ -2120,6 +2151,7 @@ EOF
 usage: ctx package list
 prints one line per package the workspace configuration declares or the install records hold, in name order: installed with its version and modules (an alias read as <alias> (alias of <module>)), or declared and not installed; then one closing line counting the declared, the installed, and the drift
 drift: a package declared but not installed, installed but not declared, or installed at a version other than its declared source's; a record without module lines reads as plainly installed, never an error
+kept data: one line per namespace whose data an uninstall kept, before the closing line: the package that kept it, its key count (unknown when the count fails), and the two ways forward, installing that package again or deleting the data with ctx package uninstall <package> --delete-data
 read only: it writes nothing and installs nothing, and needs no go
 exit codes: 0 the listing; 1 an argument; 2 an install record area or record that exists but cannot be read
 EOF
@@ -2305,19 +2337,74 @@ package_run_probe() {
   return 0
 }
 
-# package_run <install|uninstall> <package root or name> <as pairs>: one private script run
-# as a child from the workspace root, its streams and exit code passed through
+# package_run <install|uninstall> <package root or name> <as pairs> [<data answer>]: one
+# private script run as a child from the workspace root, its streams and exit code passed
+# through; an uninstall carries the data answer (keep or delete) as CTX_PACKAGE_DATA, and
+# either verb the old copy answer (backup or delete, from --backup-old or --delete-old) as
+# CTX_PACKAGE_OLD and an install the driver settings (one <key>=<value> line per
+# --driver-config) as CTX_PACKAGE_DRIVER_CONFIG
 package_run() {
-  ( cd "$root" || exit 2
-    CTX_ROOT=$root
-    CTX_PACKAGE_AS=$3
-    export CTX_ROOT CTX_PACKAGE_AS
-    exec sh "$dir/package-$1" "$2" )
+  ( package_run_exec "$@" )
+}
+
+# package_run_exec: package_run's body, which replaces the process it runs in by the script
+package_run_exec() {
+  pr_old=${pk_old:-}
+  pr_old=${pr_old#--}
+  cd "$root" || exit 2
+  CTX_ROOT=$root
+  CTX_PACKAGE_AS=$3
+  CTX_PACKAGE_DATA=${4:-}
+  CTX_PACKAGE_OLD=${pr_old%-old}
+  CTX_PACKAGE_DRIVER_CONFIG=${pk_dcfg:-}
+  export CTX_ROOT CTX_PACKAGE_AS CTX_PACKAGE_DATA CTX_PACKAGE_OLD CTX_PACKAGE_DRIVER_CONFIG
+  exec sh "$dir/package-$1" "$2"
+}
+
+# package_is_driver <install|uninstall> <package root or name>: rc 0 when the run moves a
+# record: an install's manifest declares kind driver, an uninstall's install record does
+package_is_driver() {
+  if [ "$1" = install ]; then
+    [ -f "$2/manifest" ] && package_file_parse "$2/manifest" 2>/dev/null && [ "$pf_kind" = driver ]
+  else
+    awk '$1 == "kind" && NF == 2 { k = $2; exit } END { exit(k == "driver" ? 0 : 1) }' "$dir/extensions/.state/${2##*/}.files" 2>/dev/null
+  fi
+}
+
+# package_exec <install|uninstall> <package root or name> <as pairs> [<data answer>]:
+# package_run, held for a driver package's run: the script runs in the background with the
+# engine's stdin, a hangup, interrupt, or termination of the engine is relayed to it as TERM
+# (a background child ignores an interrupt), and the engine waits for its unwind and exits
+# 129, 130, or 143 itself; a feature package's script runs in the foreground, as before
+package_exec() {
+  package_is_driver "$1" "$2" || { package_run "$@"; return; }
+  pe_sig=""
+  pe_new=0
+  trap 'pe_sig=129; pe_new=1' HUP
+  trap 'pe_sig=130; pe_new=1' INT
+  trap 'pe_sig=143; pe_new=1' TERM
+  exec 9<&0
+  package_run_exec "$@" <&9 9<&- &
+  pe_pid=$!
+  exec 9<&-
+  pe_rc=0
+  while kill -0 "$pe_pid" 2>/dev/null; do
+    if [ "$pe_new" -eq 1 ]; then
+      pe_new=0
+      kill -TERM "$pe_pid" 2>/dev/null
+    fi
+    wait "$pe_pid"
+    pe_rc=$?
+  done
+  trap - HUP INT TERM
+  [ -z "$pe_sig" ] || exit "$pe_sig"
+  return "$pe_rc"
 }
 
 # package_declared_install: the bare install, every declared package not yet installed, each
-# with its declared flags, after every pending line passed its checks; nothing pending prints
-# one plain line rc 0, and the first failure stops naming the package
+# with its declared flags, after every pending line passed its checks; a driver package is
+# left out with one line each, since its install moves the record and so runs only by name;
+# nothing pending prints one plain line rc 0, and the first failure stops naming the package
 package_declared_install() {
   pdi_all=$(pkg_decl_lines) || { ctx_err "package install: cannot read the workspace configuration"; exit 2; }
   if [ -z "$pdi_all" ]; then
@@ -2328,6 +2415,7 @@ package_declared_install() {
   pdi_nl='
 '
   pdi_seen=" "
+  pdi_skip=0
   while read -r pdi_name pdi_src pdi_flags; do
     case "$pdi_name" in
       ""|.*|*[!A-Za-z0-9._-]*) ctx_err "package install: malformed declared package name 'package.$pdi_name' (letters, digits, dot, underscore, hyphen; not starting with a dot)"; exit 1 ;;
@@ -2360,19 +2448,32 @@ package_declared_install() {
       fi
       pdi_as="${pdi_as:+$pdi_as }${pdi_f#--as=}"
     done
+    if ! package_file_parse "$pdi_root/manifest" 2>/dev/null; then
+      ctx_err "package install: package.$pdi_name: malformed package manifest: $PF_ERROR"
+      exit 1
+    fi
+    if [ "$pf_kind" = driver ]; then
+      printf "package install: skipped the driver package '%s': a driver package installs only by name (ctx package install %s), since its install moves the record\n" "$pdi_name" "$pdi_name"
+      pdi_skip=1
+      continue
+    fi
     pdi_plan="$pdi_plan$pdi_name	$pdi_root	$pdi_as$pdi_nl"
   done <<EOF
 $pdi_all
 EOF
   if [ -z "$pdi_plan" ]; then
-    printf 'package install: nothing to install: every declared package is installed\n'
+    if [ "$pdi_skip" -eq 1 ]; then
+      printf 'package install: nothing to install: every other declared package is installed\n'
+    else
+      printf 'package install: nothing to install: every declared package is installed\n'
+    fi
     exit 0
   fi
   [ -f "$dir/package-install" ] || { ctx_err "package install: missing package installer"; exit 2; }
   pdi_tab=$(printf '\t')
   while IFS="$pdi_tab" read -r pdi_name pdi_root pdi_as; do
     [ -n "$pdi_name" ] || continue
-    package_run install "$pdi_root" "$pdi_as"
+    package_exec install "$pdi_root" "$pdi_as"
     pdi_rc=$?
     if [ "$pdi_rc" -ne 0 ]; then
       ctx_err "package install: the declared package '$pdi_name' did not install (rc $pdi_rc); the packages before it stay installed"
@@ -2404,6 +2505,7 @@ package_list() {
     fi
   done
   pl_decl=$(pkg_decl_lines 2>/dev/null)
+  pl_kept=$(package_kept_lines)
   pl_names=$(
     { printf '%s\n' "$pl_decl" | awk 'NF { print $1 }'
       for pl_f in "$dir"/extensions/.state/*.files; do
@@ -2413,6 +2515,7 @@ package_list() {
       done
     } | LC_ALL=C sort -u)
   if [ -z "$pl_names" ]; then
+    [ -z "$pl_kept" ] || printf '%s\n' "$pl_kept"
     printf 'package list: no package is declared or installed\n'
     exit 0
   fi
@@ -2459,8 +2562,34 @@ package_list() {
   done <<EOF
 $pl_names
 EOF
+  [ -z "$pl_kept" ] || printf '%s\n' "$pl_kept"
   printf 'package list: %s declared, %s installed, %s drift\n' "$pl_nd" "$pl_ni" "$pl_nx"
   exit 0
+}
+
+# package_kept_lines: one line per namespace whose data a package uninstall kept, read from
+# the storage core's data reader and counted through the configured driver (unknown when
+# the count fails), naming the package that kept it and the two ways forward and no storage
+# or record path; the reader's own lines (a shadowed or unreadable kept declaration) pass to
+# stderr
+package_kept_lines() {
+  pkl_sd=$dir/storage/scripts/store-data
+  pkl_sc=$dir/storage/scripts/store-clear
+  [ -x "$pkl_sd" ] && [ -d "$dir/extensions/.state/retained" ] || return 0
+  ( cd "$root" || exit 0
+    CTX_STORE_WORKSPACE=$root "$pkl_sd" --retained | while IFS='	' read -r pkl_ns pkl_pkg pkl_orig; do
+      [ -n "$pkl_ns" ] || continue
+      pkl_n=$(CTX_ROOT=$root "$pkl_sc" count "$pkl_ns" 2>/dev/null) || pkl_n=""
+      case "$pkl_n" in
+        "") pkl_k="key count unknown" ;;
+        1) pkl_k="1 key" ;;
+        *) pkl_k="$pkl_n keys" ;;
+      esac
+      pkl_m=""
+      [ "$pkl_orig" = "$pkl_ns" ] || pkl_m=", module $pkl_orig"
+      printf "kept data %s: kept by %s%s (%s); install %s again to use it, or delete it with ctx package uninstall %s --delete-data\n" \
+        "$pkl_ns" "$pkl_pkg" "$pkl_m" "$pkl_k" "$pkl_pkg" "$pkl_pkg"
+    done )
 }
 
 # package_catalog: read-only catalog listing with optional --names, --no-probe, --json.
@@ -2711,7 +2840,7 @@ package_info() {
   done
   package_run_probe "$pi_name" "$pi_pkg" "$pf_version" "$pi_noprobe"
   if [ "$pi_json" -eq 1 ]; then
-    PI_NAME="$pi_name" PI_VER="$pf_version" PI_KIND="$pf_kind" PI_DRV="$pf_driver" \
+    PI_NAME="$pi_name" PI_VER="$pf_version" PI_KIND="$pf_kind" PI_DRV="$pf_driver" PI_FMT="$pf_format" \
       PI_CAT="$pf_category" PI_SUM="$pf_summary" PI_PITCH="$pf_pitch" PI_WHEN="$pf_when" \
       PI_NEEDS="$pf_needs" PI_TAGS="$pf_tags" PI_PARTS="$pf_parts" PI_DESC="$pf_desc" \
       PI_HAS_DESC="$pf_seen_desc" PI_INST="$pi_inst" PI_IVER="$pi_iver" PI_DECL="$pi_is_decl" \
@@ -2773,8 +2902,9 @@ package_info() {
         inst = (ENVIRON["PI_INST"] == "1" ? "true" : "false")
         decl = (ENVIRON["PI_DECL"] == "1" ? "true" : "false")
         pcode = (ENVIRON["PI_PCODE"] == "" ? "null" : ENVIRON["PI_PCODE"])
-        printf "{\"name\":%s,\"version\":%s,\"kind\":%s,\"driver\":%s,\"category\":%s,\"summary\":%s,\"pitch\":%s,\"when\":%s,\"needs\":%s,\"tags\":%s,\"parts\":%s,\"description\":%s,\"installed\":%s,\"installed_version\":%s,\"declared\":%s,\"lifecycle\":%s,\"probe\":{\"status\":%s,\"code\":%s,\"lines\":%s}}\n", \
+        printf "{\"name\":%s,\"version\":%s,\"kind\":%s,\"driver\":%s,\"format\":%s,\"category\":%s,\"summary\":%s,\"pitch\":%s,\"when\":%s,\"needs\":%s,\"tags\":%s,\"parts\":%s,\"description\":%s,\"installed\":%s,\"installed_version\":%s,\"declared\":%s,\"lifecycle\":%s,\"probe\":{\"status\":%s,\"code\":%s,\"lines\":%s}}\n", \
           jq(ENVIRON["PI_NAME"]), jq(ENVIRON["PI_VER"]), jq(ENVIRON["PI_KIND"]), jopt(ENVIRON["PI_DRV"]), \
+          (ENVIRON["PI_FMT"] == "" ? "null" : ENVIRON["PI_FMT"]), \
           jopt(ENVIRON["PI_CAT"]), jq(ENVIRON["PI_SUM"]), jopt(ENVIRON["PI_PITCH"]), jopt(ENVIRON["PI_WHEN"]), \
           jopt(ENVIRON["PI_NEEDS"]), tarr, parr, jdesc, inst, jopt(ENVIRON["PI_IVER"]), decl, harr, \
           jq(ENVIRON["PI_PSTATUS"]), pcode, larr
@@ -2800,6 +2930,7 @@ package_info() {
   printf 'version: %s\n' "$pf_version"
   printf 'kind: %s\n' "$pf_kind"
   [ -z "$pf_driver" ] || printf 'driver: %s\n' "$pf_driver"
+  [ -z "$pf_format" ] || printf 'format: %s\n' "$pf_format"
   [ -z "$pf_category" ] || printf 'category: %s\n' "$pf_category"
   printf 'summary: %s\n' "$pf_summary"
   [ -z "$pf_pitch" ] || printf 'pitch: %s\n' "$pf_pitch"
@@ -2890,12 +3021,56 @@ package_builtin() {
   # installer as CTX_PACKAGE_AS, space separated <module>=<alias> pairs
   pk_as=""
   pk_as_seen=" "
+  pk_data=""
+  pk_old=""
+  pk_dcfg=""
+  pk_nl='
+'
   pk_n=$#
   while [ "$pk_n" -gt 0 ]; do
     pk_a=$1
     shift
     pk_n=$((pk_n - 1))
     case "$pk_a" in
+      --backup-old|--delete-old)
+        case "$pk_old" in
+          "") ;;
+          "$pk_a") ctx_err "package $pk_verb: $pk_a is given twice"; exit 1 ;;
+          *) ctx_err "package $pk_verb: --backup-old and --delete-old together; give the one answer the human chose"; exit 1 ;;
+        esac
+        pk_old=$pk_a
+        ;;
+      --driver-config=*)
+        if [ "$pk_verb" != install ]; then
+          ctx_err "package $pk_verb: --driver-config sets a driver package's setting at its install; an uninstall takes none"
+          exit 1
+        fi
+        pk_pair=${pk_a#--driver-config=}
+        case "$pk_pair" in
+          [A-Za-z]*=?*) ;;
+          *) ctx_err "package install: malformed $pk_a (--driver-config=<key>=<value>)"; exit 1 ;;
+        esac
+        pk_k=${pk_pair%%=*}
+        case "$pk_k" in
+          *[!A-Za-z0-9_.-]*) ctx_err "package install: malformed $pk_a (--driver-config=<key>=<value>)"; exit 1 ;;
+        esac
+        case "$pk_pair" in
+          *"$pk_nl"*) ctx_err "package install: malformed $pk_a (a value holds no line break)"; exit 1 ;;
+        esac
+        pk_dcfg="$pk_dcfg$pk_pair$pk_nl"
+        ;;
+      --keep-data|--delete-data)
+        if [ "$pk_verb" != uninstall ]; then
+          ctx_err "package $pk_verb: $pk_a answers an uninstall's data question; an install takes no data answer"
+          exit 1
+        fi
+        case "$pk_data" in
+          "") ;;
+          "$pk_a") ctx_err "package uninstall: $pk_a is given twice"; exit 1 ;;
+          *) ctx_err "package uninstall: --keep-data and --delete-data together; give the one answer the human chose"; exit 1 ;;
+        esac
+        pk_data=$pk_a
+        ;;
       --as=*)
         if [ "$pk_verb" != install ]; then
           ctx_err "package $pk_verb: --as names an install alias; an uninstall takes the installed package alone"
@@ -2919,6 +3094,10 @@ package_builtin() {
     esac
   done
   if [ "$pk_verb" = install ] && [ $# -eq 0 ] && [ -z "$pk_as" ]; then
+    if [ -n "$pk_dcfg" ]; then
+      ctx_err "package install: --driver-config sets one driver package's setting; name that package"
+      exit 1
+    fi
     package_declared_install
   fi
   if [ $# -ne 1 ]; then
@@ -2967,14 +3146,19 @@ package_builtin() {
     ctx_err "package $pk_verb: cannot enter workspace root: $root"
     exit 2
   fi
-  package_run "$pk_verb" "$pk_arg" "$pk_as"
+  pk_name=${pk_arg##*/}
+  pk_was=0
+  [ -f "$dir/extensions/.state/$pk_name.files" ] && pk_was=1
+  pk_data=${pk_data#--}
+  package_exec "$pk_verb" "$pk_arg" "$pk_as" "${pk_data%-data}"
   pk_rc=$?
   [ "$pk_rc" -eq 0 ] || exit "$pk_rc"
   # the declaration follows the act: an install writes its package.<name> line (the source as
   # given, a path inside the workspace kept relative to its root, and every alias the record
-  # now holds), an uninstall removes it
-  pk_name=${pk_arg##*/}
+  # now holds), an uninstall removes it; an uninstall of a package that was not installed
+  # (its kept data deleted, or kept) leaves the configuration as it found it
   if [ "$pk_verb" = uninstall ]; then
+    [ "$pk_was" -eq 1 ] || exit 0
     pkg_decl_write "$pk_name" || { ctx_err "package uninstall: removed, but the workspace configuration's package.$pk_name line could not be removed"; exit 2; }
     exit 0
   fi
@@ -3006,7 +3190,7 @@ usage: ctx search "<query>" [--type=<type>] [--mode=<mode>] [--limit=N] [--json]
        ctx search --modes [--json]
        ctx search config <subcommand> [args...]
 runs every module that carries a verb named search, in discovery order, with the shared flags only (a module's own scope flags are never forwarded), and prints one group per module: its rows (type, address, snippet, read, label), failed with its reason, or not searched; no ranking crosses modules, and zero hits is an answer; a query cannot begin with a dash, which reads as a flag and refuses (no end of options marker, a stated limit)
---limit= is a positive whole number per module (default 20); --mode= defaults to exact and takes a registered mode (ctx search --modes lists them), a module that cannot answer it falling back to exact, which its group says; --type= passes to every module; --module=<name> searches one module; only the --flag=value form is taken
+--limit= is a positive whole number per module (default 20); --mode= takes exact, the one registered mode and the default (ctx search --modes lists it); --type= passes to every module; --module=<name> searches one module; only the --flag=value form is taken
 each module runs bounded by search.timeout in the workspace configuration (a positive whole number of seconds, default 10); a module past it is stopped with every descendant one process snapshot finds, and reads failed (a process forked after the snapshot, or reparented before it by a double fork, may escape, a stated limit)
 ctx search config manages search settings (load, get, set, unset, schema) in the workspace configuration; to search for the literal word 'config', put a flag first (for example, ctx search --mode=exact config)
 exit codes: 0 every searched module answered (zero hits included, or no module carries a search verb); 1 a bad argument; 2 a module failed, the other groups still printed
@@ -3151,7 +3335,6 @@ END {
     exit
   }
   printf "%s%s: %d of %d", m, (ENVIRON["SG_ALIAS"] != "" ? " (alias of " ENVIRON["SG_ALIAS"] ")" : ""), NR_, TOTAL
-  if (MODE != ENVIRON["SG_ASKED"]) printf ", mode %s (asked %s)", MODE, ENVIRON["SG_ASKED"]
   printf "\n"
   for (i = 1; i <= NR_; i++) {
     printf "  %s %s%s: %s\n", txt(V[i, "type"]), txt(V[i, "address"]), (HAS[i, "label"] ? " [" txt(V[i, "label"]) "]" : ""), txt(V[i, "snippet"])

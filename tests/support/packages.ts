@@ -54,12 +54,12 @@ export function writeManifest(pkg: string, version = '1.0.0'): void {
   if (entries(join(ext, 'laws')).length > 0) parts.push('laws laws');
   const name = pkg.split('/').pop();
   const head = [`# summary: fixture package ${name}`, `# version: ${version}`, `# kind: ${driver ? 'driver' : 'feature'}`];
-  if (driver) head.push(`# driver: ${driver}`);
+  if (driver) head.push(`# driver: ${driver}`, '# format: 1');
   writeFileSync(join(pkg, 'manifest'), [...head, ...parts.map((p) => `# part: ${p}`)].join('\n') + '\n');
 }
 
 export function install(sb: string, pkg: string): Promise<Run> {
-  return exec('./.contexture/ctx', ['package', 'install', pkg], { cwd: sb });
+  return exec('./.contexture/ctx', ['package', 'install', pkg], { cwd: sb, timeout: 600_000 });
 }
 
 export function installPkg(sb: string, pkg: string, version = '1.0.0'): Promise<Run> {
@@ -67,8 +67,10 @@ export function installPkg(sb: string, pkg: string, version = '1.0.0'): Promise<
   return install(sb, pkg);
 }
 
-export function uninstall(sb: string, target: string): Promise<Run> {
-  return exec('./.contexture/ctx', ['package', 'uninstall', target], { cwd: sb });
+// uninstall: ctx package uninstall with the data answer given ahead (--keep-data or
+// --delete-data), or none, so a package holding data meets the question
+export function uninstall(sb: string, target: string, answer: '' | '--keep-data' | '--delete-data' = '', env: Record<string, string> = {}): Promise<Run> {
+  return exec('./.contexture/ctx', ['package', 'uninstall', target, ...(answer ? [answer] : [])], { cwd: sb, env, timeout: 600_000 });
 }
 
 export function catalogCopy(sb: string, plugin: string): string {

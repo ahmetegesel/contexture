@@ -1,2 +1,0 @@
-database: optional path
-  SQLite database path for the fts5 driver (uses the driver's built-in store path when unset).

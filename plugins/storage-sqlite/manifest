@@ -1,0 +1,13 @@
+# summary: the SQLite storage driver
+# version: 1.6.0
+# kind: driver
+# driver: sqlite
+# format: 6
+# part: driver storage/drivers/sqlite
+# category: storage
+# pitch: the record and the docs corpus in one SQLite database, answering exactly what posix answers
+# when: you want the store in one database file on a single machine instead of plain files
+# needs: sqlite3 3.44 or later
+# tags: storage sqlite database driver
+# description:
+# Contract 4 store-only SQLite driver in WAL mode, a twin of the posix driver held in one database: keys and values in one table, the core key and value rule, the shared namespace lock, all or none batches, and exact search alone.

@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { FTS5_DB } from '../support/drawer';
+import { SQLITE_DB } from '../support/drawer';
 import { ROOT } from '../support/root';
 import { sandbox } from '../support/sandbox';
 import { atTop, git, kids, text } from './walk';
@@ -138,7 +138,7 @@ describe.concurrent('the Updating path', () => {
   it('the payload compare prints a leftover module folder and the retired templates folder, and drops only the workspace-owned top folders, catalog plugins, and files', () => {
     const leftovers = ['Only in .contexture/modules: session', 'Only in .contexture/modules: lane', 'Only in .contexture: templates'];
     const owned = OWNED_FOLDERS.map((f) => `Only in .contexture: ${f}`);
-    const db = basename(FTS5_DB);
+    const db = basename(SQLITE_DB);
     const files = ['plugins', 'config', 'storage.conf', db, `${db}-wal`, `${db}-shm`, '.DS_Store'].map((f) => `Only in .contexture: ${f}`);
     expect(compareFilter()).not.toBe('');
     expect(throughFilter(compareFilter(), [...leftovers, ...owned, ...files])).toEqual(leftovers);

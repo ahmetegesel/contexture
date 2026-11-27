@@ -26,7 +26,7 @@ describe.concurrent('the changed-files map selects a project for every tracked p
   });
 
   it('a plugin manifest or payload change selects governance, which holds the plugin version check; plugin tests do not', () => {
-    expect(projectsOf('plugins/storage-fts5/manifest')).toContain('governance');
+    expect(projectsOf('plugins/storage-sqlite/manifest')).toContain('governance');
     expect(projectsOf('plugins/toolchain-filters/.contexture/extensions/modules/toolchain-filters/filters/x')).toContain('governance');
     expect(projectsOf('plugins/starter-rhythms/.contexture/extensions/rhythms/x.md')).toContain('governance');
     expect(projectsOf('plugins/toolchain-filters/tests/x.test.ts')).not.toContain('governance');

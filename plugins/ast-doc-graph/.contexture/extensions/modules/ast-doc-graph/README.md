@@ -95,14 +95,27 @@ inline delta run with `--no-reconcile`, which keeps the reconcile's refusals
 but removes and adds nothing, so only its newer files sync; the query prints
 one stderr notice naming the guess and the full index that records the root.
 
-The docs extractor reads the corpus as files: `bin/ast-doc-index` lists the
-regular markdown files of the workspace's `docs/` folder (else the
-repository root outside the exclusion folders) and
-`extractors/docs/extract-docs.ts` parses each listed file, never through
-`ctx docs` or the storage driver; a walk that finds no
-markdown yields empty docs streams, never a refusal. Under the docs-discipline
-files driver that folder is the corpus; under a store driver it holds none, so
-the graph carries no docs, rules, or pitfalls (the code side is unaffected).
+The docs extractor reads the corpus as files: `bin/ast-doc-index` reads the
+docs namespace's declared root through the drawer's storage library
+(`store_roots`, the drawer's copy, then the base mirror, in a plain `sh` child
+apart from the index's own bash options) and lists the regular markdown files
+under it when it lies inside the repository root (`.contexture/docs/` for
+docs-discipline under posix); a root outside the repository root (`--repo-root`
+naming a child repository) leaves the docs side empty with one stderr notice,
+roots the library cannot list stop the index rc 2 before any write, and a
+drawer declaring no docs namespace (no docs module, or no storage core) walks
+the workspace's `docs/` folder, else the repository root outside the
+exclusion folders. The walk folder, relative to the repository root, reaches
+the extractor and the loader as `--docs-root` (stripped for the unit ids, so
+a doc reads `doc:<repo>:<slug>` at either root, and joined for a unit's file
+candidates), and the loader records it as `graph_meta.docs_root` on every
+full load, adding the column to a graph made before it; the query's freshness
+scan walks that folder beside the repository root, whose drawer exclusion
+hides it. `extractors/docs/extract-docs.ts` parses each listed file, never
+through `ctx docs` or the storage driver; a walk that finds no markdown yields
+empty docs streams, never a refusal. Under a store driver the declared root
+holds no file, so the graph carries no docs, rules, or pitfalls (the code side
+is unaffected).
 This files-only limit stands until the extraction routes through `ctx docs`.
 
 Launchers resolve their runner dynamically: a project-local `tsx`, `tsx` on
@@ -152,6 +165,7 @@ the refusal, the variable by package folder and by entry file, and the
 refusal of a variable without the API; a refusal case skips, naming the
 need, when a TypeScript 5 or 6 is reachable from the module or the sandbox
 ancestors.
+`integration/docs-root` proves the walk at the declared root: at the drawer root the same unit ids, rules, pitfalls, and governance edges a root `docs` walk gives, an adopter page in `docs/` unread, the walk folder recorded, a corpus edit refreshed by the query, a removal leaving on a delta, the roots refusal writing no database, the outside root notice, the generic walk when no docs namespace is declared, an old `graph_meta` answering and gaining its column under both loader branches, and the empty docs side under the sqlite store.
 `integration/docs-walk`, `rebuild`, and `removed-files` prove a rule or
 pitfall before any `@doc` line skipped with its one warning, a code-only
 repository indexing rc 0, a repository with no docs folder walking its root

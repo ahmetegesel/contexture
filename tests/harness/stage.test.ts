@@ -2,10 +2,10 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ctx } from '../support/ctx';
-import { FTS5_DB, RECORD_ROOT } from '../support/drawer';
+import { SQLITE_DB, RECORD_ROOT } from '../support/drawer';
 import { exec } from '../support/exec';
 import { ROOT } from '../support/root';
-import { DRIVERS, fts5Available, probeFts5, stage } from '../support/stage';
+import { DRIVERS, probeFts5, probeSqlite, sqliteAvailable, stage } from '../support/stage';
 
 function files(dir: string, skip: string): string[] {
   return readdirSync(dir, { recursive: true, encoding: 'utf8' })
@@ -34,7 +34,7 @@ describe('stage', () => {
   });
 
   for (const driver of DRIVERS) {
-    describe.skipIf(driver === 'fts5' && !fts5Available())(driver, () => {
+    describe.skipIf(driver === 'sqlite' && !sqliteAvailable())(driver, () => {
       it(`[plugins-r4] the staged ctx bootstraps a unit, lists it, and names the ${driver} driver`, async () => {
         const sb = stage(driver);
         const boot = await ctx(sb, 'unit', 'bootstrap', 'probe-unit', 'staging probe');
@@ -48,13 +48,14 @@ describe('stage', () => {
         expect({ name: resolved.name, descriptor: resolved.descriptor.driver }).toEqual({ name: driver, descriptor: driver });
         expect({
           posix: existsSync(join(sb, RECORD_ROOT, 'probe-unit')),
-          fts5: existsSync(join(sb, FTS5_DB)),
-        }).toEqual({ posix: driver === 'posix', fts5: driver === 'fts5' });
+          sqlite: existsSync(join(sb, SQLITE_DB)),
+        }).toEqual({ posix: driver === 'posix', sqlite: driver === 'sqlite' });
       });
     });
   }
 
-  it('[plugins-r3] the fts5 probe reads absent where sqlite3 is not on PATH, so the fts5 cases skip', () => {
+  it('[plugins-r3] the sqlite and FTS5 probes read absent where sqlite3 is not on PATH, so the sqlite cases skip', () => {
+    expect(probeSqlite('/nonexistent')).toBe(false);
     expect(probeFts5('/nonexistent')).toBe(false);
   });
 });

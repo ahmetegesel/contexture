@@ -2,7 +2,7 @@ import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, renameSync
 import { basename, dirname, join, relative } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ctx } from '../support/ctx';
-import { configLock, FALLBACK_ROOT, FTS5_DB, leaks, lockPath, namespaceLock, RECORD_ROOT, unitLock } from '../support/drawer';
+import { configLock, FALLBACK_ROOT, SQLITE_DB, leaks, lockPath, namespaceLock, RECORD_ROOT, unitLock } from '../support/drawer';
 import { ROOT } from '../support/root';
 import { sandbox } from '../support/sandbox';
 import { stage } from '../support/stage';
@@ -147,7 +147,7 @@ describe.concurrent('the agent surface census: no shipped law, rhythm, or help n
     const planted = [
       `${RECORD_ROOT}/u/state`,
       `${FALLBACK_ROOT}/u`,
-      FTS5_DB,
+      SQLITE_DB,
       lockPath('/', unitLock('u')),
       lockPath('/', namespaceLock('unit')),
       namespaceLock('<namespace>'),
@@ -226,8 +226,8 @@ describe.concurrent('the agent surface census: no shipped law, rhythm, or help n
   it('a planted rhythm step leaves exactly one remainder', () => {
     const copy = copyFiles('surface-leaks-rhythm');
     const rhythm = 'plugins/docs-discipline/.contexture/extensions/rhythms/docs-drift.md';
-    appendFileSync(join(copy, rhythm), `  9. PLANT: open ${FTS5_DB} and read the units\n`);
-    expect(remainder(scanFiles(copy).hits)).toEqual([{ key: rhythm, line: `  9. PLANT: open ${FTS5_DB} and read the units` }]);
+    appendFileSync(join(copy, rhythm), `  9. PLANT: open ${SQLITE_DB} and read the units\n`);
+    expect(remainder(scanFiles(copy).hits)).toEqual([{ key: rhythm, line: `  9. PLANT: open ${SQLITE_DB} and read the units` }]);
   });
 
   it('a planted verb help header leaves exactly one remainder in each form printing it, the module detail and the verb\'s own --help', async () => {

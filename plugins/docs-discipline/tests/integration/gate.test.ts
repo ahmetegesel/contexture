@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { sandbox } from '@support/sandbox';
 import { fresh, seed } from '@support/snapshot';
-import { addModule, docs, gwWorkspace, SAMPLE, stageSeed } from '../support/corpus';
+import { addModule, CORPUS, docs, gwWorkspace, SAMPLE, stageSeed } from '../support/corpus';
 import { git, gitCommit, gitInit } from '../support/git';
 
 let staged: string;
@@ -22,7 +22,7 @@ beforeAll(async () => {
       mkdirSync(join(sb, '.contexture/modules/custom'), { recursive: true });
       writeFileSync(join(sb, '.contexture/modules/custom/run.sh'), 'echo custom\n');
       writeFileSync(join(sb, 'AGENTS.workspace.md'), '# overlay\n');
-      writeFileSync(join(sb, '.gitignore'), '.contexture/tmp/\n/docs/\n');
+      writeFileSync(join(sb, '.gitignore'), `.contexture/tmp/\n/${CORPUS}/\n`);
       await gitInit(sb);
       await git(sb, 'add', '-A');
       await gitCommit(sb, 'h0');
@@ -53,10 +53,13 @@ describe('the gate through ctx on posix', { concurrent: true }, () => {
     expect(readdirSync(watch)).toEqual([]);
   });
 
-  it('S18 [docs-module-r15] changes refuses on the files driver, naming git', async () => {
-    const r = await docs(fresh(gw), ['changes']);
-    expect(r.code).toBe(1);
-    expect(r.stderr).toContain('the corpus delta comes from git');
+  it('S18 [docs-module-r4, docs-module-r15] the changes verb is retired: the module lists no such verb and a call refuses rc 1', async () => {
+    const sb = fresh(gw);
+    const help = await docs(sb, ['help']);
+    expect(help.code).toBe(0);
+    expect(help.stdout).not.toMatch(/^ {2}changes\b/m);
+    const r = await docs(sb, ['changes']);
+    expect([r.code, r.stdout]).toEqual([1, '']);
   });
 
   it('S19 [docs-module-r16] git mode: a code change alone reads STALE once the doc is committed', async () => {

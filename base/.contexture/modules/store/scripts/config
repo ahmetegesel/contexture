@@ -8,7 +8,7 @@
 # usage: ctx store config get <key>
 # subcommand: set validate and write one storage setting to the workspace configuration
 # usage: ctx store config set <key> <value>
-# help: validates storage driver selection against the storage core before writing; emits a non-blocking notice on stderr when the active storage driver changes (existing data is not migrated automatically)
+# help: the driver belongs to the driver package lifecycle: set and unset of driver refuse, naming ctx package install and ctx package uninstall (an unset lands only while the configured driver resolves nothing); an installed driver package's setting refuses a change while its driver holds data or while the storage is being moved
 # subcommand: unset remove one storage setting from the workspace configuration
 # usage: ctx store config unset <key>
 # subcommand: schema show declared storage schema keys, types, defaults, and descriptions

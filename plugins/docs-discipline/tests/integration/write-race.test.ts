@@ -5,7 +5,7 @@ import { performance } from 'node:perf_hooks';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { libraryLock, lockPath } from '@support/drawer';
 import { launch } from '@support/exec';
-import { holdLock, sleepShim } from '@support/locks';
+import { holdLock, holdMove, sleepShim } from '@support/locks';
 import { pathPlant } from '@support/plants';
 import { sandbox } from '@support/sandbox';
 import { fresh } from '@support/snapshot';
@@ -13,26 +13,27 @@ import { store } from '@support/store';
 import { docs, putDocs, stageSeed } from '../support/corpus';
 import { fixture } from '../support/edit';
 
-const GIT = spawnSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim();
+const MKTEMP = spawnSync('sh', ['-c', 'command -v mktemp'], { encoding: 'utf8' }).stdout.trim();
 
-// the barrier plant: the git rev-parse HEAD stub, which a write runs as it stores the doc
-// (docs_store reads the head after docs_lock returned, LIB_LOCK set), marks the barrier folder
-// with its pid and waits there until a second writer marks it too (up to 4 s), or, given a
-// release file, until the test writes that file (up to 60 s)
+// the barrier plant: the mktemp stub, which the storage core's dispatch gate runs as it
+// stages the doc's bytes for the put (docs_store calls store_put after docs_lock returned,
+// LIB_LOCK set), marks the barrier folder with its pid and waits there until a second writer
+// marks it too (up to 4 s), or, given a release file, until the test writes that file (up to
+// 60 s)
 const barrier = (dir = sandbox('write-race-barrier'), release = ''): Record<string, string> => {
   const wait = release
     ? `    while [ ! -e "${release}" ] && [ "$n" -lt 600 ]; do sleep 0.1; n=$((n + 1)); done`
     : `    while [ "$(ls "${dir}" | wc -l)" -lt 2 ] && [ "$n" -lt 40 ]; do sleep 0.1; n=$((n + 1)); done`;
   return {
-    ...pathPlant('git', [
+    ...pathPlant('mktemp', [
       'case " $* " in',
-      '  *" rev-parse "*" HEAD "*)',
+      '  *store-gate.*)',
       `    : > "${dir}/$$"`,
       '    n=0',
       wait,
       '    ;;',
       'esac',
-      `exec "${GIT}" "$@"`,
+      `exec "${MKTEMP}" "$@"`,
     ].join('\n')),
   };
 };
@@ -136,5 +137,22 @@ describe('every docs write pipeline takes the library lock before its first read
     const r = await docs(sb, ['header', 'wtest', 'unit', '--add-keyword=unlocked']);
     expect([r.code, r.stdout, r.stderr]).toEqual([2, '', 'ctx docs header: the storage core library has no lock (need: the storage core of this release) (ERR_DRIVER_NOT_FOUND)\n']);
     expect(await stored(sb, 'unit')).toBe(before);
+  });
+});
+
+// a multi-doc verb (replace, ids) then names where it stopped, the docs before it landed
+const MOVING = (verb: string) =>
+  `ctx docs ${verb}: storage is being moved to another driver; retry after the move ends (ERR_STORAGE_LOCKED)\n` +
+  (verb === 'replace' || verb === 'ids' ? `ctx docs ${verb}: stopped at wtest/unit; the docs printed above landed (ERR_STORAGE_WRITE)\n` : '');
+
+describe('every docs write refuses while storage is being moved', { concurrent: true }, () => {
+  it.for(WRITES)('[the-engine-r-mvf01, docs-module-r18] ctx docs %s refuses rc 2 under its own name with the freeze\'s message and code, nothing written', async ([verb, args]) => {
+    const sb = fresh(wtest);
+    const before = await stored(sb, 'unit');
+    holdMove(sb, 'sqlite', 'live');
+    const r = await docs(sb, args);
+    expect([r.code, r.stdout, r.stderr]).toEqual([2, '', MOVING(verb)]);
+    expect(await stored(sb, 'unit')).toBe(before);
+    expect((await store(sb, 'posix').get('docs', 'wtest/held')).code).not.toBe(0);
   });
 });

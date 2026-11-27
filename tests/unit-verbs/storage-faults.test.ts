@@ -1,18 +1,19 @@
+import { spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { data } from '../support/data';
 import { launch } from '../support/exec';
 import { RECORD_ROOT, lockPath, namespaceLock, unitLock } from '../support/drawer';
-import { catShim, holdLock, readOnlyLockShim, sleepShim } from '../support/locks';
-import { ROOT_USER, chmodPlant, mktempPlant } from '../support/plants';
+import { catShim, holdLock, holdMove, readOnlyLockShim, sleepShim } from '../support/locks';
+import { ROOT_USER, chmodPlant, mktempPlant, pathPlant } from '../support/plants';
 import { fresh, seed } from '../support/snapshot';
 import { createLane, lane, must, run, seedUnit, unit, unitChecksum, waitFor } from '../support/unit';
 import { refused } from '../support/wire';
 
 const scratch = (sb: string): string[] => readdirSync(join(sb, '.contexture/tmp')).filter((f) => f !== 'locks').sort();
 const added = (sb: string, before: readonly string[]): string[] => scratch(sb).filter((f) => !before.includes(f));
-const RESIDUE = /^(backlog|knowledge|state|journal|payload|rec|fts5-ws)\./;
+const RESIDUE = /^(backlog|knowledge|state|journal|payload|rec|sqlite-ws)\./;
 const CEILING_MS = 60_000;
 
 function groupGone(pid: number): boolean {
@@ -113,6 +114,16 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     expect(r.stdout + r.stderr).toContain('ERR_STORAGE_LOCKED');
   });
 
+  it('[the-engine-r-mvf01, the-engine-r21]: while storage is being moved, a unit write and a lane write refuse rc 2 under their own labels with the freeze\'s message and code, every view unchanged', async () => {
+    const sb = fresh(sb0);
+    holdMove(sb, 'sqlite', 'live');
+    const moving = 'storage is being moved to another driver; retry after the move ends';
+    refused(await unit(sb, 'task', 'add', 'w-unit', 'w-c', '--objective=Task C'), 'task.add', 2, 'ERR_STORAGE_LOCKED', moving);
+    refused(await unit(sb, 'record', 'w-unit', '--what=never lands'), 'entry.record', 2, 'ERR_STORAGE_LOCKED', moving);
+    refused(await lane(sb, 'record', 'w-unit', 'w-lane', '--what=never lands'), 'lane.record', 2, 'ERR_STORAGE_LOCKED', moving);
+    expect(await unitChecksum(sb, 'w-unit', ['w-lane'])).toBe(untouched);
+  });
+
   it('KR-c [the-engine-r6, the-engine-r20]: a writer killed while waiting leaves one per-verb scratch root, which the next dispatch sweeps', async () => {
     const sb = fresh(sb0);
     const lock = unitLock('w-unit');
@@ -192,7 +203,7 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
 
   it.skipIf(ROOT_USER)('[the-record-r9, the-engine-r18, the-engine-r21] a write whose batch payload loses a line after its first action refuses rc 2 and lands none of it', async () => {
     const sb = fresh(sb0);
-    const b64 = join(sb, '.contexture/modules/unit/lib/b64');
+    const b64 = join(sb, '.contexture/storage/scripts/store-b64');
     copyFileSync(b64, `${b64}.real`);
     writeFileSync(b64, `#!/bin/sh\nfor b in "\${CTX_SCRATCH_ROOT:-.contexture/tmp}"/unit.*/batch; do\n  [ -s "$b" ] && chmod 400 "$b"\ndone\nexec "${b64}.real" "$@"\n`, { mode: 0o755 });
     const r = await unit(sb, 'task', 'complete', 'w-unit', 'w-b', '--evidence=never lands');
@@ -200,6 +211,24 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     expect(await unitChecksum(sb, 'w-unit', ['w-lane']), `rc ${r.code} [${r.stdout}] [${r.stderr}]`).toBe(untouched);
     expect([r.code, r.stdout], r.stderr).toEqual([2, '']);
     expect(r.stderr).toMatch(/^task\.complete: error: [^\n]+ \(ERR_STORAGE_WRITE\)\n$/);
+  });
+
+  const REAL_OD = spawnSync('sh', ['-c', 'command -v od'], { encoding: 'utf8' }).stdout.trim();
+  const ENCODER_FAULTS: readonly [string, string][] = [
+    ['fails after its first line', `'${REAL_OD}' "$@" | head -n 1\nexit 1`],
+    ['succeeds after its first line', `'${REAL_OD}' "$@" | head -n 1`],
+    ['reads one byte more than the file holds', `'${REAL_OD}' "$@"\nprintf ' 0\\n'`],
+  ];
+  const ENCODED_WRITES: readonly [string, string[], string, string][] = [
+    ['a task add', ['unit', 'task', 'add', 'w-unit', 'w-c', '--objective=Task C'], 'task.add', 'w-unit/backlog'],
+    ['a lane record', ['lane', 'record', 'w-unit', 'w-lane', '--what=never lands'], 'lane.record', 'w-unit/lanes/w-lane/journal'],
+  ];
+
+  it.for(ENCODER_FAULTS.flatMap(([how, od]) => ENCODED_WRITES.map(([what, argv, fn, key]) => [what, how, od, argv, fn, key] as const)))('[the-record-r9, the-engine-r19] %s whose encoder\'s od %s refuses rc 2 naming the key, the unit unchanged', async ([, , od, argv, fn, key]) => {
+    const sb = fresh(sb0);
+    const r = await run(sb, argv, { env: pathPlant('od', od) });
+    expect(await unitChecksum(sb, 'w-unit', ['w-lane']), `rc ${r.code} [${r.stdout}] [${r.stderr}]`).toBe(untouched);
+    refused(r, fn, 2, 'ERR_STORAGE_WRITE', `cannot encode the staged value of '${key}': its encoder did not read it whole`);
   });
 });
 

@@ -1,21 +1,52 @@
 #!/bin/sh
 # package-uninstall: the package overlay remover, the private core script behind
-# ctx package uninstall <package>, which execs it with CTX_ROOT set to its own
-# workspace. Run it on the human's go at the act. Usage: package-uninstall
-# <package-root|package-name>; CTX_ROOT names the workspace (default: the
-# package root's ../.., or the current directory for a bare package name).
+# ctx package uninstall <package> [--keep-data | --delete-data], which execs it with CTX_ROOT
+# set to its own workspace and the data answer in CTX_PACKAGE_DATA (keep or delete). Run it
+# on the human's go at the act. Usage: package-uninstall <package-root|package-name>;
+# CTX_ROOT names the workspace (default: the package root's ../.., or the current directory
+# for a bare package name).
 #
-# The uninstall runs the installed module folders' uninstall part hooks in
-# module-name order, then removes the overlay files the package's record
-# (.contexture/extensions/.state/<package>.files) lists, removes the empty
-# directories they leave, and removes the record. A file changed after install
-# (content, mode, type, or one already gone) is preserved and reported, never
-# removed; the record is removed all the same, so a later install refuses the
-# preserved path as an existing non-recorded file. The core is never touched.
-# Exit codes: 0 removed; 1 a refusal (no record); 2 an environment or I/O
-# failure (a read-only root removes nothing; a failing part hook removes
-# nothing; a failing compose after the removal leaves the package removed and
-# the law layer stale, reported loudly).
+# The data answer comes first, before anything runs that writes. The package's data
+# namespaces are its installed modules that carry a data file (each named by its installed
+# name) and the data it kept at an earlier uninstall; each one holding a key, or whose key
+# list fails, needs the human's answer: the flag, else the question when stdin and stderr
+# are both terminals (or the CTX_PACKAGE_TTY seam), else a refusal rc 1 naming each
+# namespace with its key count and both flags, with nothing written. An empty namespace is
+# neither asked about nor kept.
+#
+# Then the stashed package uninstall hook runs, then the installed module folders'
+# uninstall part hooks in ascending installed name order. Then the answer acts while each
+# module's own data file still declares its namespace: keep retains each data carrying
+# module's declaration (a byte copy of its data file and its origin: the package, version,
+# and module line) in the install record area under its installed name, so the namespace
+# stays declared and moves with the record; delete removes every key of each namespace
+# through the configured driver (the storage core's store-clear), a failure stopping rc 2
+# with nothing removed, so a rerun finishes, and removes the package's kept declarations.
+# Then the overlay files the package's record (.contexture/extensions/.state/<package>.files)
+# lists go, the empty directories they leave, the record, and the stash. A file changed after
+# install (content, mode, type, or one already gone) is preserved and reported, never
+# removed, save a kept module's data file, whose bytes the kept declaration holds; the
+# record is removed all the same, so a later install refuses the preserved path as an
+# existing non-recorded file. The core is never touched. One outcome line per namespace
+# follows the removal line.
+#
+# A package that is not installed but kept data at an earlier uninstall takes the same
+# answer: delete removes every key of each kept namespace and then its declaration, keep
+# changes nothing.
+#
+# Exit codes: 0 removed; 1 a refusal (no record and no kept data, a malformed data answer,
+# no answer); 2 an environment or I/O failure (a read-only root removes nothing; a failing
+# part hook removes nothing; a failing delete or keep removes nothing; a failing compose
+# after the removal leaves the package removed and the law layer stale, reported loudly).
+#
+# A driver package's uninstall (docs/the-engine.md, Moving a record between backends) first
+# refuses a CTX_STORAGE_ variable, makes its run folder, reads the move state with crash
+# recovery, and settles the old copy answer (CTX_PACKAGE_OLD) over the driver's own storage;
+# after the stashed hook, the configured driver's record moves back into posix under the
+# storage moving freeze (the copy, storage.driver unset, the check, the release), any failure
+# or signal through the check unwinding it with nothing removed; then the driver's finish hook
+# backs up or deletes its storage (a failure keeps the package installed, not configured, rc 2)
+# and its settings are unset. A driver package installed and not configured moves nothing.
 set -u
 
 err() { printf 'package-uninstall: %s\n' "$*" >&2; }
@@ -37,6 +68,11 @@ case "$pkg_name" in
 esac
 case "$pkg_name" in
   *[!A-Za-z0-9._-]*) die 1 "malformed package name '$pkg_name' (letters, digits, dot, underscore, hyphen; not starting with a dot)" ;;
+esac
+data_answer=${CTX_PACKAGE_DATA:-}
+case "$data_answer" in
+  ""|keep|delete) ;;
+  *) die 1 "malformed data answer '$data_answer' (keep or delete)" ;;
 esac
 
 if [ -n "${CTX_ROOT:-}" ]; then
@@ -60,10 +96,40 @@ ext_root=$ws_root/.contexture/extensions
 state_root=$ext_root/.state
 state_file=$state_root/$pkg_name.files
 stash_uninstall=$state_root/$pkg_name.uninstall
+kept_root=$state_root/retained
+clear_bin=$ws_root/.contexture/storage/scripts/store-clear
+sd_bin=$ws_root/.contexture/storage/scripts/store-data
 
-[ -f "$state_file" ] || die 1 "package '$pkg_name' is not installed (no record at .contexture/extensions/.state/$pkg_name.files)"
-[ -w "$state_root" ] && [ -x "$state_root" ] || die 2 "the install record area is not writable: .contexture/extensions/.state (nothing removed)"
-[ -w "$ext_root" ] && [ -x "$ext_root" ] || die 2 "the extension root is not writable: .contexture/extensions (nothing removed)"
+case "$0" in */*) pu_home=${0%/*} ;; *) pu_home=. ;; esac
+pu_lib=""
+for _c in "$pu_home/config-lib" "$ws_root/.contexture/config-lib"; do
+  if [ -f "$_c" ]; then pu_lib=$_c; break; fi
+done
+[ -n "$pu_lib" ] || die 2 "the configuration library is not installed beside the uninstaller"
+. "$pu_lib"
+
+# the kept data of this package: every kept declaration whose origin names the package
+own_kept() {
+  [ -d "$kept_root" ] || return 0
+  for _o in "$kept_root"/*/origin; do
+    [ -f "$_o" ] || continue
+    _k=${_o%/origin}
+    _k=${_k##*/}
+    awk -v p="$pkg_name" -v k="$_k" '
+      $1 == "package" && NF == 2 && pk == "" { pk = $2 }
+      $1 == "module" && NF == 3 && $2 == k && m == "" { m = $3 }
+      END { if (pk == p && m != "") print k " " m " kept" }' "$_o" 2>/dev/null
+  done
+}
+
+installed=0
+[ -f "$state_file" ] && installed=1
+if [ "$installed" -eq 0 ]; then
+  [ -n "$(own_kept)" ] || die 1 "package '$pkg_name' is not installed (no record at .contexture/extensions/.state/$pkg_name.files)"
+else
+  [ -w "$state_root" ] && [ -x "$state_root" ] || die 2 "the install record area is not writable: .contexture/extensions/.state (nothing removed)"
+  [ -w "$ext_root" ] && [ -x "$ext_root" ] || die 2 "the extension root is not writable: .contexture/extensions (nothing removed)"
+fi
 
 tmp_base=${TMPDIR:-/tmp}
 if mkdir -p "$ws_root/.contexture/tmp" 2>/dev/null && [ -d "$ws_root/.contexture/tmp" ] && [ -w "$ws_root/.contexture/tmp" ]; then
@@ -74,7 +140,213 @@ trap 'rm -rf "$scratch"' EXIT
 trap 'rm -rf "$scratch"; exit 130' INT
 trap 'rm -rf "$scratch"; exit 143' TERM
 
-pkg_version=$(awk '$1 == "version" { print $2; exit }' "$state_file" 2>/dev/null)
+pkg_version=""
+[ "$installed" -eq 0 ] || pkg_version=$(awk '$1 == "version" { print $2; exit }' "$state_file" 2>/dev/null)
+
+# the data namespaces, "<namespace> <original module name> <installed|kept>" per line: each
+# installed module whose data file the record lists and the folder still holds, then the
+# package's kept data; then each one's key count through the configured driver, read only,
+# unknown when the list fails
+: > "$scratch/data"
+if [ "$installed" -eq 1 ]; then
+  awk '
+    $1 == "module" && NF == 3 { orig[$2] = $3; next }
+    $1 == "file" {
+      n = split($4, a, "/")
+      if (n == 5 && a[1] == ".contexture" && a[2] == "extensions" && a[3] == "modules" && a[5] == "data") d[a[4]] = 1
+    }
+    END { for (m in d) print m " " ((m in orig) ? orig[m] : m) " installed" }' "$state_file" | LC_ALL=C sort |
+    while read -r _ns _orig _src; do
+      [ -f "$ext_root/modules/$_ns/data" ] && printf '%s %s %s\n' "$_ns" "$_orig" "$_src"
+    done > "$scratch/data"
+fi
+own_kept | while read -r _ns _orig _src; do
+  awk -v n="$_ns" '$1 == n { f = 1 } END { exit(f ? 0 : 1) }' "$scratch/data" || printf '%s %s %s\n' "$_ns" "$_orig" "$_src"
+done | LC_ALL=C sort > "$scratch/kept"
+cat "$scratch/kept" >> "$scratch/data"
+
+: > "$scratch/counts"
+while read -r _ns _orig _src; do
+  if _n=$(CTX_ROOT=$ws_root "$clear_bin" count "$_ns" 2>/dev/null) && [ -n "$_n" ]; then :; else _n=unknown; fi
+  printf '%s %s %s %s\n' "$_ns" "$_orig" "$_src" "$_n" >> "$scratch/counts"
+done < "$scratch/data"
+
+keys_text() {
+  case "$1" in
+    unknown) printf 'key count unknown' ;;
+    1) printf '1 key' ;;
+    *) printf '%s keys' "$1" ;;
+  esac
+}
+
+held=$(awk '$4 != "0" { printf "%s%s (%s)", (n++ ? ", " : ""), $1, ($4 == "unknown" ? "key count unknown" : ($4 == "1" ? "1 key" : $4 " keys")) }' "$scratch/counts")
+
+answer=$data_answer
+if [ -z "$answer" ] && [ -n "$held" ]; then
+  if [ "$installed" -eq 1 ]; then
+    _subject="uninstalling '$pkg_name' leaves its data: $held"
+  else
+    _subject="'$pkg_name' is not installed and keeps its data: $held"
+  fi
+  answer=$(cfg_answer package-uninstall "$_subject" keep --keep-data delete --delete-data) || exit $?
+fi
+
+# The driver package run (docs/the-engine.md, Moving a record between backends): before
+# anything runs that writes, no storage variable, the run folder in the drawer's scratch, the
+# move state with crash recovery, and the old copy answer counted over the driver's own
+# storage; after the stashed hook, the configured driver's record moves back into posix
+# (the freeze naming posix, the copy, storage.driver unset, the check, the release), any
+# failure through the check unwinding with the driver kept installed and configured; then the
+# driver's finish out backs up or deletes its own storage and its settings are unset. A driver
+# package installed and not configured moves nothing: its finish out runs when its storage
+# still lists a key.
+pkg_kind=""
+pkg_driver=""
+[ "$installed" -eq 0 ] || pkg_kind=$(awk '$1 == "kind" && NF == 2 { print $2; exit }' "$state_file" 2>/dev/null)
+dl_keep=0
+dl_phase=""
+dl_mode=""
+if [ "$pkg_kind" = driver ]; then
+  pkg_driver=$(awk '$1 == "driver" && NF == 2 { print $2; exit }' "$state_file" 2>/dev/null)
+  case "${CTX_PACKAGE_OLD:-}" in
+    ""|backup|delete) ;;
+    *) die 1 "malformed old copy answer '${CTX_PACKAGE_OLD:-}' (backup or delete)" ;;
+  esac
+  DL_WS=$ws_root DL_LABEL=package-uninstall DL_BIN=$ctx_bin DL_SCR=$scratch DL_PKG=$pkg_name DL_PKG_ROOT=${pkg_root:-} DL_ANSWER=${CTX_PACKAGE_OLD:-}
+  dl_init
+  dl_part=$ext_root/storage/drivers/$pkg_driver
+  _v=$(dl_env_vars)
+  [ -z "$_v" ] || die 1 "the environment sets $_v; a storage variable can point a driver elsewhere, so unset it and run again"
+  dl_run_make || die 2 "the drawer's scratch folder cannot hold the driver run, and a driver run never uses the system temp (nothing removed)"
+  trap 'rm -rf "$scratch"; [ "$dl_keep" -eq 1 ] || dl_run_drop' EXIT
+
+  on_sig() {
+    trap '' HUP INT TERM
+    _sig=$1
+    dl_stop
+    case "$dl_phase" in
+      out)
+        dl_phase=unwinding
+        dl_out_unwind
+        die "$_sig" "stopped by a signal during the move back into posix${DL_UNWOUND:+; unwound: $DL_UNWOUND}; nothing removed, so $pkg_name stays installed and configured"
+        ;;
+      out-past)
+        dl_release
+        die "$_sig" "stopped by a signal after the move back into posix passed its verify: the record reads from posix and $pkg_name stays installed, not configured; uninstall it again to finish"
+        ;;
+      unwinding) ;;
+      *) exit "$_sig" ;;
+    esac
+  }
+  trap 'on_sig 129' HUP
+  trap 'on_sig 130' INT
+  trap 'on_sig 143' TERM
+
+  dl_recover || exit $?
+  if [ "$(cfg_effective_driver "$ws_root/.contexture")" = "$pkg_driver" ]; then
+    dl_mode=out
+    _lead="uninstalling '$pkg_name' moves the record back into posix and leaves the '$pkg_driver' driver's own storage, the old copy"
+  else
+    dl_mode=idle
+    _lead="uninstalling '$pkg_name' leaves the '$pkg_driver' driver's own storage, the old copy"
+  fi
+  dl_count "$pkg_driver" "$scratch/old.counts" || die 2 "the namespaces cannot be listed, so the driver's storage cannot be counted (nothing removed)"
+  dl_ask "$scratch/old.counts" "$_lead" || exit $?
+fi
+
+# driver_finish_out: the driver's own storage, the old copy, backed up or deleted as answered
+# (no answer: deleted when it held nothing the counts saw or the move carried, else backed
+# up), then every setting its config schema declares unset; a failure keeps the package
+driver_finish_out() {
+  _ans=$DL_ANSWER
+  if [ -z "$_ans" ]; then
+    _carried=0
+    [ "$dl_mode" != out ] || _carried=$(cat "$DL_RUN"/out/copied.* 2>/dev/null | awk '{ n += $1 } END { print n + 0 }')
+    if [ "$_carried" -eq 0 ] && [ -z "$(dl_holding "$scratch/old.counts")" ]; then _ans=delete; else _ans=backup; fi
+  fi
+  if ! dl_finish_out "$pkg_driver" "${pkg_version:-}" "$_ans"; then
+    if [ "$dl_mode" = out ]; then
+      die 2 "the record moved back into posix and was verified, but the '$pkg_driver' driver's finish failed ($DL_LINE), so nothing was removed: $pkg_name stays installed, not configured; uninstall it again with the human's answer to finish"
+    fi
+    die 2 "the '$pkg_driver' driver's finish failed ($DL_LINE), so nothing was removed; uninstall $pkg_name again with the human's answer to finish"
+  fi
+  printf "package-uninstall: the '%s' driver's own storage, the old copy, %s\n" "$pkg_driver" "$DL_DONE"
+  driver_settings_unset
+}
+
+driver_settings_unset() {
+  if [ -f "$dl_part/config" ] && cfg_schema_parse "$dl_part/config" package-uninstall > "$scratch/dcfg.rows" 2>/dev/null; then
+    for _k in $(cut -f 1 "$scratch/dcfg.rows"); do
+      cfg_unset "storage.$_k" "$ws_root/.contexture" 2>/dev/null \
+        || dl_err "warning: the setting storage.$_k cannot be unset; unset it with ctx store config unset $_k"
+    done
+  fi
+}
+
+# driver_move_back: the configured driver's record moved back into posix through the check
+driver_move_back() {
+  dl_phase=out
+  if ! dl_out "$pkg_driver"; then
+    _step=$DL_STEP
+    _why=$DL_LINE
+    trap '' HUP INT TERM
+    dl_phase=unwinding
+    dl_out_unwind
+    die 2 "the move back into posix failed at $_step ($_why)${DL_UNWOUND:+; unwound: $DL_UNWOUND}; nothing removed, so $pkg_name stays installed and configured"
+  fi
+  dl_phase=out-past
+  printf '%s\n' "$DL_OUT_LINES"
+  dl_release || dl_err "warning: the move's freeze cannot be released ($(dl_first "$DL_SCR/release.err"))"
+}
+
+# delete_ns <namespace> <installed|kept>: every key through the configured driver of this
+# workspace (CTX_ROOT named, never the working folder's), then a kept declaration's folder;
+# the outcome line staged, a failure stopping rc 2 after the lines of the namespaces it
+# already emptied
+delete_ns() {
+  _dn=$(CTX_ROOT=$ws_root "$clear_bin" namespace "$1" 2> "$scratch/clear.err")
+  _drc=$?
+  if [ "$_drc" -ne 0 ]; then
+    cat "$scratch/outcome"
+    # a kept declaration the reader refuses lists no key on any rerun: its package's return
+    # is the one repair
+    if [ "$2" = kept ] && ! _sdw=$(CTX_STORE_WORKSPACE=$ws_root "$sd_bin" "$1" 2>&1 > /dev/null); then
+      _sdw=$(printf '%s\n' "$_sdw" | sed -n '1s/^store-data: //p')
+      die 2 "deleting the kept data of '$1' cannot list its keys, since its kept declaration cannot be read ($_sdw); install $pkg_name again to take it back, which repairs it, then uninstall it with --delete-data"
+    fi
+    _why=$(sed -n '1p' "$scratch/clear.err")
+    _why=${_why#store-clear namespace: error: }
+    if [ "$installed" -eq 1 ]; then
+      die 2 "deleting the data of '$1' stopped ($_why); no file and no record removed, so the package stays installed: run the uninstall again to finish"
+    fi
+    die 2 "deleting the kept data of '$1' stopped ($_why); run the uninstall again to finish"
+  fi
+  if [ "$2" = kept ]; then
+    rm -rf "$kept_root/$1" 2>/dev/null
+    [ ! -e "$kept_root/$1" ] || die 2 "deleted every key of '$1', but its kept declaration cannot be removed; run the uninstall again to finish"
+  fi
+  printf 'package-uninstall: deleted %s of %s\n' "$(keys_text "$_dn")" "$1" >> "$scratch/outcome"
+}
+
+: > "$scratch/outcome"
+if [ "$installed" -eq 0 ]; then
+  if [ "$answer" = delete ]; then
+    [ -w "$kept_root" ] && [ -x "$kept_root" ] || die 2 "the kept data declarations are not writable (nothing deleted)"
+    while read -r _ns _orig _src _n; do
+      delete_ns "$_ns" kept
+    done < "$scratch/counts"
+    rmdir "$kept_root" 2>/dev/null || true
+    rmdir "$state_root" 2>/dev/null || true
+    cat "$scratch/outcome"
+    printf "package-uninstall: deleted the kept data of '%s', which is not installed\n" "$pkg_name"
+    exit 0
+  fi
+  while read -r _ns _orig _src _n; do
+    printf 'package-uninstall: kept the data of %s (%s); install %s again to use it\n' "$_ns" "$(keys_text "$_n")" "$pkg_name"
+  done < "$scratch/counts"
+  printf "package-uninstall: '%s' is not installed; its kept data stays\n" "$pkg_name"
+  exit 0
+fi
 
 if [ -f "$stash_uninstall" ]; then
   ( cd "$ws_root" && CTX_ROOT=$ws_root CTX_PACKAGE_ROOT=${pkg_root:-} CTX_BIN=$ctx_bin CTX_PACKAGE_NAME=$pkg_name CTX_PACKAGE_VERSION=${pkg_version:-} LC_ALL=C export CTX_ROOT CTX_PACKAGE_ROOT CTX_BIN CTX_PACKAGE_NAME CTX_PACKAGE_VERSION LC_ALL && if [ -x "$stash_uninstall" ]; then exec "$stash_uninstall" < /dev/null; else exec sh "$stash_uninstall" < /dev/null; fi )
@@ -97,6 +369,63 @@ while IFS= read -r mname; do
   _hr=$?
   [ "$_hr" -eq 0 ] || die 2 "the '$mname' module's uninstall hook failed (rc $_hr); nothing removed"
 done < "$scratch/hooks"
+
+case "$dl_mode" in
+  out)
+    driver_move_back
+    driver_finish_out
+    dl_phase=done
+    ;;
+  idle)
+    if [ -n "$(dl_holding "$scratch/old.counts")" ]; then
+      driver_finish_out
+    else
+      driver_settings_unset
+    fi
+    ;;
+esac
+
+# the answer acts while each module's data file still declares its namespace: keep stages
+# each kept declaration beside the others and moves it into place, replacing a stale one,
+# every one written undone when another fails; delete empties each namespace
+: > "$scratch/kept_data"
+if [ "$answer" = keep ]; then
+  kept_stage=$kept_root/.stage.$$
+  : > "$scratch/kept_now"
+  keep_undo() {
+    while IFS= read -r _k; do
+      rm -rf "$kept_root/$_k" 2>/dev/null
+      [ -d "$kept_stage/$_k.old" ] && mv "$kept_stage/$_k.old" "$kept_root/$_k" 2>/dev/null
+    done < "$scratch/kept_now"
+    rm -rf "$kept_stage" 2>/dev/null
+    rmdir "$kept_root" 2>/dev/null
+    die 2 "$1; nothing removed"
+  }
+  while read -r _ns _orig _src _n; do
+    [ "$_src" = installed ] && [ "$_n" != 0 ] || continue
+    mkdir -p "$kept_stage/$_ns" 2>/dev/null || keep_undo "cannot stage the kept data declaration of '$_ns'"
+    cp -p "$ext_root/modules/$_ns/data" "$kept_stage/$_ns/data" 2>/dev/null || keep_undo "cannot copy the data declaration of '$_ns'"
+    printf 'package %s\nversion %s\nmodule %s %s\n' "$pkg_name" "${pkg_version:-}" "$_ns" "$_orig" > "$kept_stage/$_ns/origin" 2>/dev/null \
+      || keep_undo "cannot write the origin of the kept data of '$_ns'"
+    if [ -e "$kept_root/$_ns" ]; then
+      mv "$kept_root/$_ns" "$kept_stage/$_ns.old" 2>/dev/null || keep_undo "cannot replace the stale kept data declaration of '$_ns'"
+    fi
+    printf '%s\n' "$_ns" >> "$scratch/kept_now"
+    mv "$kept_stage/$_ns" "$kept_root/$_ns" 2>/dev/null || keep_undo "cannot keep the data declaration of '$_ns'"
+    printf '.contexture/extensions/modules/%s/data\n' "$_ns" >> "$scratch/kept_data"
+  done < "$scratch/counts"
+  rm -rf "$kept_stage" 2>/dev/null
+  while read -r _ns _orig _src _n; do
+    [ "$_n" != 0 ] || continue
+    printf 'package-uninstall: kept the data of %s (%s); install %s again to use it\n' "$_ns" "$(keys_text "$_n")" "$pkg_name" >> "$scratch/outcome"
+  done < "$scratch/counts"
+elif [ "$answer" = delete ]; then
+  while read -r _ns _orig _src _n; do
+    if [ "$_src" = installed ] && [ "$_n" = 0 ]; then continue; fi
+    delete_ns "$_ns" "$_src"
+  done < "$scratch/counts"
+  rmdir "$kept_root" 2>/dev/null || true
+fi
 
 removed=0
 preserved=0
@@ -145,9 +474,13 @@ while read -r kind a b c; do
   cm=$(mode_of "$target")
   cc=$(cksum_of "$target")
   if [ "$cm" != "$rm_mode" ] || [ "$cc" != "$rm_crc" ]; then
-    printf 'package-uninstall: preserved %s (changed since install)\n' "$rm_path"
-    preserved=$((preserved + 1))
-    continue
+    if grep -Fqx -- "$rm_path" "$scratch/kept_data"; then
+      printf 'package-uninstall: removed %s (changed since install; its bytes are the kept data declaration)\n' "$rm_path"
+    else
+      printf 'package-uninstall: preserved %s (changed since install)\n' "$rm_path"
+      preserved=$((preserved + 1))
+      continue
+    fi
   fi
   rm -f "$target" || die 2 "cannot remove $rm_path"
   dirname "$target" >> "$scratch/dirs"
@@ -172,6 +505,9 @@ rmdir "$state_root" 2>/dev/null || true
 # layer's sources hash, so recompose through ctx compose after the removal.
 "$ctx_bin" compose || die 2 "the law layer did not recompose after the removal; run .contexture/ctx compose and fix what it names (the package is removed)"
 
-printf 'package-uninstall: removed %s from .contexture/extensions (%s removed, %s preserved, %s already absent)\n' \
-  "$pkg_name" "$removed" "$preserved" "$absent"
+dl_said=""
+[ "$dl_mode" != out ] || dl_said="; the record reads from posix"
+printf 'package-uninstall: removed %s from .contexture/extensions (%s removed, %s preserved, %s already absent)%s\n' \
+  "$pkg_name" "$removed" "$preserved" "$absent" "$dl_said"
+cat "$scratch/outcome"
 exit 0

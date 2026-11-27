@@ -5,6 +5,7 @@ import { exec } from '../support/exec';
 import { addFile, addModule, extPath, install, installPkg, newPkg, writeManifest } from '../support/packages';
 import { stage } from '../support/stage';
 import { put, treeState } from '../support/tree';
+import { twinPkg } from '../support/twin';
 
 const sandbox = () => stage('posix', 'pkg-refuse');
 const manifestText = (lines: readonly string[]): string => lines.map((l) => `# ${l}\n`).join('');
@@ -159,15 +160,6 @@ describe.concurrent('package-install: the collision classes', () => {
     expect(r.stderr).toContain('collides with a workspace module');
   });
 
-  it('[modules-r15] a driver named posix refuses rc1 naming the core posix driver', async () => {
-    const sb = sandbox();
-    const p = newPkg(sb, 'pkgdriver');
-    addFile(p, 'storage/drivers/posix/driver', '#!/bin/sh\nexit 0', 0o755);
-    const r = await installPkg(sb, p);
-    expect(r.code).toBe(1);
-    expect(r.stderr).toContain('core posix driver');
-  });
-
   it('[modules-r15, modules-r10] the installer reads no namespace: two package modules with data files install, each module\'s namespace its own name', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'pkgtwodata');
@@ -204,27 +196,22 @@ describe.concurrent('package-install: the collision classes', () => {
   });
 });
 
-describe.concurrent('package-install: a driver name that already resolves ahead of the extension root (N16)', () => {
-  it.each([
-    ['the core', '.contexture/storage/drivers/fakedrv/driver', 'already resolves in the core'],
-    ['the workspace', '.contexture/drivers/fakedrv/driver', 'already resolves in the workspace'],
-    ['a module', '.contexture/modules/m/drivers/fakedrv', 'already resolves in a module'],
-  ])('N16 [modules-r15]: a driver resolving in %s refuses rc1 and writes nothing', async (_label, ahead, message) => {
+describe.concurrent('package-install: the one driver name ahead of the extension root is posix (N16)', () => {
+  it('N16 [modules-r15]: a driver named posix refuses rc1 naming the core posix driver and writes nothing', async () => {
     const sb = sandbox();
-    put(join(sb, ahead), '#!/bin/sh\nexit 0\n', 0o755);
-    const p = newPkg(sb, 'pkgahead');
-    addFile(p, 'storage/drivers/fakedrv/driver', '#!/bin/sh\nexit 0', 0o755);
+    const p = newPkg(sb, 'pkgdriver');
+    addFile(p, 'storage/drivers/posix/driver', '#!/bin/sh\nexit 0', 0o755);
     const before = treeState(extPath(sb));
     const r = await installPkg(sb, p);
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain(`driver name 'fakedrv' ${message}`);
+    expect(r.stderr).toContain("driver name 'posix' collides with the core posix driver");
     expect(treeState(extPath(sb))).toBe(before);
   });
 
-  it('N16 [modules-r15]: null check: with nothing ahead the same driver package installs', async () => {
+  it('N16 [modules-r15, the-engine-r19]: a driver of the same name in a retired place (the storage core, the workspace drivers, a module) stands ahead of nothing, so the driver package installs', { timeout: 900_000 }, async () => {
     const sb = sandbox();
-    const p = newPkg(sb, 'pkgahead');
-    addFile(p, 'storage/drivers/fakedrv/driver', '#!/bin/sh\nexit 0', 0o755);
-    expect((await installPkg(sb, p)).code).toBe(0);
+    for (const ahead of ['.contexture/storage/drivers/fakedrv/driver', '.contexture/drivers/fakedrv/driver', '.contexture/modules/m/drivers/fakedrv']) put(join(sb, ahead), '#!/bin/sh\nexit 0\n', 0o755);
+    const p = twinPkg(sb, { name: 'pkgahead', driver: 'fakedrv' });
+    expect((await install(sb, p)).code).toBe(0);
   });
 });

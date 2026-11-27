@@ -8,7 +8,7 @@ import { waitFor } from '../support/unit';
 
 const LEAKS: Record<string, string> = {
   CTX_ROOT: '/leak/root',
-  CTX_STORAGE_DRIVER: 'fts5',
+  CTX_STORAGE_DRIVER: 'sqlite',
   COMPACT_DISABLE: '1',
   TMPDIR: '/leak/tmp',
   LANG: 'en_US.UTF-8',

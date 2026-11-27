@@ -56,7 +56,7 @@ describe.concurrent('package-uninstall: the removal and the changed-file preserv
     writeFileSync(extPath(sb, 'rhythms/keep.md'), 'locally edited\n');
     rmSync(join(pa, '.contexture/extensions/rhythms/keep.md'));
     expect((await installPkg(sb, pa)).code).toBe(0);
-    expect((await uninstall(sb, pa)).code).toBe(0);
+    expect((await uninstall(sb, pa, '--delete-data')).code).toBe(0);
     expect(readFileSync(extPath(sb, 'rhythms/keep.md'), 'utf8')).toBe('locally edited\n');
     expect(existsSync(recordPath(sb, 'pkga'))).toBe(false);
     expect(existsSync(extPath(sb, 'modules/alpha'))).toBe(false);

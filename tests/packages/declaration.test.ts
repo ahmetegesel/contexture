@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { exec, type Run } from '../support/exec';
 import { addModule, extPath, newPkg, recordPath, recordText, writeManifest } from '../support/packages';
 import { stage } from '../support/stage';
+import { twinPkg } from '../support/twin';
 import { put, treeState } from '../support/tree';
 
 const sandbox = () => stage('posix', 'pkg-decl');
@@ -19,6 +20,7 @@ function pkg(sb: string, name: string, module = name.replace(/^pkg-/, '')): stri
 }
 
 const PRESET = '# the workspace configuration\nstorage.driver: posix\n\n# a trailing note\n';
+const SKIPPED = (name: string): string => `package install: skipped the driver package '${name}': a driver package installs only by name (ctx package install ${name}), since its install moves the record`;
 
 describe.concurrent('the package declaration in the workspace configuration', () => {
   it('[the-engine-r22] an install writes its package line, a path inside the workspace relative to its root, every alias the record holds; a re-install replaces it in place; every other line stays byte for byte', async () => {
@@ -77,6 +79,44 @@ describe.concurrent('the package declaration in the workspace configuration', ()
     const before = treeState(sb);
     const again = await ctx(sb, ['package', 'install']);
     expect([again.code, again.stdout, again.stderr]).toEqual([0, 'package install: nothing to install: every declared package is installed\n', '']);
+    expect(treeState(sb)).toBe(before);
+  });
+
+  it('[the-engine-r22, plugins-r6] the bare install leaves a declared driver package to an install by name, one line naming it: a feature and a driver declared install the feature alone, ctx package list keeping the driver declared and not installed', async () => {
+    const sb = sandbox();
+    pkg(sb, 'pkg-feat');
+    twinPkg(sb, { name: 'pkg-drv', driver: 'drv' });
+    writeFileSync(conf(sb), 'package.pkg-feat: ./catalog/pkg-feat\npackage.pkg-drv: ./catalog/pkg-drv\n');
+    const bare = await ctx(sb, ['package', 'install']);
+    expect(bare.code, bare.stderr).toBe(0);
+    expect(bare.stdout.split('\n')[0]).toBe(SKIPPED('pkg-drv'));
+    expect(bare.stdout).toContain('package-install: installed pkg-feat');
+    expect(existsSync(recordPath(sb, 'pkg-feat'))).toBe(true);
+    expect(existsSync(recordPath(sb, 'pkg-drv'))).toBe(false);
+    expect(existsSync(extPath(sb, 'storage/drivers/drv'))).toBe(false);
+    expect(confText(sb)).toContain('package.pkg-drv: ./catalog/pkg-drv\n');
+    expect((await ctx(sb, ['package', 'list'])).stdout).toContain('pkg-drv: declared, not installed (drift)');
+  });
+
+  it('[the-engine-r22, plugins-r6] a bare install of a declared driver package alone installs nothing rc 0, the nothing to install line after its skip line', async () => {
+    const sb = sandbox();
+    twinPkg(sb, { name: 'pkg-drv', driver: 'drv' });
+    writeFileSync(conf(sb), 'package.pkg-drv: ./catalog/pkg-drv\n');
+    const before = treeState(sb);
+    const r = await ctx(sb, ['package', 'install']);
+    expect([r.code, r.stdout, r.stderr]).toEqual([0, `${SKIPPED('pkg-drv')}\npackage install: nothing to install: every other declared package is installed\n`, '']);
+    expect(treeState(sb)).toBe(before);
+  });
+
+  it('[the-engine-r22] a bare install whose pending declared package carries a manifest the reader refuses stops rc 1 naming the package, before any install', async () => {
+    const sb = sandbox();
+    pkg(sb, 'pkg-ok', 'ok');
+    const bad = pkg(sb, 'pkg-bad');
+    writeFileSync(join(bad, 'manifest'), '# summary: a refused manifest\n# version: 1.0.0\n# kind: gadget\n# part: module modules/bad\n');
+    writeFileSync(conf(sb), 'package.pkg-ok: ./catalog/pkg-ok\npackage.pkg-bad: ./catalog/pkg-bad\n');
+    const before = treeState(sb);
+    const r = await ctx(sb, ['package', 'install']);
+    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', "ctx: package install: package.pkg-bad: malformed package manifest: line 3: kind 'gadget' is not feature or driver\n"]);
     expect(treeState(sb)).toBe(before);
   });
 

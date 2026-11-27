@@ -27,7 +27,7 @@ laws              the sweep-consent law under @laws (no sweep that writes withou
                   @refresh, @close, @handoff (the law compose fragment)
 data              the storage declaration (the namespace is the folder name, unit):
                   root .contexture/units, fallback_root .contexture/sessions, suffix .md,
-                  key <unit>/<path...>, changes false, the document rules
+                  key <unit>/<path...>, the document set as seven unsearched lines
 scripts/<verb>    the 22 record verbs (sh), each sourcing lib/verb.sh
 scripts/data      the record operations over the storage layer (sh, private), and
                   outside them unit.migrate (the migrations behind migrate),
@@ -40,10 +40,8 @@ lib/canon.awk     the canonical renderer and the JSON string form
 lib/model.awk     the legacy parse, the typed items, the derived fields, the schema JSON
 lib/ops.awk       the record rules: the writes, the reads, the audit, the liveness
 lib/search.awk    the exact search over the canonical render
-lib/ranked.awk    the storage layer's ranked answer mapped into the record's search shape
 lib/refs.awk      the refs of a write payload
 lib/payfield.awk  one decoded payload value
-lib/b64           the store.batch value encoder
 lib/fold-*.awk    the fold verb's programs, each run with fold-lib.awk (the flat answer
                   reader): fold-find-active.awk (the live fold start), fold-plan-gen.awk
                   and fold-plan-load.awk (the plan written and read back),
@@ -70,10 +68,10 @@ The data script answers the record operations: session (`create`, `list`, `activ
 do the posix driver's `storage.leftovers`, which `diagnose --leftovers` reads through the
 storage layer's library (`store_leftovers`) for the unit namespace, and `storage.sweep`,
 which `migrate --sweep` runs through `store_sweep`. The data file declares the record's
-documents: the document rules name the backlog, the knowledge, the journal, and each
-lane's recipe, journal, and report, and `unsearched: <unit>/state` names the state, a
-document every verb reads that no search returns; so the probe and the sweep count
-exactly the keys the verbs read as documents, and every other key the pattern admits
+documents as seven `unsearched` lines and no search schema: the state, the backlog, the
+knowledge, the journal, and each lane's recipe, journal, and report, the documents every
+verb reads (the module's own exact search reads the canonical render, never a schema); so
+the probe and the sweep count exactly the keys the verbs read as documents, and every other key the pattern admits
 (old lane scratch written as `.md` files under a unit, say) as a key outside the document
 rules.
 
@@ -102,7 +100,12 @@ key absent from the batch reads absent exactly as its one key read did.
 
 A write fetches under the unit lock (`.contexture/tmp/locks/unit/<unit>.lock`), stages the
 changed artifacts with the record engine, and lands them through one `store.batch`, all or
-none. The multi-key writes are the batch's: `session.create`
+none. Each staged value enters the batch through the storage core's encoder, `store-b64`,
+found beside the library the data script loaded, its exit code read: it answers a value only
+when it read the staged file whole, so a failed or short read refuses the write rc 2
+`ERR_STORAGE_WRITE` naming the key (`cannot encode the staged value of '<key>': its encoder
+did not read it whole`) before the batch, nothing written; the module keeps no encoder of
+its own. The multi-key writes are the batch's: `session.create`
 the four fresh artifacts, `task.start` the backlog alone (the state no longer holds a
 next action), `task.complete` and
 `task.drop` the backlog and the journal, `session.stamp` and `session.objective` the state
@@ -124,8 +127,8 @@ every dead holder, so the wait exists only to bound a live one, busy or hung (a 
 process, a holder blocked on its input, a pid reused by another process), turning an
 endless wait into a named error. Its size is measured on a 1 MB unit:
 six writers arriving at once (five lanes and their dispatcher) wait at most 6.8 s on
-posix and 29 s on fts5 with four more writers busy on other units, eight writers 9.3 s and
-42 s, so the 60 s floor holds a margin over that need, while the error still surfaces
+posix and 29 s on the SQLite driver (measured while its writes still derived search
+documents) with four more writers busy on other units, eight writers 9.3 s and 42 s, so the 60 s floor holds a margin over that need, while the error still surfaces
 inside an agent's two-minute command budget at a moderate load; the driver's namespace
 lock waits the same 600 polls. Writers looping without pause can starve one waiter past
 any bound, since the polling lock keeps no queue.
@@ -346,44 +349,36 @@ in its check mode) and warns once after its answer while any remain.
 
 `search.query --mode=exact` is the record rule over the canonical render (the preambles,
 every item's canonical span, each lane; never the state) in record order, so a legacy value
-answers the canonical text. A ranked mode is the storage layer's search over the document-set
-schema (the data file's rules derive the entities at write time; the fts5 store indexes
-them), filtered to the unit's keys, with `--entity` applied and `--limit` capped after the
-complete walk (0 for every result); the storage layer's rank order is kept. The storage layer answers a default document's
-identity as its artifact key, so the data script maps it to the record id: the unit for a
-session document (backlog, knowledge, journal; the state is never a result), the lane for a lane document, and a
-lane entry keeps its `<lane>/` prefix; a result outside the record's artifact shape or the
-sections the record searches is dropped. A mode the unit's records cannot answer (the
-configured driver's registry through the library's `store_modes`, a ranked mode only where
-the unit's data file declares its search schema) refuses before any store search, rc 1
-`ERR_CAPABILITY_UNSUPPORTED` naming the answerable modes. The exact mode asks neither the
-held probe nor the registry: exact answers everywhere, and the unit's listed artifacts
-prove it held, a unit without its state refusing with the held probe's own line before any
-artifact is read.
+answers the canonical text. `exact` is the storage contract's one mode: any other refuses
+before any store call, rc 1 `ERR_CAPABILITY_UNSUPPORTED` naming `exact` as the answerable
+mode. The exact read asks no held probe: the unit's listed artifacts prove it held, a unit
+without its state refusing with the held probe's own line before any artifact is read.
 
 The search verb (`scripts/search`) lists the units through `session.active` (the default
 scope its ACTIVE units, `--all` every unit, `--unit` one, the listing narrowed to that one
 unit by `session.active <unit>`, so a one unit search reads no other unit's state), calls `search.query` once per
 unit uncapped, and maps the merged rows onto the shared row shape with `lib/search-rows.awk`
-(the container from the data declaration's document rules, read through the storage core's
-data reader; the address, the read, and the closed label), applying the limit once.
+(the container derived in the module: `<unit>/backlog`, `<unit>/knowledge`, or
+`<unit>/journal`, a lane row's the address form `<unit>/lane/<lane>/<recipe|journal|report>`;
+the address, the read, and the closed label), applying the limit once.
 
 ## The tests
 
 The vitest project `unit-record` (`tests/unit-record`, `bun run test:unit-record` from
 `tests/`) proves the record logic once, on posix: the record compliance cases through this
 data script over a staged store, the module's own cases (the canonical refs and the write
-refusal, the file-pointer exemption, the legacy ref, the ranked search identity over a
-canned fts5 store answer, the active listing, the per-unit read), the audit classes, and
+refusal, the file-pointer exemption, the legacy ref, the active listing, the per-unit
+read), the audit classes, and
 the record engine alone (`lib/canon.awk`, `lib/model.awk`, `lib/ops.awk`), held equal to
 this data script for every dispatched function by a differential test, with the search,
-ranked, render, payload, and base64 programs each tested alone. The vitest project
+render, and payload programs each tested alone. The vitest project
 `unit-verbs` (`tests/unit-verbs`, `bun run test:unit-verbs`; `bun run test:unit` runs both
 unit projects) proves the `ctx unit` and `ctx lane` verbs once, on posix: one file per verb
 family, each over its own seeded snapshot built through the verbs, the input matrices of
 `lib/verb.sh` (the REF shapes, the UTF-8 and NUL checks, the newline and carriage return
 refusals) one function at a time with one wiring test per write path, the fold protocol
 and its defect classes, and the fault cases (a read-only store, an interrupted waiter, a
-killed writer, a held lock, concurrent writers). The store fuzzer's
+killed writer, a held lock, concurrent writers, and an encoder whose `od` fails or reads
+short under a write and under the pointer rewrite). The store fuzzer's
 unit-shaped profile (`tests/drivers/store-fuzz.test.ts`) is the seeded differential proof of the
-store calls the module makes across posix and fts5.
+store calls the module makes across posix and sqlite.

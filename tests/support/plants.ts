@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { accessSync, chmodSync, constants, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { sandbox } from './sandbox';
 
@@ -39,6 +39,35 @@ export function pathPlant(name: string, script: string): Record<string, string> 
   const dir = sandbox(`${name}-plant`);
   writeFileSync(join(dir, name), `#!/bin/sh\n${script}\n`, { mode: 0o755 });
   return { PATH: `${dir}:${process.env.PATH ?? ''}` };
+}
+
+// a PATH of one shim per command the real PATH resolves, each logging its name to SHIM_LOG
+// before it runs the real command, so a run's external commands are counted by name; a
+// command named in withArgs logs its working folder and its arguments after its name, tab
+// separated, in the same one line
+export function shimPath(withArgs: readonly string[] = []): string {
+  const bin = join(sandbox('shim-path'), 'bin');
+  mkdirSync(bin);
+  const seen = new Set<string>();
+  for (const dir of (process.env.PATH ?? '').split(':')) {
+    if (!dir || !existsSync(dir)) continue;
+    for (const name of readdirSync(dir)) {
+      if (seen.has(name) || !/^[A-Za-z0-9._+-]+$/.test(name)) continue;
+      const real = join(dir, name);
+      try {
+        accessSync(real, constants.X_OK);
+        if (!statSync(real).isFile()) continue;
+      } catch {
+        continue;
+      }
+      seen.add(name);
+      const log = withArgs.includes(name)
+        ? `l='${name}'"\t$PWD"\nfor a in "$@"; do l="$l\t$a"; done\nprintf '%s\\n' "$l" >> "$SHIM_LOG"`
+        : `printf '%s\\n' '${name}' >> "$SHIM_LOG"`;
+      writeFileSync(join(bin, name), `#!/bin/sh\n${log}\nexec '${real}' "$@"\n`, { mode: 0o755 });
+    }
+  }
+  return bin;
 }
 
 export function mktempPlant(after: string): Record<string, string> {

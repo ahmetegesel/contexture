@@ -1,15 +1,17 @@
-import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import { dataFile } from '../support/data-file';
 import { FALLBACK_ROOT, RECORD_ROOT } from '../support/drawer';
+import { driverPath } from '../support/driver';
+import { launch } from '../support/exec';
 import { ROOT_USER, chmodPlant } from '../support/plants';
-import { DRIVERS, fts5Available, stage } from '../support/stage';
-import { store } from '../support/store';
+import { DRIVERS, sqliteAvailable, stage } from '../support/stage';
+import { listAnswer, store } from '../support/store';
 import { answer, refused } from '../support/wire';
 
-const KINDS = ['stray_files', 'nonkey_folders', 'empty_folders', 'links', 'special_files', 'unreadable_folders', 'remnants', 'shadowed_keys', 'outside_keys', 'newline_names'] as const;
+const KINDS = ['stray_files', 'nonkey_folders', 'empty_folders', 'links', 'special_files', 'unreadable_folders', 'remnants', 'shadowed_keys', 'outside_keys', 'refused_keys', 'newline_names'] as const;
 type Kind = (typeof KINDS)[number];
 type Root = { state: string; entries?: number; keys?: number; documents?: number; kinds?: Record<Kind, { count: number; bytes: number }> };
 
@@ -68,7 +70,7 @@ describe('the leftovers probe on posix', { concurrent: true }, () => {
       entries: 22,
       keys: 4,
       documents: 3,
-      kinds: kinds({ stray_files: [3, 11], nonkey_folders: [1, 2], empty_folders: [2, 0], links: [1, 0], special_files: [1, 0], remnants: [2, 6], outside_keys: [1, 55] }),
+      kinds: kinds({ stray_files: [2, 9], nonkey_folders: [1, 2], empty_folders: [2, 0], links: [1, 0], special_files: [1, 0], remnants: [2, 6], outside_keys: [1, 55], refused_keys: [1, 2] }),
     });
     expect(a.fallback).toEqual({ state: 'absent' });
   });
@@ -153,6 +155,41 @@ describe('the leftovers probe on posix', { concurrent: true }, () => {
     expect((await leftovers(linked, 'probe')).root).toEqual({ state: 'link' });
   });
 
+  it('[the-engine-r-lf7vr, the-engine-r-kvr01] a refused key counts apart, also in a folder holding no key; a dot name stays a stray; the put temp (a dot, the key file name, the mktemp tail) and the older <key file>.XXXXXX temp are remnants', async () => {
+    const sb = await keyed('leftovers-refused');
+    const r = (rel: string) => join(RECORD_ROOT, rel);
+    plant(sb, r('u1/.journal.mdAb12Cd'), 'abc');
+    plant(sb, r('u1/journal.md.Xy34Zw'), 'ab');
+    plant(sb, r('u1/Bad+Name.md'), 'bad');
+    plant(sb, r('_old/state.md'), 'old!');
+    plant(sb, r('_old/lanes/l1/report.md'), 'gone!');
+    plant(sb, r('u1/.hidden.md'), 'h');
+    plant(sb, r('.cache/x.md'), 'c');
+    const a = await leftovers(sb, 'unit');
+    expect(a.root.kinds).toEqual(kinds({ stray_files: [1, 1], nonkey_folders: [1, 1], remnants: [2, 5], refused_keys: [3, 12] }));
+    expect([a.root.keys, a.root.documents]).toEqual([3, 3]);
+    expect((await store(sb, 'posix').list('unit')).stdout).toBe(listAnswer('unit', ['u1/journal', 'u1/lanes/l1/report', 'u1/state']));
+  });
+
+  it('[the-engine-r-lf7vr, the-engine-r-kvr01] a put killed mid write in an empty suffix namespace leaves a remnant, never a key the store lists', async () => {
+    const sb = stage('posix', 'leftovers-killed-put');
+    dataFile(sb, 'modules', 'probe', 'root: probe-root\nkey: <c>/<id>\n');
+    answer(await store(sb, 'posix').put('probe', 'c/a', 'one\n'), 'store.put');
+    const put = launch(driverPath(sb, 'posix'), ['store.put', 'probe', 'c/b'], { cwd: sb, input: null, group: true });
+    put.child.stdin?.write('partial');
+    const dir = join(sb, 'probe-root/c');
+    const temps = () => readdirSync(dir).filter((n) => n !== 'a');
+    for (let i = 0; i < 200 && temps().length === 0; i++) await new Promise((done) => setTimeout(done, 25));
+    expect(temps()).toEqual([expect.stringMatching(/^\.b[A-Za-z0-9]{6}$/)]);
+    put.signal('SIGKILL');
+    await put.result;
+    expect(temps().length, 'the killed put left its temp').toBe(1);
+    expect((await store(sb, 'posix').list('probe')).stdout).toBe(listAnswer('probe', ['c/a']));
+    const root = (await leftovers(sb, 'probe')).root;
+    expect([root.entries, root.keys, root.documents, root.kinds?.remnants.count]).toEqual([3, 1, 1, 1]);
+    expect({ ...root.kinds, remnants: kinds().remnants }).toEqual(kinds());
+  });
+
   it('[the-engine-r-lf7vr] refuses a missing, extra, or undeclared namespace with its one line, and writes nothing', async () => {
     const sb = stage('posix', 'leftovers-refusals');
     const s = store(sb, 'posix');
@@ -162,10 +199,10 @@ describe('the leftovers probe on posix', { concurrent: true }, () => {
   });
 });
 
-for (const driver of DRIVERS.filter((d) => d === 'fts5')) {
-  describe.skipIf(!fts5Available())('the leftovers probe on fts5', () => {
+for (const driver of DRIVERS.filter((d) => d === 'sqlite')) {
+  describe.skipIf(!sqliteAvailable())('the leftovers probe on sqlite', () => {
     it('[the-engine-r-lf7vr] a driver that keeps no file tree answers its unknown function line rc 2', async () => {
-      const sb = stage(driver, 'leftovers-fts5');
+      const sb = stage(driver, 'leftovers-sqlite');
       refused(await store(sb, driver).op('storage.leftovers', ['unit']), 'storage.leftovers', 2, 'ERR_CAPABILITY_UNSUPPORTED', "unknown function 'storage.leftovers'");
     });
   });

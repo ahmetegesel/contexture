@@ -7,7 +7,7 @@ import { exec, type Run } from '../support/exec';
 import { stage } from '../support/stage';
 import { answerLine } from '../support/wire';
 
-const PROBE = 'root: probe-data\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n';
+const PROBE = 'root: probe-data\nsuffix: .txt\nkey: <a>/<b>\n';
 
 function probeStage(): string {
   const sb = stage('posix', 'store-smoke');
@@ -21,20 +21,20 @@ const resolver = (sb: string, args: readonly string[], env: Record<string, strin
 const op = (sb: string, name: string, args: readonly string[], input = ''): Promise<Run> => driverOp(sb, 'posix', name, args, input);
 
 describe.concurrent('the bare base: the store-data owner scan over both module roots', () => {
-  it("[modules-r10] an extension module's data file answers its five validated fields", async () => {
+  it("[modules-r10] an extension module's data file answers its four validated fields", async () => {
     const sb = probeStage();
-    dataFile(sb, 'extensions', 'extprobe', 'root: ext-data\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
+    dataFile(sb, 'extensions', 'extprobe', 'root: ext-data\nsuffix: .txt\nkey: <a>/<b>\n');
     const r = await storeData(sb, 'extprobe');
     expect({ code: r.code, stderr: r.stderr }).toEqual({ code: 0, stderr: '' });
-    expect(r.stdout.split('\n').slice(0, 5)).toEqual(['extprobe', 'ext-data', '.txt', '<a>/<b>', 'false']);
+    expect(r.stdout.split('\n').slice(0, 4)).toEqual(['extprobe', 'ext-data', '.txt', '<a>/<b>']);
   });
 
   it('[modules-r10, modules-r14] a name both module roots hold answers the workspace module\'s data file, as discovery resolves it', async () => {
     const sb = probeStage();
-    dataFile(sb, 'extensions', 'probe', 'root: ext-probe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: true\n');
+    dataFile(sb, 'extensions', 'probe', 'root: ext-probe-root\nsuffix: .txt\nkey: <a>/<b>\n');
     const r = await storeData(sb, 'probe');
     expect({ code: r.code, stderr: r.stderr }).toEqual({ code: 0, stderr: '' });
-    expect(r.stdout.split('\n').slice(0, 5)).toEqual(['probe', 'probe-data', '.txt', '<a>/<b>', 'false']);
+    expect(r.stdout.split('\n').slice(0, 4)).toEqual(['probe', 'probe-data', '.txt', '<a>/<b>']);
   });
 
   it('[modules-r10] the stage carries no extension root, so the owner scan reads silent', async () => {
@@ -67,17 +67,17 @@ describe.concurrent('the bare base: the driver resolver tiers', () => {
   });
 });
 
-describe('the bare base: the store seven over a synthetic namespace', () => {
+describe('the bare base: the store six over a synthetic namespace', () => {
   it('[the-engine-r19] list, put, get, and delete answer exactly on posix', async () => {
     const sb = probeStage();
     expect(answerLine(await op(sb, 'store.list', ['probe']), 'store.list')).toBe('{"namespace":"probe","keys":[]}');
-    expect(answerLine(await op(sb, 'store.put', ['probe', 'x/one'], 'one\n'), 'store.put')).toBe('{"namespace":"probe","key":"x/one","op":"write"}');
+    expect(answerLine(await op(sb, 'store.put', ['probe', 'x/one'], 'one\n'), 'store.put')).toBe('{"namespace":"probe","key":"x/one"}');
     answerLine(await op(sb, 'store.put', ['probe', 'x/two'], 'two\n'), 'store.put');
     answerLine(await op(sb, 'store.put', ['probe', 'y/three'], 'three\n'), 'store.put');
     expect(answerLine(await op(sb, 'store.list', ['probe']), 'store.list')).toBe('{"namespace":"probe","keys":["x/one","x/two","y/three"]}');
     const got = await op(sb, 'store.get', ['probe', 'x/one']);
     expect({ code: got.code, stdout: got.stdout }).toEqual({ code: 0, stdout: 'one\n' });
-    expect(answerLine(await op(sb, 'store.delete', ['probe', 'x/two']), 'store.delete')).toBe('{"namespace":"probe","key":"x/two","op":"remove"}');
+    expect(answerLine(await op(sb, 'store.delete', ['probe', 'x/two']), 'store.delete')).toBe('{"namespace":"probe","key":"x/two"}');
     expect(answerLine(await op(sb, 'store.list', ['probe']), 'store.list')).toBe('{"namespace":"probe","keys":["x/one","y/three"]}');
   });
 });

@@ -1,21 +1,28 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { dataFile } from '../support/data-file';
+import { exec } from '../support/exec';
 import { ROOT_USER, chmodPlant } from '../support/plants';
-import { moduleCall } from '../support/sh';
+import { moduleCall, moduleScript } from '../support/sh';
 import { fresh } from '../support/snapshot';
-import { DRIVERS, fts5Available } from '../support/stage';
-import { docsStore, store } from '../support/store';
+import { DRIVERS, sqliteAvailable } from '../support/stage';
+import { docsStore, plantScript, store } from '../support/store';
 import { answer, refused } from '../support/wire';
 
 const LIBRARY = '.contexture/storage/scripts/library';
 const RICH = Buffer.from('say "hi" \\ back\\n\ttab\rcr\u0001one\u001fus\u007fdel çay\nnext line');
 const RICH_JSON = 'say \\"hi\\" \\\\ back\\\\n\\ttab\\rcr\\u0001one\\u001fus\u007fdel çay\\nnext line';
-const ASKED = ['workspace/türkçe', 'workspace/a', 'workspace/missing', 'workspace/binary', 'workspace/q"uote', 'workspace/a'];
-const ASKED_ANSWER = '{"namespace":"docs","items":[{"key":"workspace/türkçe","value":"turkce\\n"},{"key":"workspace/a","value":"a\\n"},{"key":"workspace/missing","missing":true},{"key":"workspace/binary","value_b64":"YQBi/w=="},{"key":"workspace/q\\"uote","value":"quote\\n"},{"key":"workspace/a","value":"a\\n"}]}\n';
+const ASKED = ['workspace/u_n-1', 'workspace/a', 'workspace/missing', 'workspace/binary', 'workspace/q.uote', 'workspace/a'];
+const ASKED_ANSWER = '{"namespace":"docs","items":[{"key":"workspace/u_n-1","value":"turkce\\n"},{"key":"workspace/a","value":"a\\n"},{"key":"workspace/missing","missing":true},{"key":"workspace/binary","value_b64":"YQBi/w=="},{"key":"workspace/q.uote","value":"quote\\n"},{"key":"workspace/a","value":"a\\n"}]}\n';
 
 const lib = (sb: string, fn: string, args: string[] = []) => moduleCall(sb, 'docs', join(sb, LIBRARY), fn, args, { input: '', env: { CTX_STORE_ROOT: sb }, root: 'extensions' });
+
+// libClosed: store_get_into called with its stdout open for reading only, so every answer line
+// it writes fails (a closed stdout would not do: the shell reuses the free descriptor)
+const SHELLS = ['sh', ...(existsSync('/bin/dash') ? ['/bin/dash'] : [])];
+const libClosed = (sb: string, shell: string, args: string[]) =>
+  exec(shell, [moduleScript(sb, 'docs', 'lib-closed', 'f=$1; shift; . "$f" && store_get_into "$@" 1< /dev/null\n', 'extensions'), join(sb, LIBRARY), ...args], { cwd: sb, input: '', env: { CTX_STORE_ROOT: sb } });
 
 function targets(sb: string, name: string, keys: readonly string[]): { file: string; paths: string[] } {
   const dir = join(sb, 'into', name);
@@ -27,7 +34,7 @@ function targets(sb: string, name: string, keys: readonly string[]): { file: str
 }
 
 for (const driver of DRIVERS) {
-  describe.skipIf(driver === 'fts5' && !fts5Available())(`the batched store.get on ${driver}`, { concurrent: true }, () => {
+  describe.skipIf(driver === 'sqlite' && !sqliteAvailable())(`the batched store.get on ${driver}`, { concurrent: true }, () => {
     let empty: string;
     let keyed: string;
     beforeAll(async () => {
@@ -75,6 +82,12 @@ for (const driver of DRIVERS) {
       expect([r.code, r.stdout, r.stderr]).toEqual([0, '{"namespace":"docs","items":[{"key":"Workspace/a","missing":true},{"key":"workspace/a","value":"a\\n"},{"key":"Other/c","missing":true},{"key":"other/c","value":"c\\n"}]}\n', '']);
     });
 
+    it('[the-engine-r19, the-engine-r21] a value holding a NUL byte its encoder cannot read whole refuses the batch rc 2 naming the key, never packing part of it', async () => {
+      const sb = fresh(keyed);
+      plantScript(sb, 'store-b64', "printf 'YQ'\nexit 2");
+      refused(await store(sb, driver).op('store.get', ['docs', 'workspace/a', 'workspace/binary']), 'store.get', 2, 'ERR_STORAGE_READ', "cannot read key 'workspace/binary' in namespace 'docs'");
+    });
+
     it.each([
       [['docs'], 'store.get takes the namespace and the key'],
       [['docs', 'workspace/a', 'bad key'], "malformed key 'bad key'"],
@@ -88,10 +101,10 @@ for (const driver of DRIVERS) {
       const sb = fresh(keyed);
       const s = store(sb, driver);
       answer(await s.put('docs', 'workspace/rich', RICH), 'store.put');
-      const keys = ['workspace/rich', 'workspace/gone', 'workspace/binary', 'workspace/q"uote'];
+      const keys = ['workspace/rich', 'workspace/gone', 'workspace/binary', 'workspace/q.uote'];
       const t = targets(sb, 'many', keys);
       const r = await lib(sb, 'store_get_into', [t.file]);
-      expect([r.code, r.stdout, r.stderr]).toEqual([0, '1\tworkspace/rich\n0\tworkspace/gone\n1\tworkspace/binary\n1\tworkspace/q"uote\n', '']);
+      expect([r.code, r.stdout, r.stderr]).toEqual([0, '1\tworkspace/rich\n0\tworkspace/gone\n1\tworkspace/binary\n1\tworkspace/q.uote\n', '']);
       expect(readFileSync(t.paths[0]!).equals(RICH)).toBe(true);
       expect(readFileSync(t.paths[2]!).equals(Buffer.from([0x61, 0x00, 0x62, 0xff]))).toBe(true);
       expect(readFileSync(t.paths[3]!, 'utf8')).toBe('quote\n');
@@ -102,6 +115,19 @@ for (const driver of DRIVERS) {
       expect(await lib(sb, 'store_get_into', [gone.file])).toMatchObject({ code: 0, stdout: '0\tworkspace/gone\n', stderr: '' });
       const bad = targets(sb, 'bad', ['workspace/a', 'workspace']);
       refused(await lib(sb, 'store_get_into', [bad.file]), 'store.get', 1, 'ERR_INVALID_ARGUMENT', "key 'workspace' does not match the namespace pattern '<repo>/<slug>'");
+    });
+
+    it.for([
+      ['one present key', ['workspace/a'], 'store.get'],
+      ['one absent key', ['workspace/gone'], 'store.get'],
+      ['a batch', ['workspace/a', 'workspace/gone'], 'store-pack'],
+    ] as const)('[the-engine-r19] store_get_into answering %s into an answer it cannot write refuses rc 2 with one line, never rc 0 with a short answer', async ([name, keys, label]) => {
+      const sb = fresh(keyed);
+      const t = targets(sb, name.replace(/ /g, '-'), keys);
+      for (const shell of SHELLS) {
+        const r = await libClosed(sb, shell, [t.file]);
+        expect([r.code, r.stdout, r.stderr], shell).toEqual([2, '', `${label}: error: cannot write the answer (ERR_STORAGE_WRITE)\n`]);
+      }
     });
   });
 }
@@ -120,6 +146,21 @@ describe('the batched store.get on posix alone', { concurrent: true }, () => {
     const r = await s.op('store.get', ['docs', 'workspace/a', 'workspace/ro', 'workspace/aa']);
     expect(r.stderr).not.toContain('docs/workspace');
     refused(r, 'store.get', 2, 'ERR_STORAGE_READ', "cannot read key 'workspace/ro' in namespace 'docs'");
+  });
+
+  it('[the-engine-r19] a batched get whose value paths pass the system\'s argument limit answers every item, the codec sizing and reading them in runs', { timeout: 120_000 }, async () => {
+    const sb = fresh(keyed);
+    const max = Number((await exec('getconf', ['ARG_MAX'], { cwd: sb, input: '' })).stdout.trim());
+    expect(max, 'the argument limit reads').toBeGreaterThan(0);
+    const path = (key: string) => join(sb, 'docs', `${key}.md`);
+    const n = Math.ceil((1.25 * max) / (path('workspace/k000000').length + 1));
+    const keys = Array.from({ length: n }, (_, i) => `workspace/k${String(i).padStart(6, '0')}`);
+    for (const key of keys) writeFileSync(path(key), `value of ${key}\n`);
+    const r = await store(sb, 'posix').op('store.get', ['docs', ...keys]);
+    expect([r.code, r.stderr]).toEqual([0, '']);
+    const items: { key: string; value?: string }[] = JSON.parse(r.stdout).items;
+    expect(items.length).toBe(n);
+    expect(items.filter((item, i) => item.key !== keys[i] || item.value !== `value of ${keys[i]}\n`)).toEqual([]);
   });
 
   it('[the-engine-r-b3r6t] a key served from the declared fallback root answers with the one notice line, the root\'s copy shadowing', async () => {

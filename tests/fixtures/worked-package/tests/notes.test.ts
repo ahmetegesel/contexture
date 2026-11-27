@@ -81,14 +81,20 @@ describe.concurrent('the worked example package: notes, from manifest to uninsta
     expect(out(await ctx(sb, 'notes', 'show', 'welcome/readme'))).toBe('an edited welcome');
   });
 
-  it('[modules-r18] the uninstall removes the module and its record and leaves the store data', async () => {
+  it('[modules-r18] the uninstall asks for the notes, keeps them on --keep-data while the module and its record go, and the re-install brings the module back over them', async () => {
     const sb = fresh(installed);
     expect((await ctxIn(sb, 'the first test note\n', 'notes', 'put', 'demo/first')).code).toBe(0);
-    expect((await uninstall(sb, pkgIn(sb))).code).toBe(0);
+    const asked = await uninstall(sb, pkgIn(sb));
+    expect(asked.code).toBe(1);
+    expect(asked.stderr).toContain('leaves its data: notes (2 keys)');
+    const kept = await uninstall(sb, pkgIn(sb), '--keep-data');
+    expect(kept.code).toBe(0);
+    expect(kept.stdout).toContain('kept the data of notes (2 keys); install worked-package again to use it');
     expect(existsSync(extPath(sb, 'modules/notes/module'))).toBe(false);
     expect(existsSync(recordPath(sb, 'worked-package'))).toBe(false);
-    expect(existsSync(join(sb, 'notes/demo/first'))).toBe(true);
     expect(readFileSync(join(sb, 'notes/demo/first'), 'utf8')).toBe('the first test note\n');
     expect((await ctx(sb, 'notes', 'show', 'demo/first')).code).toBe(1);
+    expect((await install(sb, pkgIn(sb))).code).toBe(0);
+    expect(out(await ctx(sb, 'notes', 'show', 'demo/first'))).toBe('the first test note');
   });
 });

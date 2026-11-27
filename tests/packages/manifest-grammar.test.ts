@@ -19,8 +19,8 @@ const REFUSED: [string, string[]][] = [
   ['a manifest with no part', [...HEAD, 'kind: feature']],
   ['an unknown kind', [...HEAD, 'kind: other', 'part: module modules/x']],
   ['a feature package with a driver line', [...HEAD, 'kind: feature', 'driver: fakedrv', 'part: module modules/x']],
-  ['a driver package without a driver line', [...HEAD, 'kind: driver', 'part: driver storage/drivers/fakedrv']],
-  ['a driver part that does not match the name', [...HEAD, 'kind: driver', 'driver: fakedrv', 'part: driver storage/drivers/other']],
+  ['a driver package without a driver line', [...HEAD, 'kind: driver', 'format: 1', 'part: driver storage/drivers/fakedrv']],
+  ['a driver part that does not match the name', [...HEAD, 'kind: driver', 'driver: fakedrv', 'format: 1', 'part: driver storage/drivers/other']],
   ['an unknown part type', [...HEAD, 'kind: feature', 'part: other modules/x']],
   ['a duplicate part path', [...HEAD, 'kind: feature', 'part: module modules/x', 'part: module modules/x']],
   ['a part path with ..', [...HEAD, 'kind: feature', 'part: module modules/../x']],
@@ -101,11 +101,38 @@ describe.concurrent('ctx _package: the package manifest grammar', () => {
     expect((await pkgv(last, 'description')).stdout).toBe('body line\ncategory: docs\n');
   });
 
-  it('[the-engine-r23, modules-r16] a driver manifest validates and reads its kind and driver name', async () => {
-    const f = manifest('driver', ['summary: a driver fixture package', 'version: 2.0.0', 'kind: driver', 'driver: fakedrv', 'part: driver storage/drivers/fakedrv']);
+  it('[the-engine-r23, modules-r16] a driver manifest validates and reads its kind, driver name, and storage format version', async () => {
+    const f = manifest('driver', ['summary: a driver fixture package', 'version: 2.0.0', 'kind: driver', 'driver: fakedrv', 'format: 12', 'part: driver storage/drivers/fakedrv']);
     expect((await pkgv(f, 'validate')).code).toBe(0);
     expect(out(await pkgv(f, 'kind'))).toBe('driver');
     expect(out(await pkgv(f, 'driver'))).toBe('fakedrv');
+    expect(out(await pkgv(f, 'format'))).toBe('12');
+    const feature = manifest('feature-format', [...HEAD, 'kind: feature', 'part: module modules/x']);
+    const r = await pkgv(feature, 'format');
+    expect([r.code, r.stdout]).toEqual([0, '\n']);
+  });
+
+  const DRIVER = [...HEAD, 'kind: driver', 'driver: fakedrv', 'part: driver storage/drivers/fakedrv'];
+  it.each([
+    ['an empty format', [...DRIVER, 'format: '], 'line 6: the format is empty'],
+    ['a bare format line', [...DRIVER, 'format:'], 'line 6: the format is empty'],
+    ['a zero format', [...DRIVER, 'format: 0'], 'line 6: the format is zero (a positive whole number)'],
+    ['a format of zeros', [...DRIVER, 'format: 00'], 'line 6: the format is zero (a positive whole number)'],
+    ['a format with a leading zero', [...DRIVER, 'format: 06'], "line 6: malformed format '06' (a positive whole number)"],
+    ['a negative format', [...DRIVER, 'format: -1'], "line 6: malformed format '-1' (a positive whole number)"],
+    ['a fractional format', [...DRIVER, 'format: 1.5'], "line 6: malformed format '1.5' (a positive whole number)"],
+    ['a format holding a word', [...DRIVER, 'format: six'], "line 6: malformed format 'six' (a positive whole number)"],
+    ['a format with no space after its colon', [...DRIVER, 'format:6'], "line 6: malformed field line (expected '# <field>: <value>')"],
+    ['a duplicate format', [...DRIVER, 'format: 6', 'format: 7'], 'line 7: duplicate # format:'],
+    ['a driver package without a format line', DRIVER, 'a driver package carries no # format: line'],
+    ['a feature package with a format line', [...HEAD, 'kind: feature', 'format: 3', 'part: module modules/x'], 'line 4: a feature package carries no # format: line'],
+    ['a driver package with a module part', [...DRIVER, 'format: 6', 'part: module modules/x'], 'a driver package carries no module part (its install and uninstall move the record)'],
+  ])('[the-engine-r23, modules-r16] %s refuses rc1 naming its line', async (label, lines, message) => {
+    const f = manifest(`format-${label.replace(/[^a-z]+/g, '-')}`, lines);
+    for (const field of ['validate', 'format']) {
+      const r = await pkgv(f, field);
+      expect([r.code, r.stdout, r.stderr]).toEqual([1, '', `package-file: error: ${message}\n`]);
+    }
   });
 
   it.each(REFUSED)('[the-engine-r23, modules-r16] %s refuses rc1', async (label, lines) => {

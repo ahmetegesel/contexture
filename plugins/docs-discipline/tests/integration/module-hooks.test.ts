@@ -4,22 +4,22 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { exec, type Run } from '@support/exec';
 import { stage } from '@support/stage';
 import { unit } from '@support/unit';
-import { docs, MODULE, PLUGIN, SAMPLE, stageSeed } from '../support/corpus';
+import { CORPUS, docs, MODULE, PLUGIN, SAMPLE, stageSeed } from '../support/corpus';
 
 let ws: string;
 const ctx = (args: readonly string[]): Promise<Run> => exec('./.contexture/ctx', args, { cwd: ws, env: { GIT_CEILING_DIRECTORIES: dirname(ws) } });
-const stored = (): string => readFileSync(join(ws, 'docs/workspace/conventions.md'), 'utf8');
+const stored = (): string => readFileSync(join(ws, CORPUS, 'workspace/conventions.md'), 'utf8');
 
 beforeAll(() => {
   ws = stage('posix', 'hooks');
 });
 
 describe('the docs module part hooks, in order on one workspace', { concurrent: false }, () => {
-  it('RS3a [plugins-r1, plugins-r2, modules-r13] a package install runs no install part hook and writes no conventions doc', async () => {
+  it('RS3a [plugins-r1, plugins-r2, modules-r13] a package install runs the root move guard alone, silent over an empty corpus, and writes no conventions doc', async () => {
     const r = await ctx(['package', 'install', PLUGIN]);
     expect(r.code, r.stderr).toBe(0);
     expect(existsSync(join(ws, '.contexture/extensions/modules/docs/uninstall'))).toBe(true);
-    expect(existsSync(join(ws, '.contexture/extensions/modules/docs/install'))).toBe(false);
+    expect(existsSync(join(ws, '.contexture/extensions/modules/docs/install'))).toBe(true);
     expect(r.stdout + r.stderr).not.toContain('docs install');
     expect((await docs(ws, ['query', 'workspace', 'conventions'])).code).toBe(1);
   });
@@ -40,14 +40,20 @@ describe('the docs module part hooks, in order on one workspace', { concurrent: 
     expect(stored()).toBe(before);
   });
 
-  it('RS3d [plugins-r2, modules-r13] uninstall leaves the corpus whole', async () => {
+  it('RS3d [plugins-r2, modules-r13] uninstall on the keep answer leaves the corpus whole, the hook claiming nothing about it', async () => {
     const before = stored();
-    const r = await ctx(['package', 'uninstall', 'docs-discipline']);
+    const r = await ctx(['package', 'uninstall', 'docs-discipline', '--keep-data']);
     expect(r.code, r.stderr).toBe(0);
-    expect(r.stdout + r.stderr).toContain('the corpus data stays in the storage layer');
+    expect(r.stdout + r.stderr).not.toContain('docs uninstall');
     expect(existsSync(join(ws, '.contexture/extensions/modules/docs'))).toBe(false);
     expect(stored()).toBe(before);
     expect(before).toContain('A locally kept description');
+  });
+
+  it('RS3e install refuses rc 2 without the workspace root context', async () => {
+    const r = await exec(join(MODULE, 'install'), [], { cwd: ws, env: {} });
+    expect(r.code).toBe(2);
+    expect(r.stdout + r.stderr).toContain('CTX_ROOT is not set');
   });
 
   it('RS3f uninstall refuses rc 2 without the workspace root context', async () => {

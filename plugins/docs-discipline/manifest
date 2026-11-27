@@ -9,4 +9,4 @@
 # needs: POSIX sh and awk; git optional (required for check, gate, and drift)
 # tags: docs corpus gate audit
 # description:
-# Typed-block documentation corpus with read verbs (query, get, search, audit, check, gate, nudge, changes), schema-checked write verbs, unit task-landing and load-end nudges, and authoring/drift rhythms over any configured storage driver.
+# Typed-block documentation corpus with read verbs (query, get, search, audit, check, gate, nudge), schema-checked write verbs, unit task-landing and load-end nudges, and authoring/drift rhythms over any configured storage driver.

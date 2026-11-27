@@ -125,7 +125,7 @@ parse_plugins_arg() {
     return 0
   fi
   if [ "$pa_raw" = "all" ]; then
-    die 1 "--plugins=all is not supported (git has no default and storage-fts5 changes the storage driver; list plugins explicitly)"
+    die 1 "--plugins=all is not supported (git has no default and storage-sqlite changes the storage driver; list plugins explicitly)"
   fi
   pa_rest=$pa_raw
   pa_out=""
@@ -633,7 +633,7 @@ interactive_select_plugins() {
 
   printf '\n'
   printf 'Core is ready now: unit memory, subagent lanes, workflow rhythms, key-value store, and command compaction need no install.\n'
-  printf 'Optional plugins add project capabilities (docs discipline, TypeScript graph, git rules, test filters, starter rhythms, SQLite search); pick below or press Enter for core only.\n'
+  printf 'Optional plugins add project capabilities (docs discipline, TypeScript graph, git rules, test filters, starter rhythms, SQLite storage); pick below or press Enter for core only.\n'
   printf '\n'
   run_ctx package catalog || exit $?
   printf '\n'
@@ -728,8 +728,32 @@ if [ "$non_interactive" -eq 0 ] && [ "$plugins_given" -eq 0 ]; then
   interactive_select_plugins
 fi
 
-installed_plugins=""
+# plugin_kind <name>: the package kind its catalog manifest's # kind: line declares, read from
+# .contexture/plugins/<name> first and plugins/<name> after, the order ctx package resolves a
+# catalog name in; prints nothing when no manifest is found.
+plugin_kind() {
+  for pk_manifest in "$target_dir/.contexture/plugins/$1/manifest" "$target_dir/plugins/$1/manifest"; do
+    [ -f "$pk_manifest" ] || continue
+    awk '/^# kind:/ { sub(/^# kind:[ \t]*/, ""); sub(/[ \t]+$/, ""); print; exit }' "$pk_manifest"
+    return 0
+  done
+}
+
+# Driver packages install first, the rest keeping their selection order: a driver package's
+# install moves the record into its driver, and a fresh workspace's posix record lists no key
+# until a feature package seeds one, so the move needs no answer for the old copy.
+driver_plugins=""
+other_plugins=""
 for p in $selected_plugins; do
+  if [ "$(plugin_kind "$p")" = driver ]; then
+    driver_plugins="${driver_plugins:+$driver_plugins }$p"
+  else
+    other_plugins="${other_plugins:+$other_plugins }$p"
+  fi
+done
+
+installed_plugins=""
+for p in $driver_plugins $other_plugins; do
   if run_ctx package install "$p"; then
     installed_plugins="${installed_plugins:+$installed_plugins }$p"
   else
@@ -748,11 +772,10 @@ printf '  catalog: .contexture/plugins/\n'
 printf '  law layer: AGENTS.generated.md (composed)\n'
 if [ -n "$installed_plugins" ]; then
   printf '  plugins installed: %s\n' "$installed_plugins"
-  case " $installed_plugins " in
-    *" storage-fts5 "*)
-      printf '  storage-fts5 installed: activate with .contexture/ctx store config set driver fts5\n'
-      ;;
-  esac
+  if [ -n "$driver_plugins" ]; then
+    active_driver=$(run_ctx store config get driver 2>/dev/null) || active_driver=""
+    printf '  storage driver: %s (its package install moved the record into it)\n' "${active_driver:-unknown}"
+  fi
 else
   printf '  plugins installed: none (core only; run .contexture/ctx package catalog to inspect)\n'
 fi

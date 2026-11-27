@@ -118,46 +118,33 @@ read_conf_driver() {
   return 1
 }
 
-# Locate driver executable: the storage core's drivers first, then the extension root's
-# package drivers, then the transitional locations (workspace drivers, module-owned
-# drivers, the base mirror, PATH). The core drivers and the extension root are the
-# settled end shape; the module tree carries the fts5 driver until the module system
-# moves it to the extension root.
+# driver_name_ok <name>: the installer's driver name rule (letters, digits, dot, underscore,
+# hyphen; not empty, not opening with a dot), so no name is a path
+driver_name_ok() {
+  case "$1" in
+    ""|.*|*[!A-Za-z0-9._-]*) return 1 ;;
+  esac
+  return 0
+}
+
+# Locate driver executable, from two places alone: posix is the storage core's posix driver,
+# then its base mirror copy for a drawer without its storage core beside a base folder; any
+# other name is an installed driver package's driver at the extension root, by its path, no
+# install record read. The caller checks the name rule first.
 find_driver_executable() {
   ctx_dir="$1"
   driver="$2"
 
-  case "$driver" in
-    */*)
-      if [ -x "$driver" ]; then
-        printf '%s\n' "$driver"
+  if [ "$driver" = posix ]; then
+    for fde_p in "$ctx_dir/storage/drivers/posix/driver" "$ctx_dir/../base/.contexture/storage/drivers/posix/driver"; do
+      if [ -f "$fde_p" ] && [ -x "$fde_p" ]; then
+        printf '%s\n' "$fde_p"
         return 0
       fi
-      ;;
-  esac
-
-  # Tier 1: Workspace custom drivers (transitional)
-  if [ -x "$ctx_dir/drivers/$driver/driver" ]; then
-    printf '%s/drivers/%s/driver\n' "$ctx_dir" "$driver"
-    return 0
-  fi
-  if [ -f "$ctx_dir/drivers/$driver" ] && [ -x "$ctx_dir/drivers/$driver" ]; then
-    printf '%s/drivers/%s\n' "$ctx_dir" "$driver"
-    return 0
+    done
+    return 1
   fi
 
-  # Tier 2: The storage core's drivers
-  if [ -x "$ctx_dir/storage/drivers/$driver/driver" ]; then
-    printf '%s/storage/drivers/%s/driver\n' "$ctx_dir" "$driver"
-    return 0
-  fi
-  if [ -f "$ctx_dir/storage/drivers/$driver" ] && [ -x "$ctx_dir/storage/drivers/$driver" ]; then
-    printf '%s/storage/drivers/%s\n' "$ctx_dir" "$driver"
-    return 0
-  fi
-
-  # Tier 3: The extension root's package drivers (the settled home of a package's
-  # driver; the core's drivers above stay beside it, the transitional tiers below)
   if [ -x "$ctx_dir/extensions/storage/drivers/$driver/driver" ]; then
     printf '%s/extensions/storage/drivers/%s/driver\n' "$ctx_dir" "$driver"
     return 0
@@ -166,51 +153,6 @@ find_driver_executable() {
     printf '%s/extensions/storage/drivers/%s\n' "$ctx_dir" "$driver"
     return 0
   fi
-
-  # Tier 4: Module-owned drivers (transitional; the fts5 driver lives here until the
-  # module system moves it to the extension root)
-  for mod_dir in "$ctx_dir"/modules/*; do
-    [ -d "$mod_dir" ] || continue
-    if [ -x "$mod_dir/drivers/$driver/driver" ]; then
-      printf '%s/drivers/%s/driver\n' "$mod_dir" "$driver"
-      return 0
-    fi
-    if [ -f "$mod_dir/drivers/$driver" ] && [ -x "$mod_dir/drivers/$driver" ]; then
-      printf '%s/drivers/%s\n' "$mod_dir" "$driver"
-      return 0
-    fi
-  done
-
-  # Tier 5: Base mirror fallback (transitional)
-  base_ctx="$ctx_dir/../base/.contexture"
-  if [ -d "$base_ctx" ]; then
-    if [ -x "$base_ctx/storage/drivers/$driver/driver" ]; then
-      printf '%s/storage/drivers/%s/driver\n' "$base_ctx" "$driver"
-      return 0
-    fi
-    if [ -x "$base_ctx/extensions/storage/drivers/$driver/driver" ]; then
-      printf '%s/extensions/storage/drivers/%s/driver\n' "$base_ctx" "$driver"
-      return 0
-    fi
-    for mod_dir in "$base_ctx"/modules/*; do
-      [ -d "$mod_dir" ] || continue
-      if [ -x "$mod_dir/drivers/$driver/driver" ]; then
-        printf '%s/drivers/%s/driver\n' "$mod_dir" "$driver"
-        return 0
-      fi
-      if [ -f "$mod_dir/drivers/$driver" ] && [ -x "$mod_dir/drivers/$driver" ]; then
-        printf '%s/drivers/%s\n' "$mod_dir" "$driver"
-        return 0
-      fi
-    done
-  fi
-
-  # Tier 6: External binary on PATH (transitional)
-  if command -v "ctx-storage-$driver" >/dev/null 2>&1; then
-    command -v "ctx-storage-$driver"
-    return 0
-  fi
-
   return 1
 }
 
@@ -244,6 +186,10 @@ resolve_target_driver() {
   ctx_dir="$1"
   target_name="$2"
 
+  if ! driver_name_ok "$target_name"; then
+    printf 'driver-resolver: ERROR: malformed storage driver name '\''%s'\'' (letters, digits, dot, underscore, hyphen; not opening with a dot) (ERR_INVALID_ARGUMENT)\n' "$target_name" >&2
+    return 1
+  fi
   resolved_path=$(find_driver_executable "$ctx_dir" "$target_name") || resolved_path=""
 
   if [ -n "$resolved_path" ] && [ -x "$resolved_path" ]; then
@@ -257,7 +203,7 @@ resolve_target_driver() {
     return 0
   fi
 
-  printf 'driver-resolver: ERROR: storage driver '\''%s'\'' not found in the core drivers, the extension drivers, workspace drivers, module drivers, or PATH (ERR_DRIVER_NOT_FOUND)\n' "$target_name" >&2
+  printf 'driver-resolver: ERROR: storage driver '\''%s'\'' is neither the core posix driver nor an installed driver package (ERR_DRIVER_NOT_FOUND)\n' "$target_name" >&2
   return 2
 }
 
@@ -306,29 +252,29 @@ verify_capabilities() {
     return 2
   fi
 
-  # contract 3 (docs/the-engine.md, The descriptor and the handshake): the store-only card
-  # at driver version 3.0.0: contract 3, the seven data names in the fixed order, exact among
-  # the search modes, and the optional token agreement. The card carries no record function
-  # family: capability and storage.health are the driver's own methods, never descriptor
-  # families, and a record-only driver refuses
+  # contract 4 (docs/the-engine.md, The descriptor and the handshake): the store-only card
+  # that describes posix exactly: contract 4, the six data names in the fixed order, the
+  # exact search mode alone, and the optional token agreement. The card carries no record
+  # function family: capability and storage.health are the driver's own methods, never
+  # descriptor families, and a record-only driver refuses; the version stays unchecked
   check_result=$(printf '%s\n' "$cap_json" | desc_field contract)
-  if [ "$check_result" != 3 ]; then
-    printf 'driver-resolver: ERROR: driver '\''%s'\'' declares contract '\''%s'\'', not 3 (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$check_result" >&2
+  if [ "$check_result" != 4 ]; then
+    printf 'driver-resolver: ERROR: driver '\''%s'\'' declares contract '\''%s'\'', not 4 (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$check_result" >&2
     return 2
   fi
   case "$cap_json" in
     *'"functions"'*)
-      printf 'driver-resolver: ERROR: driver '\''%s'\'' declares a record function family, which contract 3 does not carry (ERR_DRIVER_PROTOCOL)\n' "$driver_name" >&2
+      printf 'driver-resolver: ERROR: driver '\''%s'\'' declares a record function family, which contract 4 does not carry (ERR_DRIVER_PROTOCOL)\n' "$driver_name" >&2
       return 2
       ;;
   esac
   cap_store=$(printf '%s\n' "$cap_json" | desc_field store | tr '\n' ' ')
   if [ -z "$cap_store" ]; then
-    printf 'driver-resolver: ERROR: driver '\''%s'\'' declares no store family; contract 3 serves the store family alone (ERR_DRIVER_PROTOCOL)\n' "$driver_name" >&2
+    printf 'driver-resolver: ERROR: driver '\''%s'\'' declares no store family; contract 4 serves the store family alone (ERR_DRIVER_PROTOCOL)\n' "$driver_name" >&2
     return 2
   fi
   if [ "$cap_store" != "$STORE_FUNCTIONS " ]; then
-    printf 'driver-resolver: ERROR: driver '\''%s'\'' declares the store family '\''%s'\'', not the seven data names in the fixed order (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$cap_store" >&2
+    printf 'driver-resolver: ERROR: driver '\''%s'\'' declares the store family '\''%s'\'', not the six data names in the fixed order (%s) (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$cap_store" "$STORE_FUNCTIONS" >&2
     return 2
   fi
   if ! cap_pairs=$(printf '%s\n' "$cap_json" | desc_modes); then
@@ -336,20 +282,19 @@ verify_capabilities() {
     return 2
   fi
   cap_modes=$(printf '%s\n' "$cap_pairs" | cut -f 1 | tr '\n' ' ' | sed 's/[[:space:]]*$//')
-  case " $cap_modes " in
-    *" exact "*) ;;
-    *) printf 'driver-resolver: ERROR: driver '\''%s'\'' declares no exact search mode among [%s] (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$cap_modes" >&2; return 2 ;;
-  esac
+  if [ "$cap_modes" != exact ]; then
+    printf 'driver-resolver: ERROR: driver '\''%s'\'' declares the search modes [%s], not the exact mode alone (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$cap_modes" >&2
+    return 2
+  fi
 
-  # the optional tokens stay inside the card: store (implied by the family), store.changelog
-  # where the driver keeps a change log, search.schema where it consumes a declared search
-  # schema, and store.promote where it moves a key prefix from a declared fallback root to
-  # the root; any other token refuses
+  # the optional tokens stay inside the card: store (implied by the family) and
+  # store.promote where the driver moves a key prefix from a declared fallback root to the
+  # root; any other token refuses
   cap_opt=" $(printf '%s\n' "$cap_json" | desc_field optional | tr '\n' ' ') "
   for cap_o in $cap_opt; do
     case "$cap_o" in
-      store|store.changelog|search.schema|store.promote) ;;
-      *) printf 'driver-resolver: ERROR: driver '\''%s'\'' declares optional capability '\''%s'\'' outside store, store.changelog, search.schema, store.promote (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$cap_o" >&2; return 2 ;;
+      store|store.promote) ;;
+      *) printf 'driver-resolver: ERROR: driver '\''%s'\'' declares optional capability '\''%s'\'' outside store, store.promote (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$cap_o" >&2; return 2 ;;
     esac
   done
 
@@ -357,8 +302,8 @@ verify_capabilities() {
   return 0
 }
 
-# the seven store data names of contract 3's card, in the descriptor's fixed order
-STORE_FUNCTIONS="list get put delete changes batch scan"
+# the six store data names of contract 4's card, in the descriptor's fixed order
+STORE_FUNCTIONS="list get put delete batch scan"
 
 # desc_field <key>: the value of one descriptor key on stdin: a string, or each element of
 # a list of strings on its own line (the descriptor is one compact JSON object; a legacy
@@ -451,18 +396,21 @@ desc_modes() {
 }
 
 # verdict_fresh <verdict file> <driver path>: a cached verdict stands while the driver
-# exists and the verdict is strictly newer than it and, when the workspace carries one, than
-# its configuration (a driver that reads configuration is verified again after the
-# configuration changes). The driver's existence is tested on its own, since a bash or ksh
-# sh reads -nt as true against a missing file where dash and zsh read false
+# exists and the verdict is strictly newer than it, than this resolver (a core update, whose
+# copy stamps the resolver anew, verifies every driver against the new contract), and, when
+# the workspace carries one, than its configuration (a driver that reads configuration is
+# verified again after the configuration changes). Each file's existence is tested on its
+# own, since a bash or ksh sh reads -nt as true against a missing file where dash and zsh
+# read false
 verdict_fresh() {
   [ -f "$1" ] && [ -f "$2" ] && [ "$1" -nt "$2" ] || return 1
+  if [ -f "$0" ] && [ ! "$1" -nt "$0" ]; then return 1; fi
   if [ -f "$CTX_DIR/config" ] && [ ! "$1" -nt "$CTX_DIR/config" ]; then return 1; fi
   return 0
 }
 
 # The handshake at dispatch: a driver other than the bundled core posix driver proves its
-# descriptor (contract 3, the seven store data names, exact, and the optional token
+# descriptor (contract 4, the six store data names, exact alone, and the optional token
 # agreement) before it serves any function, and a driver that fails halts the call rc 2
 # ERR_DRIVER_PROTOCOL with the gap named; a record-only driver refuses because the card is
 # store-only. The
@@ -498,8 +446,8 @@ handshake_at_dispatch() {
   return 0
 }
 
-# The optional capabilities (store, store.changelog, search.schema, store.promote) and the
-# search modes stay outside the dispatch handshake; the store family's array implies the
+# The optional capabilities (store, store.promote) and the search mode stay outside the
+# dispatch handshake; the store family's array implies the
 # store capability even when the token is omitted, and a caller that needs one asks the
 # resolver first (a search mode reads search.mode.<m>):
 #   require <capability>...  rc 0 when the configured driver declares every one; rc 2
@@ -589,11 +537,561 @@ require_caps() {
   return 0
 }
 
+# The key and value gate at dispatch: every key and prefix a store function takes and every
+# value it writes meets the storage core's one key rule (store-key.awk beside this script)
+# before any driver runs, so every caller (a module through the library, a core script) and
+# every driver meet one rule. A refusal is the dispatched function's own line, rc 1
+# ERR_INVALID_ARGUMENT, a key named with the batch payload escape so the line stays one;
+# nothing reaches stdout and no driver runs. The suffix clause reads the namespace's suffix
+# and key pattern through store-data when a checked key or prefix has a non final segment,
+# and once for every batch; a declaration it cannot read leaves the refusal to the driver.
+# A put's and a batch's stdin are staged in the per verb scratch root, else the drawer's
+# scratch (the system temp only when the drawer cannot hold it), a batch's without its NUL
+# bytes, checked there (a value at most KV_CAP bytes, a batch value's decoded size
+# likewise), and handed to the driver as its stdin from the staged file, which kv_handoff
+# unlinks before the exec; a hangup, interrupt, or termination before it ends the copy still
+# reading stdin and removes the file.
+KV_CAP=16777216
+KV_STAGE=""
+KV_COPY=""
+KV_RULE=""
+KV_SFX=""
+KV_MULTI=0
+KV_NL='
+'
+case "$0" in */*) KV_HOME=${0%/*} ;; *) KV_HOME=. ;; esac
+
+kv_drop() {
+  if [ -n "$KV_COPY" ]; then
+    KV_COPY=""
+    set +u
+    [ -z "$!" ] || { kill -KILL "$!"; wait "$!"; } 2>/dev/null
+    set -u
+  fi
+  [ -n "$KV_STAGE" ] && rm -f "$KV_STAGE" 2>/dev/null
+  KV_STAGE=""
+  return 0
+}
+
+kv_fail() {
+  printf '%s: error: %s (%s)\n' "$METHOD" "$3" "$2" >&2
+  kv_drop
+  exit "$1"
+}
+
+kv_rule() {
+  [ -z "$KV_RULE" ] || return 0
+  [ -f "$KV_HOME/store-key.awk" ] && [ -r "$KV_HOME/store-key.awk" ] || kv_fail 2 ERR_STORAGE_READ "the storage core key rule is not installed"
+  while IFS= read -r kv_l || [ -n "$kv_l" ]; do
+    KV_RULE="$KV_RULE$kv_l$KV_NL"
+  done < "$KV_HOME/store-key.awk"
+}
+
+# kv_decl <namespace>: KV_SFX and KV_MULTI from the namespace's declaration, read once, from
+# the workspace root the drivers find (the walk up from the working folder)
+kv_decl() {
+  [ -z "${KV_DECL_READ:-}" ] || return 0
+  KV_DECL_READ=1
+  kd_ws=$PWD
+  while [ -n "$kd_ws" ] && [ "$kd_ws" != / ] && [ ! -d "$kd_ws/.contexture" ]; do kd_ws=${kd_ws%/*}; done
+  [ -n "$kd_ws" ] && [ "$kd_ws" != / ] || kd_ws=$PWD
+  [ -x "$KV_HOME/store-data" ] || return 0
+  kd_out=$(CTX_STORE_WORKSPACE="$kd_ws" "$KV_HOME/store-data" "$1" 2>/dev/null </dev/null) || return 0
+  kd_rest=${kd_out#*"$KV_NL"}
+  kd_rest=${kd_rest#*"$KV_NL"}
+  KV_SFX=${kd_rest%%"$KV_NL"*}
+  kd_rest=${kd_rest#*"$KV_NL"}
+  kd_pat=${kd_rest%%"$KV_NL"*}
+  case "$kd_pat" in *'...>') KV_MULTI=1 ;; esac
+}
+
+# kv_check <key|list|whole> <namespace> <message> <item>...: each item under the rule (a key,
+# a list prefix, or a whole segment prefix); the first one outside it refuses with
+# <message> '<item>'. Each item rides awk's operands behind one letter, so none reads as an
+# option.
+kv_check() {
+  kc_mode=$1; kc_ns=$2; kc_msg=$3
+  shift 3
+  kc_n=$#
+  kc_slash=0
+  for kc_a in "$@"; do
+    case "$kc_a" in */*) kc_slash=1 ;; esac
+    set -- "$@" "k$kc_a"
+  done
+  shift "$kc_n"
+  kv_rule
+  if [ "$kc_slash" -eq 1 ] || [ "$kc_mode" = whole ]; then kv_decl "$kc_ns"; fi
+  kc_bad=$(KC_MODE=$kc_mode KC_SFX=$KV_SFX KC_MULTI=$KV_MULTI LC_ALL=C awk "$KV_RULE"'
+    BEGIN {
+      mode = ENVIRON["KC_MODE"]; sfx = ENVIRON["KC_SFX"]; multi = (ENVIRON["KC_MULTI"] == "1")
+      for (a = 1; a < ARGC; a++) {
+        s = substr(ARGV[a], 2)
+        if (mode == "key") ok = kr_key(s, sfx, multi)
+        else if (mode == "list") ok = kr_list_prefix(s, sfx, multi)
+        else ok = kr_whole_prefix(s, sfx, multi)
+        if (!ok) { printf "%s", kr_esc(s); exit 3 }
+      }
+      exit 0
+    }' "$@")
+  case $? in
+    0) return 0 ;;
+    3) kv_fail 1 ERR_INVALID_ARGUMENT "$kc_msg '$kc_bad'" ;;
+    *) kv_fail 2 ERR_STORAGE_READ "the storage core key rule cannot be read" ;;
+  esac
+}
+
+# kv_stage [wire]: stdin staged in a file of the per verb scratch root, else the drawer's
+# scratch; a batch payload (wire) is staged without its NUL bytes, which an awk may cut a
+# line at while a shell read drops them, so the gate checks the very lines the driver reads.
+# The copy runs in the background under the wait builtin, which a trapped signal interrupts at
+# once, and the trap kills it (KV_COPY marks it from before its fork, so $! names it): a
+# foreground copy holds the trap until the caller's stdin ends, and a signal reaching the
+# shell around that fork never reaches the copy
+kv_stage() {
+  trap 'kv_drop' EXIT
+  trap 'kv_drop; exit 129' HUP
+  trap 'kv_drop; exit 130' INT
+  trap 'kv_drop; exit 143' TERM
+  ks_dir=""
+  if [ -n "${CTX_SCRATCH_ROOT:-}" ] && { [ -d "$CTX_SCRATCH_ROOT" ] || mkdir -p "$CTX_SCRATCH_ROOT" 2>/dev/null; } && [ -w "$CTX_SCRATCH_ROOT" ]; then
+    ks_dir=$CTX_SCRATCH_ROOT
+  elif { [ -d "$CTX_DIR/tmp" ] || mkdir -p "$CTX_DIR/tmp" 2>/dev/null; } && [ -w "$CTX_DIR/tmp" ]; then
+    ks_dir=$CTX_DIR/tmp
+  else
+    ks_dir="${TMPDIR:-/tmp}/contexture-${USER:-}"
+    mkdir -p "$ks_dir" 2>/dev/null
+  fi
+  KV_STAGE=$(mktemp "$ks_dir/store-gate.XXXXXX" 2>/dev/null) || kv_fail 2 ERR_STORAGE_WRITE "cannot stage the payload"
+  KV_COPY=1
+  if [ "${1:-}" = wire ]; then
+    LC_ALL=C tr -d '\000' <&3 > "$KV_STAGE" 3<&- &
+  else
+    cat <&3 > "$KV_STAGE" 3<&- &
+  fi 2>/dev/null 3<&0 || kv_fail 2 ERR_STORAGE_WRITE "cannot stage the payload"
+  wait "$!"
+  ks_rc=$?
+  KV_COPY=""
+  [ "$ks_rc" -eq 0 ] || kv_fail 2 ERR_STORAGE_WRITE "cannot stage the payload"
+}
+
+kv_value() {
+  kv_stage
+  kv_size=$(wc -c < "$KV_STAGE" 2>/dev/null) || kv_fail 2 ERR_STORAGE_WRITE "cannot stage the payload"
+  kv_size=${kv_size##* }
+  [ "$kv_size" -le "$KV_CAP" ] || kv_fail 1 ERR_INVALID_ARGUMENT "the value of key '$1' is $kv_size bytes, past the 16 MiB cap ($KV_CAP bytes)"
+}
+
+# kv_batch <namespace>: the batch payload staged, then every action's key and decoded value
+# size (the trailing padding run aside, so no decoder yields more) checked in action order
+# as the driver parses them; a line outside the wire's shape (an unknown or repeated line, a
+# line outside an action, an unknown action, an action with no key) ends the check there,
+# so the driver names it
+kv_batch() {
+  kv_stage wire
+  kv_rule
+  kv_decl "$1"
+  kb_bad=$(KC_SFX=$KV_SFX KC_MULTI=$KV_MULTI KC_CAP=$KV_CAP LC_ALL=C awk "$KV_RULE"'
+    function unesc(s,   o, i, c, n) {
+      o = ""; n = length(s)
+      for (i = 1; i <= n; i++) {
+        c = substr(s, i, 1)
+        if (c == "\\") {
+          c = substr(s, ++i, 1)
+          if (c == "n") c = "\n"; else if (c == "t") c = "\t"; else if (c == "r") c = "\r"
+        }
+        o = o c
+      }
+      return o
+    }
+    function shut(   L, size) {
+      if (!open) return
+      open = 0; n++
+      if (!seen_key || key == "") stop()
+      if (!kr_key(key, sfx, multi)) { printf "malformed\t%s\t%s\t%s", n, op, kr_esc(key); rc = 3; exit 3 }
+      if (op == "put" && seen_val) {
+        L = length(val)
+        while (L > 0 && substr(val, L, 1) == "=") L--
+        size = int(L * 3 / 4)
+        if (size > cap) { printf "cap\t%s\t%s\t%s\t%.0f", n, op, kr_esc(key), size; rc = 3; exit 3 }
+      }
+    }
+    function stop() { stopped = 1; exit 0 }
+    BEGIN { sfx = ENVIRON["KC_SFX"]; multi = (ENVIRON["KC_MULTI"] == "1"); cap = ENVIRON["KC_CAP"] + 0 }
+    {
+      line = $0
+      sub(/\r$/, "", line)
+      if (line == "") next
+      if (substr(line, 1, 7) == "action=") {
+        shut()
+        op = substr(line, 8)
+        if (op != "put" && op != "delete") stop()
+        open = 1; key = ""; val = ""; seen_key = seen_val = 0
+      } else if (substr(line, 1, 4) == "key=") {
+        if (!open || seen_key) stop()
+        seen_key = 1; key = unesc(substr(line, 5))
+      } else if (substr(line, 1, 10) == "value_b64=") {
+        if (!open || seen_val) stop()
+        seen_val = 1; val = substr(line, 11)
+      } else stop()
+    }
+    END { if (!stopped && !rc) shut(); exit rc }' "$KV_STAGE")
+  case $? in
+    0) return 0 ;;
+    3) ;;
+    *) kv_fail 2 ERR_STORAGE_READ "the storage core key rule cannot be read" ;;
+  esac
+  kb_kind=${kb_bad%%	*}; kb_bad=${kb_bad#*	}
+  kb_n=${kb_bad%%	*}; kb_bad=${kb_bad#*	}
+  kb_op=${kb_bad%%	*}; kb_key=${kb_bad#*	}
+  printf 'store.batch: error: action %s (%s '\''%s'\''): ' "$kb_n" "$kb_op" "${kb_key%%	*}" >&2
+  if [ "$kb_kind" = cap ]; then
+    printf 'the value of key '\''%s'\'' is %s bytes, past the 16 MiB cap (%s bytes) (ERR_INVALID_ARGUMENT)\n' "${kb_key%%	*}" "${kb_key#*	}" "$KV_CAP" >&2
+  else
+    printf 'malformed key '\''%s'\'' (ERR_INVALID_ARGUMENT)\n' "$kb_key" >&2
+  fi
+  kv_drop
+  exit 1
+}
+
+# kv_gate <the dispatched function's arguments>: the gate's checks for the dispatched
+# function; a function that takes no key, prefix, or value passes untouched, and an argument
+# count the driver refuses is left to it
+kv_gate() {
+  kg_ns=${1:-}
+  case "$METHOD" in
+    store.get)
+      [ $# -ge 2 ] || return 0
+      shift
+      kv_check key "$kg_ns" "malformed key" "$@"
+      ;;
+    store.put|store.delete)
+      [ $# -ge 2 ] || return 0
+      kv_check key "$kg_ns" "malformed key" "$2"
+      [ "$METHOD" = store.delete ] || kv_value "$2"
+      ;;
+    store.list)
+      [ $# -ge 2 ] && [ -n "$2" ] || return 0
+      kv_check list "$kg_ns" "malformed key prefix" "$2"
+      ;;
+    store.promote)
+      [ $# -ge 2 ] || return 0
+      kv_check whole "$kg_ns" "malformed key prefix" "$2"
+      ;;
+    storage.sweep)
+      [ $# -ge 1 ] || return 0
+      shift
+      for kg_a in "$@"; do
+        case "$kg_a" in --prefix=*) kv_check whole "$kg_ns" "malformed key prefix" "${kg_a#--prefix=}" ;; esac
+      done
+      ;;
+    store.batch)
+      [ $# -ge 1 ] || return 0
+      kv_batch "$kg_ns"
+      ;;
+  esac
+  return 0
+}
+
+# kv_handoff: the staged payload becomes the driver's stdin, its file unlinked before the exec
+kv_handoff() {
+  [ -n "$KV_STAGE" ] || return 0
+  [ -r "$KV_STAGE" ] || kv_fail 2 ERR_STORAGE_WRITE "cannot stage the payload"
+  exec < "$KV_STAGE"
+  rm -f "$KV_STAGE" 2>/dev/null
+  KV_STAGE=""
+  trap - EXIT HUP INT TERM
+}
+
+# The storage moving freeze. A move holds its marker, a folder of the drawer's lock folder
+# holding the move's target driver, its source driver, then its holder pid; while the holder
+# lives, every dispatched function but the reads refuses at once rc 2 ERR_STORAGE_LOCKED with
+# its own one line, nothing on stdout and no driver run, whichever driver it addresses. The
+# move's own calls pass: one carrying the holder's token (CTX_STORAGE_MOVE, the holder pid)
+# to the move's target, and a delete only batch carrying it to the move's source, decided on
+# the payload the gate staged. A marker whose holder pid is gone freezes nothing and stays
+# for the next take to remove; one without a numeric pid counts as held. With no marker a
+# put and a batch gain two existence tests (before the gate and after its staging), every
+# other write one, and a read none, and a marker is read with the read and kill builtins
+# alone.
+MV_PID=""
+MV_TARGET=""
+MV_SOURCE=""
+MV_SOURCE_PASS=""
+MV_BG=""
+MV_OWN=""
+
+# move_read [<arguments>]: rc 0 when the dispatched function only reads (the reads listed, a
+# sweep's dry run); a function a later contract adds is a write until it is listed here
+move_read() {
+  case "$METHOD" in
+    store.list|store.get|store.scan|store.search|storage.health|storage.leftovers|capability) return 0 ;;
+    storage.sweep)
+      case $# in 0) return 1 ;; esac
+      shift
+      for mr_a in "$@"; do
+        case "$mr_a" in --dry-run) return 0 ;; esac
+      done
+      ;;
+  esac
+  return 1
+}
+
+# move_marker: MV_PID, MV_TARGET, and MV_SOURCE read from the marker, the pid first, since
+# the take writes it last; rc 1 when no marker stands
+move_marker() {
+  MV_PID=""; MV_TARGET=""; MV_SOURCE=""
+  [ -d "$MV_MARK" ] || return 1
+  { IFS= read -r MV_PID < "$MV_MARK/pid"; } 2>/dev/null
+  { IFS= read -r MV_TARGET < "$MV_MARK/target"; } 2>/dev/null
+  { IFS= read -r MV_SOURCE < "$MV_MARK/source"; } 2>/dev/null
+  return 0
+}
+
+# move_live: rc 0 while the marker read counts as held: no numeric holder pid, or a live one
+move_live() {
+  case "$MV_PID" in ""|*[!0-9]*) return 0 ;; esac
+  kill -0 "$MV_PID" 2>/dev/null
+}
+
+# move_holder: rc 0 when the call carries the token of the marker read
+move_holder() {
+  case "$MV_PID" in ""|*[!0-9]*) return 1 ;; esac
+  [ "${CTX_STORAGE_MOVE:-}" = "$MV_PID" ]
+}
+
+# move_own: the pass rule, rc 0 when the call is the move's own: a held marker stands, the
+# call carries its holder's token, and the driver the call resolves to is the move's target
+move_own() {
+  move_marker && move_live && move_holder && [ "$TARGET_DRIVER" = "$MV_TARGET" ]
+}
+
+move_refuse() {
+  printf '%s: error: storage is being moved to another driver; retry after the move ends (ERR_STORAGE_LOCKED)\n' "$METHOD" >&2
+  kv_drop
+  exit 2
+}
+
+# move_pass: the verdict over a standing marker: rc 0 for the move's own call or a holder that
+# is gone; the holder's batch to the move's source is marked for the payload check, and every
+# other call refuses
+move_pass() {
+  move_own && return 0
+  move_live || return 0
+  move_holder && [ "$METHOD" = store.batch ] && [ "$TARGET_DRIVER" = "$MV_SOURCE" ] || move_refuse
+  MV_SOURCE_PASS=1
+}
+
+# move_check <the dispatched function's arguments>: the freeze at dispatch, before the gate
+# reads any stdin; a batch the holder sends to the move's source waits for move_staged
+move_check() {
+  move_read "$@" && return 0
+  [ -d "$MV_MARK" ] || return 0
+  move_pass
+}
+
+# move_override <the dispatched function's arguments>: a one off override (--driver, -d, or
+# CTX_STORAGE_DRIVER) reads only: a write whose driver differs from the configured one (the
+# configuration as determine_driver_name reads it without the overrides, else posix) refuses
+# rc 1 before the gate reads any stdin, unless it is the move's own (move_own, or the
+# holder's batch to the move's source, which move_staged checks once its payload is staged);
+# a write without an override reads nothing here
+move_override() {
+  [ -n "$CLI_DRIVER" ] || [ -n "${CTX_STORAGE_DRIVER:-}" ] || return 0
+  move_read "$@" && return 0
+  [ -z "$MV_SOURCE_PASS" ] || return 0
+  move_own && return 0
+  mo_conf=$(read_conf_driver "$CTX_DIR" 2>/dev/null) || mo_conf=""
+  [ -n "$mo_conf" ] || mo_conf=posix
+  [ "$TARGET_DRIVER" = "$mo_conf" ] && return 0
+  printf "%s: error: the driver override '%s' reads only; writes go through the configured driver '%s' (ERR_INVALID_ARGUMENT)\n" "$METHOD" "$TARGET_DRIVER" "$mo_conf" >&2
+  exit 1
+}
+
+# move_staged: once the gate has staged a put's or a batch's stdin, the marker is tested
+# again, so a call that passed move_check before a take and was still reading its stdin when
+# the take answered meets the freeze; the holder's batch to the move's source passes only
+# when the staged payload holds actions and every one is a delete
+move_staged() {
+  case "$MV_SOURCE_PASS" in
+    "")
+      case "$KV_STAGE" in "") return 0 ;; esac
+      [ -d "$MV_MARK" ] || return 0
+      move_pass
+      case "$MV_SOURCE_PASS" in "") return 0 ;; esac
+      ;;
+  esac
+  [ -n "$KV_STAGE" ] && LC_ALL=C awk '
+    { sub(/\r$/, "") }
+    /^action=/ { if ($0 != "action=delete") bad = 1; n++ }
+    END { exit (bad || !n) }' "$KV_STAGE" 2>/dev/null || move_refuse
+}
+
+move_fail() {
+  printf 'driver-resolver: ERROR: %s (%s)\n' "$3" "$2" >&2
+  move_abort "$1"
+}
+
+# move_abort <rc>: the take's own marker removed and its waited child stopped, then exit
+move_abort() {
+  if [ -n "$MV_BG" ]; then
+    MV_BG=""
+    set +u
+    [ -z "$!" ] || { kill "$!"; wait "$!"; } 2>/dev/null
+    set -u
+  fi
+  [ -z "$MV_OWN" ] || rm -rf "$MV_MARK" 2>/dev/null
+  MV_OWN=""
+  exit "$1"
+}
+
+# move_wait <command>...: the command run in the background under the wait builtin, which a
+# trapped signal interrupts at once (MV_BG marks it from before its fork, so $! names it)
+move_wait() {
+  MV_BG=1
+  "$@" &
+  wait "$!"
+  mw_rc=$?
+  MV_BG=""
+  return "$mw_rc"
+}
+
+move_abs() {
+  case "$1" in /*) MA_OUT=$1 ;; *) MA_OUT=$PWD/$1 ;; esac
+}
+
+# move_pause: one poll's pause, 0.1 s, or 1 s counted as ten where sleep refuses a fraction
+move_pause() {
+  MP_N=1
+  move_wait sleep 0.1 2>/dev/null && return 0
+  move_wait sleep 1 2>/dev/null
+  MP_N=10
+}
+
+# move_take <pid> <target>: the freeze taken for the holder, then the writes in flight drained
+move_take() {
+  [ $# -eq 2 ] || move_fail 1 ERR_INVALID_ARGUMENT "move-freeze takes the holder pid and the target driver"
+  mt_pid=$1
+  mt_target=$2
+  case "$mt_pid" in
+    ""|0*|*[!0-9]*) move_fail 1 ERR_INVALID_ARGUMENT "malformed holder pid '$mt_pid'" ;;
+  esac
+  kill -0 "$mt_pid" 2>/dev/null || move_fail 1 ERR_INVALID_ARGUMENT "the holder pid '$mt_pid' names no live process"
+  resolve_target_driver "$CTX_DIR" "$mt_target" > /dev/null || exit $?
+  mt_src=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit $?
+  case "$CTX_DIR" in */*) mt_ws=${CTX_DIR%/*} ;; *) mt_ws=. ;; esac
+  [ -n "$mt_ws" ] || mt_ws=/
+  move_abs "$mt_ws"; mt_ws=$MA_OUT
+  move_abs "$mt_src"; mt_src=$MA_OUT
+  move_abs "$KV_HOME"; KV_HOME=$MA_OUT
+  move_abs "$MV_MARK"; MV_MARK=$MA_OUT
+  mt_dir=${MV_MARK%/*}
+  { [ -d "$mt_dir" ] || mkdir -p "$mt_dir"; } 2>/dev/null && [ -w "$mt_dir" ] \
+    || move_fail 2 ERR_STORAGE_WRITE "the drawer's lock folder cannot hold the storage moving marker"
+  cd "$mt_ws" 2>/dev/null || move_fail 2 ERR_STORAGE_READ "the workspace root cannot be entered"
+  CTX_STORE_WORKSPACE=$mt_ws
+  export CTX_STORE_WORKSPACE
+  trap 'move_abort 129' HUP
+  trap 'move_abort 130' INT
+  trap 'move_abort 143' TERM
+  mt_miss=0
+  until mkdir "$MV_MARK" 2>/dev/null; do
+    [ -d "$MV_MARK" ] || move_fail 2 ERR_STORAGE_WRITE "the drawer's lock folder cannot hold the storage moving marker"
+    move_marker
+    case "$MV_PID" in
+      ""|*[!0-9]*)
+        mt_miss=$((mt_miss + 1))
+        if [ "$mt_miss" -lt 10 ]; then move_pause; continue; fi
+        mt_miss=0
+        ;;
+      *) kill -0 "$MV_PID" 2>/dev/null && move_fail 2 ERR_STORAGE_LOCKED "storage is already being moved to driver '$MV_TARGET'; one move at a time" ;;
+    esac
+    if [ -n "$MV_TARGET" ]; then
+      printf 'driver-resolver: notice: a crashed move to driver '\''%s'\'' left its freeze, removed now; that move needs its recovery\n' "$MV_TARGET" >&2
+    else
+      printf 'driver-resolver: notice: a crashed take left its freeze before naming its target, removed now\n' >&2
+    fi
+    rm -rf "$MV_MARK" 2>/dev/null || move_fail 2 ERR_STORAGE_WRITE "the freeze of a crashed move cannot be removed"
+  done
+  MV_OWN=1
+  { printf '%s\n' "$mt_target" > "$MV_MARK/target" && printf '%s\n' "$TARGET_DRIVER" > "$MV_MARK/source" \
+    && printf '%s\n' "$mt_pid" > "$MV_MARK/pid"; } 2>/dev/null \
+    || move_fail 2 ERR_STORAGE_WRITE "the storage moving marker cannot be written"
+  move_drain "$mt_src"
+  rm -f "$MV_MARK/probe" 2>/dev/null
+  trap - HUP INT TERM
+  exit 0
+}
+
+# move_drain <source driver path>: every namespace the workspace's declaration listing names
+# probed through the source driver's storage.health until none reads locked for 20 polls in
+# a row, 0.1 s apart; one still locked past the 600 polls every lock wait shares refuses the
+# take. A namespace found locked is probed first from then on, so a held poll costs one probe
+move_drain() {
+  md_probe=$MV_MARK/probe
+  move_wait "$KV_HOME/store-data" --list > "$md_probe" 2>/dev/null < /dev/null \
+    || move_fail 2 ERR_STORAGE_READ "the module declarations cannot be listed whole, so the writes in flight cannot be drained"
+  md_list=""
+  while IFS= read -r md_l || [ -n "$md_l" ]; do
+    md_list="$md_list ${md_l%%	*}"
+  done < "$md_probe"
+  md_n=0
+  md_free=0
+  while [ "$md_free" -lt 20 ]; do
+    md_held=""
+    for md_ns in $md_list; do
+      move_wait "$1" storage.health "$md_ns" > "$md_probe" 2>/dev/null < /dev/null \
+        || move_fail 2 ERR_STORAGE_READ "the health of namespace '$md_ns' cannot be read through driver '$TARGET_DRIVER'"
+      md_line=""
+      { IFS= read -r md_line < "$md_probe"; } 2>/dev/null
+      case "$md_line" in *'"health":"locked"'*) md_held=$md_ns; break ;; esac
+    done
+    md_n=$((md_n + 1))
+    if [ -n "$md_held" ]; then
+      [ "$md_n" -lt 600 ] || move_fail 2 ERR_STORAGE_LOCKED "the storage layer's namespace '$md_held' is still locked by a writer (60 s timeout)"
+      md_free=0
+      md_l=" $md_list "
+      md_list="$md_held ${md_l%%" $md_held "*} ${md_l#*" $md_held "}"
+    else
+      md_free=$((md_free + 1))
+      [ "$md_free" -lt 20 ] || break
+    fi
+    move_pause
+    md_n=$((md_n + MP_N - 1))
+    [ -n "$md_held" ] || md_free=$((md_free + MP_N - 1))
+  done
+}
+
+# move_release <pid>: the marker removed when the named holder holds it
+move_release() {
+  [ $# -eq 1 ] || move_fail 1 ERR_INVALID_ARGUMENT "move-release takes the holder pid"
+  case "$1" in
+    ""|0*|*[!0-9]*) move_fail 1 ERR_INVALID_ARGUMENT "malformed holder pid '$1'" ;;
+  esac
+  move_marker || exit 0
+  [ "$MV_PID" = "$1" ] || move_fail 1 ERR_INVALID_ARGUMENT "the storage moving freeze is not held by pid '$1'"
+  rm -rf "$MV_MARK" 2>/dev/null || move_fail 2 ERR_STORAGE_WRITE "the storage moving marker cannot be removed"
+  exit 0
+}
+
+# move_state: free, held <target>, or stale <target> (a holder pid that is gone), read only
+move_state() {
+  [ $# -eq 0 ] || move_fail 1 ERR_INVALID_ARGUMENT "move-state takes no argument"
+  if ! move_marker; then
+    printf 'free\n'
+  elif move_live; then
+    printf 'held%s\n' "${MV_TARGET:+ $MV_TARGET}"
+  else
+    printf 'stale %s\n' "$MV_TARGET"
+  fi
+  exit 0
+}
+
 # Main entry point
 CTX_DIR=$(find_ctx_dir) || {
   printf 'driver-resolver: ERROR: could not locate .contexture root directory\n' >&2
   exit 2
 }
+MV_MARK="$CTX_DIR/tmp/locks/storage-moving"
 
 CLI_DRIVER=""
 COMMAND=""
@@ -621,8 +1119,11 @@ while [ $# -gt 0 ]; do
       printf '  modes [name]                      the search mode registry: one name TAB description line per mode\n'
       printf '  exec <subsystem>.<method> [args]  dispatch call to active driver (stdin passes through)\n'
       printf '  <subsystem>.<method> [args]       direct dispatch form\n'
+      printf '  move-freeze <pid> <target>        freeze every write but the move'\''s own, once the writes in flight drain\n'
+      printf '  move-release <pid>                end the freeze the named holder took\n'
+      printf '  move-state                        free, held <target>, or stale <target>\n'
       printf 'options:\n'
-      printf '  --driver=<name>, -d <name>        explicit driver override\n'
+      printf '  --driver=<name>, -d <name>        read through another driver; writes go through the configured one\n'
       exit 0
       ;;
     *)
@@ -648,7 +1149,7 @@ fi
 
 TARGET_DRIVER=$(determine_driver_name "$CTX_DIR" "$CLI_DRIVER")
 
-# contract 3: no backend delegates to another, so the resolver exports no reference
+# contract 4: no backend delegates to another, so the resolver exports no reference
 # driver (the v0.54.0 CTX_REFERENCE_DRIVER retired with the delegate design)
 
 case "$COMMAND" in
@@ -669,7 +1170,7 @@ case "$COMMAND" in
     if [ $# -gt 0 ]; then
       TARGET_DRIVER="$1"
     fi
-    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit $?
     verify_capabilities "$DRIVER_PATH" "$TARGET_DRIVER"
     exit $?
     ;;
@@ -682,7 +1183,7 @@ case "$COMMAND" in
     if [ $# -gt 0 ]; then
       TARGET_DRIVER="$1"
     fi
-    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit $?
     md_card=$(verify_capabilities "$DRIVER_PATH" "$TARGET_DRIVER" </dev/null) || exit 2
     printf '%s\n' "$md_card" | desc_modes
     exit 0
@@ -692,7 +1193,7 @@ case "$COMMAND" in
     if [ $# -gt 0 ]; then
       TARGET_DRIVER="$1"
     fi
-    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit $?
     verify_capabilities "$DRIVER_PATH" "$TARGET_DRIVER" >/dev/null || exit 2
     printf 'OK: storage driver '\''%s'\'' verified at %s\n' "$TARGET_DRIVER" "$DRIVER_PATH"
     exit 0
@@ -713,7 +1214,7 @@ case "$COMMAND" in
         exit 1
       }
     done
-    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit $?
     rq_q=0
     [ "$COMMAND" = has ] && rq_q=1
     require_caps "$rq_q" "$DRIVER_PATH" "$TARGET_DRIVER" "$@"
@@ -725,6 +1226,10 @@ case "$COMMAND" in
     esac
     ;;
 
+  move-freeze) move_take "$@" ;;
+  move-release) move_release "$@" ;;
+  move-state) move_state "$@" ;;
+
   exec|dispatch)
     [ $# -gt 0 ] || {
       printf 'driver-resolver: ERROR: exec requires <subsystem>.<method> argument (ERR_INVALID_ARGUMENT)\n' >&2
@@ -732,23 +1237,33 @@ case "$COMMAND" in
     }
     METHOD="$1"
     shift
-    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+    move_check "$@"
+    move_override "$@"
+    kv_gate "$@"
+    move_staged
+    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit $?
     if [ ! -x "$DRIVER_PATH" ]; then
       printf 'driver-resolver: ERROR: driver '\''%s'\'' executable not found at %s (ERR_DRIVER_NOT_FOUND)\n' "$TARGET_DRIVER" "$DRIVER_PATH" >&2
       exit 2
     fi
     handshake_at_dispatch "$DRIVER_PATH" "$TARGET_DRIVER" || exit 2
+    kv_handoff
     exec "$DRIVER_PATH" "$METHOD" "$@"
     ;;
 
   *.*)
     METHOD="$COMMAND"
-    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+    move_check "$@"
+    move_override "$@"
+    kv_gate "$@"
+    move_staged
+    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit $?
     if [ ! -x "$DRIVER_PATH" ]; then
       printf 'driver-resolver: ERROR: driver '\''%s'\'' executable not found at %s (ERR_DRIVER_NOT_FOUND)\n' "$TARGET_DRIVER" "$DRIVER_PATH" >&2
       exit 2
     fi
     handshake_at_dispatch "$DRIVER_PATH" "$TARGET_DRIVER" || exit 2
+    kv_handoff
     exec "$DRIVER_PATH" "$METHOD" "$@"
     ;;
 

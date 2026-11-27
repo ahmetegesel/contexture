@@ -38,9 +38,9 @@ The layer returns to its pre-install bytes.
 
 git the tool, when the workspace is a repository; the package is plain text and
 installs nothing. The docs-discipline module's change-aware checks need git the tool
-as well: its check, gate, and drift read git's delta and the change log stamps the
-workspace git HEAD, so a workspace without git keeps the docs audit, the query, and
-the writes and loses the change-aware checks. This package is independent of that module.
+as well: its check, gate, and drift read git's delta under every driver, so a
+workspace without git keeps the docs audit, the query, and the writes and loses the
+change-aware checks. This package is independent of that module.
 
 ## Tests
 

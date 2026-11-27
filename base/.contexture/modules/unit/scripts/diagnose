@@ -13,7 +13,7 @@
 # help: its documents and entries and each kind found with its count and bytes (stray files,
 # help: folders outside the key shape, empty folders, symbolic links, special files,
 # help: unreadable folders, lock or write remnants, keys the root shadows, keys outside the
-# help: document rules such as old lane scratch), never a path; --json adds
+# help: document rules such as old lane scratch, keys the key rule refuses), never a path; --json adds
 # help: storage.leftovers, the probe's answer, null when it refused; a probe that refuses
 # help: prints leftovers: unknown (<its message>); ctx unit migrate --sweep clears what it names.
 # help: exit codes: 0 the diagnosis printed, a part it could not read named in its own line

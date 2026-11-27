@@ -399,14 +399,19 @@ cfg_list() {
 # Acquires <ctx_dir>/tmp/locks/config.lock inside a subshell with EXIT/HUP/INT/TERM
 # cleanup traps (preserving caller traps), stages <ctx_dir>/config.tmp.<pid>,
 # and atomically mv -f into <ctx_dir>/config.
+# cfg_write_locked restore <ctx_dir> <saved> <expected>: under the same lock, puts the saved
+# bytes and mode back (<saved> a file, or a lone hyphen argument when there was no
+# configuration, which removes it) only while the configuration's bytes equal <expected>'s, the
+# bytes the caller's own writes left; rc 3 writes nothing when another writer changed it
+# meanwhile.
 cfg_write_locked() {
   cwl_mode=$1
   cwl_ctx=$2
   cwl_key=$3
   cwl_val=${4:-}
 
-  cfg_write_key_ok config "$cwl_key" || return 1
-  if [ "$cwl_mode" != "unset" ]; then
+  [ "$cwl_mode" = restore ] || cfg_write_key_ok config "$cwl_key" || return 1
+  if [ "$cwl_mode" != "unset" ] && [ "$cwl_mode" != restore ]; then
     if [ -z "$cwl_val" ]; then
       printf "config: error: empty value for key '%s' (use unset to remove a key) (ERR_INVALID_ARGUMENT)\n" "$cwl_key" >&2
       return 1
@@ -482,6 +487,24 @@ cfg_write_locked() {
       exit 2
     fi
 
+    if [ "$cwl_mode" = restore ]; then
+      [ -f "$cwl_conf" ] && cmp -s "$cwl_conf" "$cwl_val" || exit 3
+      if [ "$cwl_key" = - ]; then
+        rm -f "$cwl_conf" 2>/dev/null || {
+          printf 'config: error: cannot write the workspace configuration (ERR_STORAGE_WRITE)\n' >&2
+          exit 2
+        }
+        exit 0
+      fi
+      cwl_tmp="$cwl_ctx/config.tmp.$cwl_pid"
+      cp -p "$cwl_key" "$cwl_tmp" 2>/dev/null && mv -f "$cwl_tmp" "$cwl_conf" 2>/dev/null || {
+        printf 'config: error: cannot write the workspace configuration (ERR_STORAGE_WRITE)\n' >&2
+        exit 2
+      }
+      cwl_tmp=""
+      exit 0
+    fi
+
     if [ "$cwl_mode" = "unset" ] && [ ! -f "$cwl_conf" ]; then
       exit 0
     fi
@@ -508,7 +531,7 @@ cfg_write_locked() {
     fi
 
     cwl_tmp="$cwl_ctx/config.tmp.$cwl_pid"
-    : > "$cwl_tmp" 2>/dev/null || {
+    { true > "$cwl_tmp"; } 2>/dev/null || {
       cwl_tmp=""
       printf 'config: error: cannot stage the workspace configuration (ERR_STORAGE_WRITE)\n' >&2
       exit 2
@@ -634,6 +657,12 @@ cfg_set_raw() {
 # cfg_unset <key> [<ctx_dir>]: remove all entries for <key> under lock (no-op if absent).
 cfg_unset() {
   cfg_write_locked unset "$(cfg_ctx_dir "${2:-}")" "$1"
+}
+
+# cfg_restore <saved|-> <expected> [<ctx_dir>]: the saved bytes put back under lock while
+# the configuration still holds the expected bytes; rc 3 when another writer changed it.
+cfg_restore() {
+  cfg_write_locked restore "$(cfg_ctx_dir "${3:-}")" "$1" "$2"
 }
 
 # ---------------------------------------------------------------------------
@@ -1055,9 +1084,9 @@ cfg_discover_module_configs() {
   [ -z "$cdmc_out" ] || printf '%s' "$cdmc_out" | LC_ALL=C sort -t '	' -k1,1
 }
 
-# cfg_storage_schema_rows <ctx_dir> <label>: parse core storage/config plus installed
-# driver configs under storage/drivers/*/config, extensions/storage/drivers/*/config,
-# and drivers/*/config. Refuses collisions with core driver or other drivers.
+# cfg_storage_schema_rows <ctx_dir> <label>: parse core storage/config plus the posix
+# driver's config and the installed driver packages' configs at the extension root, the two
+# places the resolver finds a driver. Refuses collisions with core driver or other drivers.
 cfg_storage_schema_rows() {
   cssr_ctx=$1
   cssr_lbl=$2
@@ -1088,10 +1117,10 @@ EOF
 
   cssr_drivers=" "
   for cssr_glob in \
-    "$cssr_ctx"/storage/drivers/*/config \
-    "$cssr_ctx"/extensions/storage/drivers/*/config \
-    "$cssr_ctx"/drivers/*/config; do
+    "$cssr_ctx"/storage/drivers/posix/config \
+    "$cssr_ctx"/extensions/storage/drivers/*/config; do
     [ -f "$cssr_glob" ] || continue
+    [ "$cssr_glob" != "$cssr_ctx/extensions/storage/drivers/posix/config" ] || continue
     cssr_drv_dir=${cssr_glob%/config}
     cssr_drv=${cssr_drv_dir##*/}
     case "$cssr_drivers" in
@@ -1246,52 +1275,130 @@ cfg_find_resolver() {
   return 1
 }
 
-# cfg_storage_driver_post: emit non-blocking stderr migration notice when effective
-# driver changed across set or unset.
-cfg_storage_driver_post() {
-  csdp_new=$(cfg_effective_driver "$CFG_DRV_CTX")
-  if [ "$CFG_DRV_OLD" != "$csdp_new" ]; then
-    printf "notice: active storage driver changed from '%s' to '%s'; existing data is not migrated automatically between storage drivers\n" "$CFG_DRV_OLD" "$csdp_new" >&2
-  fi
+# cfg_storage_core <ctx_dir> <script> [<argument>...]: a storage core script run from the
+# workspace root, the drawer found there, with no CTX_STORAGE_ variable, so a driver reads
+# the place its configuration names
+cfg_storage_core() {
+  csc_rsv=$(cfg_find_resolver "$1") || return 2
+  csc_root=$(cfg_root_dir "$1")
+  csc_s=${csc_rsv%/*}/$2
+  shift 2
+  (
+    for csc_v in $(env | sed -n 's/^\(CTX_STORAGE_[A-Za-z0-9_]*\)=.*/\1/p'); do
+      unset "$csc_v"
+    done
+    unset CTX_DIR
+    CTX_ROOT=$csc_root
+    CTX_STORE_WORKSPACE=$csc_root
+    export CTX_ROOT CTX_STORE_WORKSPACE
+    cd "$csc_root" || exit 2
+    exec "$csc_s" "$@"
+  )
+}
+
+# cfg_storage_key_driver <ctx_dir> <key>: the driver whose config, at the extension root
+# where an installed driver package's driver lives, declares the storage key; nothing for the
+# storage core's and the posix driver's own keys, a folder named posix there included
+cfg_storage_key_driver() {
+  for cskd_f in "$1"/extensions/storage/drivers/*/config; do
+    [ -f "$cskd_f" ] || continue
+    cskd_d=${cskd_f%/config}
+    [ "${cskd_d##*/}" != posix ] || continue
+    cfg_schema_parse "$cskd_f" config 2>/dev/null | LC_ALL=C awk -F '\t' -v k="$2" '$1 == k { f = 1 } END { exit !f }' || continue
+    printf '%s\n' "${cskd_d##*/}"
+    return 0
+  done
+}
+
+# cfg_storage_driver_pkg <ctx_dir> <driver>: the installed package whose record names the
+# driver, else the placeholder <package>
+cfg_storage_driver_pkg() {
+  cdp_p=""
+  for cdp_f in "$1"/extensions/.state/*.files; do
+    [ -f "$cdp_f" ] || continue
+    cdp_p=$(LC_ALL=C awk -v d="$2" '
+      $1 == "package" && NF == 2 && p == "" { p = $2 }
+      $1 == "kind" && NF == 2 && k == "" { k = $2 }
+      $1 == "driver" && NF == 2 && v == "" { v = $2 }
+      END { if (k == "driver" && v == d) print p }' "$cdp_f" 2>/dev/null)
+    [ -z "$cdp_p" ] || break
+  done
+  printf '%s\n' "${cdp_p:-<package>}"
+}
+
+# cfg_storage_dangling: the unset of a storage.driver line that named a driver resolving
+# nothing landed
+cfg_storage_dangling() {
+  printf "notice: storage.driver named '%s', which resolves nothing, so it is unset and the record reads from %s again\n" "$CFG_DRV_OLD" "$(cfg_effective_driver "$CFG_DRV_CTX")" >&2
   return 0
 }
 
-# cfg_validate_storage_driver <op> <key> <value> <ctx_dir>:
-# Pre-write validator hook for storage config writes. When <key> is 'driver':
-# on set, verifies driver via driver-resolver check >/dev/null before writing;
-# on both set and unset, arms CFG_POST_HOOK=cfg_storage_driver_post so a non-blocking
-# migration notice prints if the effective driver changes.
+# cfg_validate_storage_driver <op> <key> <value> <ctx_dir>: the store config hook. The
+# driver setting belongs to the driver package lifecycle, so a set or an unset of driver
+# refuses, but an unset while the configured driver resolves nothing lands (nothing is
+# reachable through it, so nothing strands). A setting an installed driver package's config
+# declares refuses a change while the move state reads held (rc 2) or while that driver
+# holds data in any namespace the declaration listing names (rc 1), a listing that fails
+# refusing rc 2; a set to the value in force and an unset of an absent key change nothing.
 cfg_validate_storage_driver() {
   cvsd_op=$1
   cvsd_key=$2
   cvsd_val=$3
   cvsd_ctx=$4
-  [ "$cvsd_key" = "driver" ] || return 0
-
-  if [ "$cvsd_op" = "set" ]; then
-    case "$cvsd_val" in
-      ""|-*|*[[:space:]]*)
-        printf "store config: error: malformed storage driver '%s' (ERR_INVALID_ARGUMENT)\n" "$cvsd_val" >&2
-        return 1
-        ;;
-    esac
-    cvsd_rsv=$(cfg_find_resolver "$cvsd_ctx") || {
-      printf 'store config: error: the storage core resolver is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
-      return 2
-    }
-    cvsd_root=$(cfg_root_dir "$cvsd_ctx")
-    (
-      unset CTX_DIR
-      CTX_ROOT=$cvsd_root
-      export CTX_ROOT
-      cd "$cvsd_root" || exit 2
-      exec "$cvsd_rsv" check "$cvsd_val" >/dev/null
-    ) || return $?
+  cvsd_lbl='ctx store config'
+  if [ "$cvsd_key" = driver ]; then
+    if [ "$cvsd_op" = unset ]; then
+      CFG_DRV_OLD=$(cfg_effective_driver "$cvsd_ctx")
+      if ! cfg_storage_core "$cvsd_ctx" driver-resolver resolve "$CFG_DRV_OLD" > /dev/null 2>&1; then
+        CFG_DRV_CTX=$cvsd_ctx
+        CFG_POST_HOOK=cfg_storage_dangling
+        return 0
+      fi
+    fi
+    printf '%s: error: storage.driver belongs to the driver package lifecycle: install a driver package (ctx package install <package>) or uninstall it (ctx package uninstall <package>) to change it (ERR_INVALID_ARGUMENT)\n' "$cvsd_lbl" >&2
+    return 1
   fi
 
-  CFG_DRV_OLD=$(cfg_effective_driver "$cvsd_ctx")
-  CFG_DRV_CTX=$cvsd_ctx
-  CFG_POST_HOOK=cfg_storage_driver_post
+  cvsd_drv=$(cfg_storage_key_driver "$cvsd_ctx" "$cvsd_key")
+  [ -n "$cvsd_drv" ] || return 0
+  if [ "$cvsd_op" = set ]; then
+    cvsd_now=$(cfg_assembly_get "$cvsd_lbl" "$cvsd_ctx" "storage.$cvsd_key" 2>/dev/null) && [ "$cvsd_now" = "$cvsd_val" ] && return 0
+  else
+    cfg_get_file "$cvsd_ctx/config" "storage.$cvsd_key" > /dev/null 2>&1 || return 0
+  fi
+
+  case $(cfg_storage_core "$cvsd_ctx" driver-resolver move-state 2>/dev/null) in
+    held*)
+      printf '%s: error: storage is being moved to another driver; retry after the move ends (ERR_STORAGE_LOCKED)\n' "$cvsd_lbl" >&2
+      return 2
+      ;;
+  esac
+
+  cvsd_ns=$(cfg_storage_core "$cvsd_ctx" store-data --list 2>/dev/null) || {
+    printf '%s: error: the declaration listing failed, so whether the driver '\''%s'\'' holds data cannot be read (ERR_STORAGE_READ)\n' "$cvsd_lbl" "$cvsd_drv" >&2
+    return 2
+  }
+  while IFS='	' read -r cvsd_n cvsd_rest; do
+    [ -n "$cvsd_n" ] || continue
+    cvsd_l=$(cfg_storage_core "$cvsd_ctx" driver-resolver --driver="$cvsd_drv" store.list "$cvsd_n" 2>/dev/null < /dev/null) || {
+      printf '%s: error: listing the namespace '\''%s'\'' through the driver '\''%s'\'' failed, so whether it holds data cannot be read (ERR_STORAGE_READ)\n' "$cvsd_lbl" "$cvsd_n" "$cvsd_drv" >&2
+      return 2
+    }
+    case "$cvsd_l" in
+      *'"keys":[]'*) ;;
+      *'"keys":["'*)
+        cvsd_pkg=$(cfg_storage_driver_pkg "$cvsd_ctx" "$cvsd_drv")
+        printf '%s: error: storage.%s belongs to the driver '\''%s'\'', which holds data; to change it, uninstall its package (ctx package uninstall %s), then install it again with the new setting (ctx package install %s --driver-config=%s=<value>) (ERR_INVALID_ARGUMENT)\n' "$cvsd_lbl" "$cvsd_key" "$cvsd_drv" "$cvsd_pkg" "$cvsd_pkg" "$cvsd_key" >&2
+        return 1
+        ;;
+      *)
+        printf '%s: error: listing the namespace '\''%s'\'' through the driver '\''%s'\'' answered no key list, so whether it holds data cannot be read (ERR_STORAGE_READ)\n' "$cvsd_lbl" "$cvsd_n" "$cvsd_drv" >&2
+        return 2
+        ;;
+    esac
+  done <<EOF
+$cvsd_ns
+EOF
   return 0
 }
 
@@ -1795,4 +1902,647 @@ config_owner_verb() {
       return 1
       ;;
   esac
+}
+
+# ---------------------------------------------------------------------------
+# 6. The human's answer
+#
+# cfg_answer <label> <subject> <word1> <flag1> <word2> <flag2>: the answer to a question only
+# the human answers (an irreversible choice a package script needs before it writes), its
+# word on stdout rc 0. It asks only when stdin and stderr are both terminals ([ -t 0 ] and
+# [ -t 2 ]), or when CTX_PACKAGE_TTY names a file read as the terminal (the test seam); never
+# /dev/tty, so a harness shell holding a controlling terminal never blocks, and never on
+# stdin alone, so a run under ctx run, whose capture makes stderr a file, refuses instead of
+# waiting. The question is one stderr line, <label>: <subject>; answer <word1> or <word2>:,
+# an unknown answer re-asks, and end of input refuses rc 1 with one line naming both flags.
+# With no terminal it refuses rc 1 with one stderr line naming the subject, both flags, and
+# that the answer is the human's, so an agent relays the question and never picks a default;
+# a seam naming a file that cannot be read refuses rc 2. Nothing is written in any case.
+cfg_answer() {
+  ca_lbl=$1 ca_subj=$2 ca_w1=$3 ca_f1=$4 ca_w2=$5 ca_f2=$6
+  if [ -n "${CTX_PACKAGE_TTY:-}" ]; then
+    if [ ! -f "$CTX_PACKAGE_TTY" ] || [ ! -r "$CTX_PACKAGE_TTY" ]; then
+      printf "%s: the answer cannot be read: CTX_PACKAGE_TTY names no readable file\n" "$ca_lbl" >&2
+      return 2
+    fi
+  elif ! { [ -t 0 ] && [ -t 2 ]; }; then
+    printf "%s: %s; this needs the human's answer, %s (%s) or %s (%s): relay the question and run it again with the flag the human chooses (the answer is the human's, never a default)\n" \
+      "$ca_lbl" "$ca_subj" "$ca_w1" "$ca_f1" "$ca_w2" "$ca_f2" >&2
+    return 1
+  fi
+  (
+    if [ -n "${CTX_PACKAGE_TTY:-}" ]; then
+      exec < "$CTX_PACKAGE_TTY" || exit 2
+    fi
+    ca_ask="$ca_lbl: $ca_subj; answer $ca_w1 or $ca_w2: "
+    while :; do
+      printf '%s' "$ca_ask" >&2
+      if ! IFS= read -r ca_line; then
+        printf "\n%s: no answer was read; answer %s or %s, or run it again with %s or %s as the human chooses\n" "$ca_lbl" "$ca_w1" "$ca_w2" "$ca_f1" "$ca_f2" >&2
+        exit 1
+      fi
+      ca_line=$(printf '%s' "$ca_line" | tr -d ' \t\r')
+      if [ "$ca_line" = "$ca_w1" ] || [ "$ca_line" = "$ca_w2" ]; then
+        printf '%s\n' "$ca_line"
+        exit 0
+      fi
+      ca_ask="$ca_lbl: '$ca_line' is no answer; answer $ca_w1 or $ca_w2: "
+    done
+  )
+}
+
+# cfg_answer_value <label> <subject> <flag>: one value only the human gives (a required
+# setting with no default), on stdout rc 0, under cfg_answer's terminal rule and seam: the
+# question is one stderr line, <label>: <subject>; answer a value:, an empty answer re-asks,
+# end of input refuses rc 1 naming the flag, and with no terminal one stderr line names the
+# subject, the flag, and that the answer is the human's, rc 1; an unreadable seam refuses rc 2.
+# The value is trimmed of leading and trailing blanks, tabs, and carriage returns; the caller
+# checks it against its type. Nothing is written in any case.
+cfg_answer_value() {
+  cav_lbl=$1 cav_subj=$2 cav_flag=$3
+  if [ -n "${CTX_PACKAGE_TTY:-}" ]; then
+    if [ ! -f "$CTX_PACKAGE_TTY" ] || [ ! -r "$CTX_PACKAGE_TTY" ]; then
+      printf "%s: the answer cannot be read: CTX_PACKAGE_TTY names no readable file\n" "$cav_lbl" >&2
+      return 2
+    fi
+  elif ! { [ -t 0 ] && [ -t 2 ]; }; then
+    printf "%s: %s; this needs the human's answer, a value given as %s: relay the question and run it again with the value the human chooses (the answer is the human's, never a default)\n" \
+      "$cav_lbl" "$cav_subj" "$cav_flag" >&2
+    return 1
+  fi
+  (
+    if [ -n "${CTX_PACKAGE_TTY:-}" ]; then
+      exec < "$CTX_PACKAGE_TTY" || exit 2
+    fi
+    cav_ask="$cav_lbl: $cav_subj; answer a value: "
+    while :; do
+      printf '%s' "$cav_ask" >&2
+      if ! IFS= read -r cav_line; then
+        printf "\n%s: no answer was read; answer a value, or run it again with %s as the human chooses\n" "$cav_lbl" "$cav_flag" >&2
+        exit 1
+      fi
+      cav_line=$(printf '%s' "$cav_line" | tr -d '\r' | sed 's/^[[:blank:]]*//; s/[[:blank:]]*$//')
+      if [ -n "$cav_line" ]; then
+        printf '%s\n' "$cav_line"
+        exit 0
+      fi
+      cav_ask="$cav_lbl: an empty answer is no answer; answer a value: "
+    done
+  )
+}
+
+# ---------------------------------------------------------------------------
+# 7. The driver package run
+#
+# The steps the package installer and uninstaller share when a driver package moves the record
+# between posix and its driver: long steps as held children, the driver hooks, the storage
+# moving freeze, the move engine's commands, the configuration's snapshot and its put back,
+# and the move state read with crash recovery. A caller sets DL_WS (the workspace root),
+# DL_LABEL (its stderr label), DL_BIN (the engine), DL_SCR (its own scratch folder), DL_PKG and
+# DL_PKG_ROOT (the package's name and root, the root empty when no catalog holds it), and
+# DL_ANSWER (the old copy answer: backup, delete, or empty), then calls dl_init.
+
+dl_init() {
+  DL_CORE=$DL_WS/.contexture/storage/scripts
+  DL_CONF=$DL_WS/.contexture/config
+  DL_STATE=$DL_WS/.contexture/extensions/.state
+  DL_RUN=""
+  DL_STAMP=""
+  DL_CHILD=""
+  DL_TOKEN=""
+  DL_CONF_SAVED=0
+  DL_LINE=""
+  DL_FLAG=$DL_SCR/stopped
+}
+
+dl_err() { printf '%s: %s\n' "$DL_LABEL" "$*" >&2; }
+
+# dl_first <file>: the file's first line holding a character; a line naming a path is left out
+dl_first() {
+  dlf_l=$(awk '/[^[:space:]]/ { sub(/\r$/, ""); print; exit }' "$1" 2>/dev/null)
+  case "$dlf_l" in
+    */*) dlf_l="its message names a path, so it is left out" ;;
+    "") dlf_l="it gave no reason" ;;
+  esac
+  printf '%s\n' "$dlf_l"
+}
+
+# dl_env_vars: the CTX_STORAGE_ variables the environment sets, joined by commas
+dl_env_vars() {
+  env | sed -n 's/^\(CTX_STORAGE_[A-Za-z0-9_]*\)=.*/\1/p' | LC_ALL=C sort -u \
+    | awk '{ s = s (s == "" ? "" : ", ") $0 } END { print s }'
+}
+
+# dl_run_make: the run folder, the drawer's tmp/driver-run.<pid>, and the run's one stamp
+# (<YYYYmmdd-HHMMSS>-<pid>); rc 2 when the drawer's scratch cannot hold it (never the system
+# temp). The in and out subfolders are the move engine's run folders of the move in and out.
+dl_run_make() {
+  dlr_t=$DL_WS/.contexture/tmp
+  { [ -d "$dlr_t" ] || mkdir -p "$dlr_t"; } 2>/dev/null && [ -w "$dlr_t" ] || return 2
+  DL_RUN=$dlr_t/driver-run.$$
+  rm -rf "$DL_RUN" 2>/dev/null
+  mkdir "$DL_RUN" "$DL_RUN/in" "$DL_RUN/out" 2>/dev/null || { DL_RUN=""; return 2; }
+  DL_STAMP="$(date +%Y%m%d-%H%M%S)-$$"
+  printf '%s\n' "$DL_STAMP" > "$DL_RUN/stamp" 2>/dev/null || return 2
+}
+
+dl_run_drop() {
+  [ -z "$DL_RUN" ] || rm -rf "$DL_RUN" 2>/dev/null
+}
+
+# dl_held <stdout file> <stderr file> <command>...: one long step as a held child, started in
+# the background with stdin /dev/null so a trapped signal reaches the caller at once through
+# the wait builtin; DL_CHILD names it while it runs
+dl_held() {
+  dlh_o=$1
+  dlh_e=$2
+  shift 2
+  "$@" < /dev/null > "$dlh_o" 2> "$dlh_e" &
+  DL_CHILD=$!
+  wait "$DL_CHILD"
+  dlh_rc=$?
+  DL_CHILD=""
+  return "$dlh_rc"
+}
+
+# dl_tree <pid>: the pid and every descendant, from one ps snapshot (the search builtin's way)
+dl_tree() {
+  ps -A -o pid= -o ppid= 2>/dev/null | awk -v r="$1" '
+    { P[$1] = $2 }
+    END {
+      S[r] = 1
+      do { c = 0; for (p in P) if (!(p in S) && (P[p] in S)) { S[p] = 1; c = 1 } } while (c)
+      for (p in S) printf "%s ", p
+    }'
+}
+
+# dl_stop: the held child stopped with every descendant one ps snapshot finds (a hook's own
+# child outlives a stopped hook), TERM, then KILL after 10 s, the child reaped and whatever of
+# the snapshot outlived it killed; the killer polls a flag file, since it inherits the ignored
+# signals of an unwind and so cannot be signalled
+dl_stop() {
+  [ -n "$DL_CHILD" ] || return 0
+  dls_c=$DL_CHILD
+  dls_set=$(dl_tree "$dls_c")
+  [ -n "$dls_set" ] || dls_set=$dls_c
+  kill -TERM $dls_set 2>/dev/null
+  rm -f "$DL_FLAG" 2>/dev/null
+  (
+    dls_n=0
+    while [ "$dls_n" -lt 100 ]; do
+      [ -f "$DL_FLAG" ] && exit 0
+      if sleep 0.1 2>/dev/null; then dls_n=$((dls_n + 1)); else sleep 1; dls_n=$((dls_n + 10)); fi
+    done
+    kill -KILL $dls_set 2>/dev/null
+  ) &
+  dls_k=$!
+  wait "$dls_c" 2>/dev/null
+  : > "$DL_FLAG"
+  wait "$dls_k" 2>/dev/null
+  sleep 0.2 2>/dev/null || sleep 1
+  for dls_p in $dls_set; do
+    [ "$dls_p" = "$dls_c" ] || kill -KILL "$dls_p" 2>/dev/null
+  done
+  DL_CHILD=""
+}
+
+# dl_core_exec <scratch root, or -> <token: 1 or 0> <script> <arguments>...: a storage core
+# script from the workspace root, the scratch root and, with 1, the freeze token exported into
+# it alone
+dl_core_exec() {
+  cd "$DL_WS" || exit 2
+  unset CTX_DIR
+  CTX_ROOT=$DL_WS
+  CTX_STORE_WORKSPACE=$DL_WS
+  export CTX_ROOT CTX_STORE_WORKSPACE
+  if [ "$1" != - ]; then
+    CTX_SCRATCH_ROOT=$1
+    export CTX_SCRATCH_ROOT
+  fi
+  if [ "$2" = 1 ] && [ -n "$DL_TOKEN" ]; then
+    CTX_STORAGE_MOVE=$DL_TOKEN
+    export CTX_STORAGE_MOVE
+  fi
+  dlc_s=$3
+  shift 3
+  exec "$DL_CORE/$dlc_s" "$@"
+}
+
+# dl_move <run subfolder> <store-move arguments>...: one move engine command as a held child,
+# the run subfolder as its run folder and the freeze token passed; its streams in DL_SCR's
+# move.out and move.err
+dl_move() {
+  dlm_r=$1
+  shift
+  dl_held "$DL_SCR/move.out" "$DL_SCR/move.err" dl_core_exec "$dlm_r" 1 store-move "$@"
+}
+
+# dl_take <source> <target>: the storage moving freeze for this run (holder pid $$), the
+# source named through the override so the old copy step's deletes to it pass; a held child,
+# so a signal stops it with TERM (a background take ignores an interrupt)
+dl_take() {
+  dl_held "$DL_SCR/take.out" "$DL_SCR/take.err" dl_core_exec - 0 driver-resolver --driver="$1" move-freeze "$$" "$2"
+  dlt_rc=$?
+  [ "$dlt_rc" -ne 0 ] || DL_TOKEN=$$
+  return "$dlt_rc"
+}
+
+dl_release() {
+  [ -n "$DL_TOKEN" ] || return 0
+  ( dl_core_exec - 0 driver-resolver move-release "$$" ) > /dev/null 2> "$DL_SCR/release.err"
+  dlr_rc=$?
+  [ "$dlr_rc" -ne 0 ] || DL_TOKEN=""
+  return "$dlr_rc"
+}
+
+# dl_namespaces <file>: the namespaces the declaration listing names (kept ones included),
+# one per line; rc 2 when the listing fails
+dl_namespaces() {
+  ( dl_core_exec - 0 store-data --list ) > "$DL_SCR/ns.list" 2> /dev/null || return 2
+  cut -f 1 "$DL_SCR/ns.list" > "$1"
+}
+
+# dl_count <driver> <file>: "<namespace> <count>" per namespace through the named driver's
+# store.list, unknown when a count fails; rc 2 when the namespace listing fails
+dl_count() {
+  dl_namespaces "$DL_SCR/count.ns" || return 2
+  : > "$2"
+  while IFS= read -r dlc_ns; do
+    [ -n "$dlc_ns" ] || continue
+    dlc_n=$( ( dl_core_exec - 0 store-clear count --driver="$1" "$dlc_ns" ) 2> /dev/null) && [ -n "$dlc_n" ] || dlc_n=unknown
+    printf '%s %s\n' "$dlc_ns" "$dlc_n" >> "$2"
+  done < "$DL_SCR/count.ns"
+}
+
+# dl_holding <counts file>: the namespaces holding a key (or whose count failed), for a line
+dl_holding() {
+  awk '$2 != "0" { printf "%s%s (%s)", (n++ ? ", " : ""), $1, ($2 == "unknown" ? "key count unknown" : ($2 == "1" ? "1 key" : $2 " keys")) }' "$1"
+}
+
+# dl_ask <counts file> <subject>: DL_ANSWER settled before anything is written: kept when the
+# flag gave it, else asked once when the old copy holds a key, else left empty; the answer is
+# the human's, so no terminal refuses rc 1 naming both flags
+dl_ask() {
+  [ -z "$DL_ANSWER" ] || return 0
+  dla_h=$(dl_holding "$1")
+  [ -n "$dla_h" ] || return 0
+  DL_ANSWER=$(cfg_answer "$DL_LABEL" "$2: $dla_h; back it up or delete it" backup --backup-old delete --delete-old) || return $?
+}
+
+# dl_hook <part folder> <hook> <version> <direction> [<old copy> [<backup folder>]]: a driver
+# hook (prepare, finish, cleanup) inside the driver part, run as a held child from the
+# workspace root with stdin /dev/null, today's hook environment, CTX_DRIVER, and
+# CTX_DRIVER_DIRECTION, a finish out also CTX_DRIVER_OLD_COPY and, for a backup,
+# CTX_DRIVER_BACKUP, never the freeze token nor any CTX_STORAGE_ variable; a missing hook
+# answers rc 0; DL_LINE holds its first stderr line
+dl_hook() {
+  DL_LINE=""
+  [ -f "$1/hooks/$2" ] || return 0
+  dl_held "$DL_SCR/hook.out" "$DL_SCR/hook.err" dl_hook_exec "$@"
+  dlk_rc=$?
+  DL_LINE=$(dl_first "$DL_SCR/hook.err")
+  return "$dlk_rc"
+}
+
+dl_hook_exec() {
+  cd "$DL_WS" || exit 2
+  for dlx_v in $(env | sed -n 's/^\(CTX_STORAGE_[A-Za-z0-9_]*\)=.*/\1/p'); do
+    unset "$dlx_v"
+  done
+  unset CTX_DIR CTX_SCRATCH_ROOT
+  CTX_ROOT=$DL_WS
+  CTX_BIN=$DL_BIN
+  CTX_PACKAGE_NAME=$DL_PKG
+  CTX_PACKAGE_VERSION=$3
+  CTX_PACKAGE_ROOT=$DL_PKG_ROOT
+  CTX_DRIVER=${1##*/}
+  CTX_DRIVER_DIRECTION=$4
+  LC_ALL=C
+  export CTX_ROOT CTX_BIN CTX_PACKAGE_NAME CTX_PACKAGE_VERSION CTX_PACKAGE_ROOT CTX_DRIVER CTX_DRIVER_DIRECTION LC_ALL
+  if [ -n "${5:-}" ]; then
+    CTX_DRIVER_OLD_COPY=$5
+    export CTX_DRIVER_OLD_COPY
+  fi
+  if [ -n "${6:-}" ]; then
+    CTX_DRIVER_BACKUP=$6
+    export CTX_DRIVER_BACKUP
+  fi
+  dlx_h=$1/hooks/$2
+  [ ! -x "$dlx_h" ] || exec "$dlx_h"
+  exec sh "$dlx_h"
+}
+
+# dl_finish_out <driver> <version> <backup|delete>: the driver's finish hook out, its own
+# storage (the old copy once the record reads from posix) backed up into the run's backup,
+# move-<stamp>/@<driver> (a name no namespace can take), or deleted; DL_DONE says what it did
+dl_finish_out() {
+  dlo_part=$DL_WS/.contexture/extensions/storage/drivers/$1
+  dlo_b=""
+  if [ "$3" = backup ]; then
+    dlo_b=$DL_WS/.contexture/backups/move-$DL_STAMP/@$1
+    mkdir -p "$dlo_b" 2>/dev/null || { DL_LINE="the backup folder cannot be made in the drawer"; return 2; }
+  fi
+  dl_hook "$dlo_part" finish "$2" out "$3" "$dlo_b"
+  dlo_rc=$?
+  if [ -n "$dlo_b" ]; then
+    if rmdir "$dlo_b" 2>/dev/null; then
+      rmdir "${dlo_b%/*}" 2>/dev/null
+      DL_DONE="held nothing to back up"
+    else
+      DL_DONE="moved into the backup stamped $DL_STAMP"
+    fi
+  else
+    DL_DONE="deleted"
+  fi
+  return "$dlo_rc"
+}
+
+# dl_conf_save: the configuration's bytes and mode (or its absence) saved in the run folder
+# before the run's first write of a phase; dl_conf_set and dl_conf_unset write through the
+# locked writer, noting each key; dl_conf_back puts the saved bytes back under the lock while
+# the file holds what the run's writes left, else each noted key alone, said so
+dl_conf_save() {
+  rm -f "$DL_RUN/config.saved" "$DL_RUN/config.expect" 2>/dev/null
+  if [ -f "$DL_CONF" ]; then
+    cp -p "$DL_CONF" "$DL_RUN/config.saved" 2>/dev/null || return 2
+  fi
+  { true > "$DL_RUN/config.keys"; } 2>/dev/null || return 2
+  DL_CONF_SAVED=1
+  dl_conf_mark
+}
+
+dl_conf_mark() {
+  if [ -f "$DL_CONF" ]; then
+    cp -p "$DL_CONF" "$DL_RUN/config.expect" 2>/dev/null
+  else
+    rm -f "$DL_RUN/config.expect" 2>/dev/null
+  fi
+}
+
+dl_conf_set() {
+  grep -Fqx -- "$1" "$DL_RUN/config.keys" 2>/dev/null || printf '%s\n' "$1" >> "$DL_RUN/config.keys"
+  cfg_set "$1" "$2" "$DL_WS/.contexture" 2> "$DL_SCR/conf.err" || return $?
+  dl_conf_mark
+}
+
+dl_conf_unset() {
+  grep -Fqx -- "$1" "$DL_RUN/config.keys" 2>/dev/null || printf '%s\n' "$1" >> "$DL_RUN/config.keys"
+  cfg_unset "$1" "$DL_WS/.contexture" 2> "$DL_SCR/conf.err" || return $?
+  dl_conf_mark
+}
+
+# dl_conf_revert <key>: one key put back to its saved value (or unset when it had none)
+dl_conf_revert() {
+  if [ -f "$DL_RUN/config.saved" ] && dlv_v=$(cfg_get_file "$DL_RUN/config.saved" "$1" 2>/dev/null) && [ -n "$dlv_v" ]; then
+    dl_conf_set "$1" "$dlv_v"
+  else
+    dl_conf_unset "$1"
+  fi
+}
+
+dl_conf_back() {
+  [ "$DL_CONF_SAVED" -eq 1 ] || return 0
+  DL_CONF_SAVED=0
+  dlb_s=-
+  [ ! -f "$DL_RUN/config.saved" ] || dlb_s=$DL_RUN/config.saved
+  if [ -f "$DL_RUN/config.expect" ]; then
+    cfg_restore "$dlb_s" "$DL_RUN/config.expect" "$DL_WS/.contexture" 2> /dev/null
+    dlb_rc=$?
+  elif [ -f "$DL_CONF" ]; then
+    dlb_rc=3
+  else
+    dlb_rc=0
+  fi
+  [ "$dlb_rc" -ne 0 ] || return 0
+  [ "$dlb_rc" -eq 3 ] || return "$dlb_rc"
+  while IFS= read -r dlb_k; do
+    [ -n "$dlb_k" ] || continue
+    if [ "$dlb_s" != - ] && dlb_v=$(cfg_get_file "$dlb_s" "$dlb_k" 2>/dev/null) && [ -n "$dlb_v" ]; then
+      cfg_set "$dlb_k" "$dlb_v" "$DL_WS/.contexture" 2> /dev/null || return 2
+    else
+      cfg_unset "$dlb_k" "$DL_WS/.contexture" 2> /dev/null || return 2
+    fi
+  done < "$DL_RUN/config.keys"
+  dl_err "the workspace configuration changed during the run, so each key the run wrote was put back alone"
+}
+
+# dl_driver_pkgs: "<package> <driver> <version>" per installed driver package
+dl_driver_pkgs() {
+  for dlp_f in "$DL_STATE"/*.files; do
+    [ -f "$dlp_f" ] || continue
+    awk '
+      $1 == "package" && NF == 2 && p == "" { p = $2 }
+      $1 == "version" && NF == 2 && v == "" { v = $2 }
+      $1 == "kind" && NF == 2 && k == "" { k = $2 }
+      $1 == "driver" && NF == 2 && d == "" { d = $2 }
+      END { if (k == "driver" && p != "" && d != "") print p " " d " " v }' "$dlp_f" 2>/dev/null
+  done
+}
+
+# dl_written <run subfolder>: the keys the copy sent per namespace, noted before an unwind
+# removes its lists; dl_unwound <unwind stdout>: "<namespace> <w> written, <d> deleted"
+# joined by semicolons
+dl_written() {
+  for dlu_f in "$1"/written.*; do
+    [ -f "$dlu_f" ] || continue
+    printf '%s %s\n' "${dlu_f##*/written.}" "$(awk 'END { print NR }' "$dlu_f")"
+  done > "$DL_SCR/unwound.w"
+}
+
+dl_unwound() {
+  awk 'FILENAME == ARGV[1] { i = index($0, ": "); if (i) d[substr($0, 1, i - 1)] = substr($0, i + 2) + 0; next }
+    $2 > 0 || d[$1] > 0 { printf "%s%s %s written, %s deleted", (n++ ? "; " : ""), $1, $2, (($1 in d) ? d[$1] : 0) }' \
+    "$1" "$DL_SCR/unwound.w" 2>/dev/null
+}
+
+# dl_out <driver>: the move back into posix (an uninstall of the configured driver, a format
+# change's move out): the freeze naming posix, store-move copy <driver> posix, storage.driver
+# unset, store-move check <driver>, the release; DL_STEP names the step reached, DL_LINE a
+# failure's reason, DL_OUT_LINES the copy's lines; dl_out_unwind undoes a failure
+dl_out() {
+  DL_O_COPY=0
+  DL_O_SWITCH=0
+  DL_STEP="the freeze"
+  dl_conf_save || { DL_LINE="the workspace configuration cannot be saved in the run folder"; return 2; }
+  dl_take "$1" posix || { DL_LINE=$(dl_first "$DL_SCR/take.err"); return 2; }
+  DL_STEP="the copy into posix"
+  DL_O_COPY=1
+  dl_move "$DL_RUN/out" copy "$1" posix || { DL_LINE=$(dl_first "$DL_SCR/move.err"); return 2; }
+  DL_OUT_LINES=$(cat "$DL_SCR/move.out")
+  DL_STEP="the switch to posix"
+  DL_O_SWITCH=1
+  dl_conf_unset storage.driver || { DL_LINE=$(dl_first "$DL_SCR/conf.err"); return 2; }
+  DL_STEP="the check through posix"
+  dl_move "$DL_RUN/out" check "$1" || { DL_LINE=$(dl_first "$DL_SCR/move.err"); return 2; }
+  return 0
+}
+
+dl_out_unwind() {
+  DL_UNWOUND=""
+  dlw_rc=0
+  [ "${DL_O_SWITCH:-0}" -eq 0 ] || dl_conf_revert storage.driver
+  if [ "${DL_O_COPY:-0}" -eq 1 ]; then
+    dl_written "$DL_RUN/out"
+    if dl_move "$DL_RUN/out" unwind posix; then
+      DL_UNWOUND=$(dl_unwound "$DL_SCR/move.out")
+    else
+      DL_UNWOUND="the unwind of the posix copy stopped ($(dl_first "$DL_SCR/move.err")), so its freeze stays for the next driver package run, which deletes that copy"
+      dlw_rc=2
+    fi
+  fi
+  [ "$dlw_rc" -ne 0 ] || dl_release
+  dl_conf_back || dlw_rc=2
+  return "$dlw_rc"
+}
+
+# dl_recover: the move state read first by every driver package run: held refuses rc 2,
+# stale is recovered with one line naming what it found and did, then each stopped run's kept
+# old copy step is finished and every other stopped run's folder removed
+dl_recover() {
+  DL_STATE_LINE=$( ( dl_core_exec - 0 driver-resolver move-state ) 2> "$DL_SCR/state.err") \
+    || { dl_err "the storage moving state cannot be read ($(dl_first "$DL_SCR/state.err"))"; return 2; }
+  case "$DL_STATE_LINE" in
+    free) ;;
+    held) dl_err "storage is being moved by another run; retry after that move ends (ERR_STORAGE_LOCKED)"; return 2 ;;
+    held\ *) dl_err "storage is being moved to driver '${DL_STATE_LINE#held }' by another run; retry after that move ends (ERR_STORAGE_LOCKED)"; return 2 ;;
+    stale\ *) dl_stale "${DL_STATE_LINE#stale }" || return $? ;;
+    *) dl_err "the storage moving state reads '$DL_STATE_LINE'"; return 2 ;;
+  esac
+  dl_kept
+}
+
+# dl_clear <source>: a crashed move's freeze removed through a take naming posix and the release
+dl_clear() {
+  dl_take "$1" posix || { dl_err "the freeze a stopped move left cannot be cleared ($(dl_first "$DL_SCR/take.err"))"; return 2; }
+  dl_release
+}
+
+# dl_kept_for <driver>: rc 0 when a stopped run's folder holds an unfinished step of a move
+# into the driver
+dl_kept_for() {
+  for dlq_d in "$DL_WS"/.contexture/tmp/driver-run.*; do
+    [ -s "$dlq_d/pending" ] && [ -f "$dlq_d/run" ] || continue
+    [ "$(awk '{ print $2; exit }' "$dlq_d/run")" = "$1" ] && return 0
+  done
+  return 1
+}
+
+dl_stale() {
+  dls_t=$1
+  dls_c=$(cfg_effective_driver "$DL_WS/.contexture")
+  if [ "$dls_t" = posix ] && [ "$dls_c" = posix ]; then
+    dl_clear posix || return 2
+    dls_what="the record reads from posix"
+    dls_pkgs=$(dl_driver_pkgs)
+    if [ -n "$dls_pkgs" ]; then
+      set -- $dls_pkgs
+      dl_count "$2" "$DL_SCR/stale.counts" || { dl_err "the namespaces cannot be listed, so the stopped move cannot be recovered"; return 2; }
+      if [ -n "$(dl_holding "$DL_SCR/stale.counts")" ]; then
+        dl_ask "$DL_SCR/stale.counts" "a stopped move back into posix left the '$2' driver's own storage, the old copy" || return $?
+        dl_finish_out "$2" "$3" "${DL_ANSWER:-backup}" || {
+          dl_err "found a move back into posix stopped after its switch, but the '$2' driver's finish failed ($DL_LINE); run the uninstall of $1 with the human's answer to finish"
+          return 2
+        }
+        dls_what="$dls_what; the '$2' driver's own storage $DL_DONE"
+      fi
+      dls_what="$dls_what; $1 stays installed, not configured"
+    fi
+    printf '%s: recovered a move back into posix stopped after its switch: %s\n' "$DL_LABEL" "$dls_what"
+  elif [ "$dls_t" = "$dls_c" ]; then
+    dl_kept_for "$dls_t" && return 0
+    dl_clear posix || return 2
+    printf "%s: recovered a move into '%s' stopped after its switch: the record reads from '%s' and nothing was left to finish\n" "$DL_LABEL" "$dls_t" "$dls_t"
+  elif [ "$dls_t" = posix ]; then
+    dl_take "$dls_c" posix || { dl_err "the freeze a stopped move left cannot be cleared ($(dl_first "$DL_SCR/take.err"))"; return 2; }
+    dl_namespaces "$DL_SCR/stale.ns" || { dl_release; dl_err "the namespaces cannot be listed, so the stopped move cannot be recovered"; return 2; }
+    dls_n=0
+    while IFS= read -r dls_ns; do
+      [ -n "$dls_ns" ] || continue
+      if ! dls_k=$( ( dl_core_exec - 1 store-clear namespace --driver=posix "$dls_ns" ) 2> "$DL_SCR/clear.err"); then
+        dl_release
+        dl_err "the partial posix copy a stopped move back left cannot be deleted ($(dl_first "$DL_SCR/clear.err"))"
+        return 2
+      fi
+      dls_n=$((dls_n + ${dls_k:-0}))
+    done < "$DL_SCR/stale.ns"
+    dl_release
+    printf "%s: recovered a move back into posix stopped before its switch: deleted the %s keys of its partial posix copy; the record reads from '%s'\n" "$DL_LABEL" "$dls_n" "$dls_c"
+  else
+    dls_what="nothing of it was found installed"
+    dls_pkg=$(dl_driver_pkgs | awk -v d="$dls_t" '$2 == d { print; exit }')
+    if [ -n "$dls_pkg" ]; then
+      set -- $dls_pkg
+      dl_hook "$DL_WS/.contexture/extensions/storage/drivers/$2" cleanup "$3" in || {
+        dl_err "found a move into '$2' stopped before its switch, but the driver's cleanup failed ($DL_LINE)"
+        return 2
+      }
+      dls_what="the driver's cleanup removed what the move made; $1 stays installed, not configured"
+    fi
+    dl_clear posix || return 2
+    printf "%s: recovered a move into '%s' stopped before its switch: the record reads from '%s'; %s\n" "$DL_LABEL" "$dls_t" "$dls_c" "$dls_what"
+  fi
+}
+
+# dl_kept: each stopped run's folder (its pid gone): an unfinished check, old copy step, or
+# finish of a move into the configured driver is finished under a freeze, with this run's
+# answer and the stopped run's stamp, a check the stop cut short run again in the stopped
+# run's folder before its old copy step; when it no longer passes (the driver took writes
+# after the stop), posix is retired from a fresh scan of itself into the stamped backup,
+# kept whatever the answer, with a warning; any other such folder is removed
+dl_kept() {
+  for dlk_d in "$DL_WS"/.contexture/tmp/driver-run.*; do
+    [ -d "$dlk_d" ] || continue
+    dlk_p=${dlk_d##*.}
+    case "$dlk_p" in ""|*[!0-9]*) continue ;; esac
+    [ "$dlk_p" != "$$" ] || continue
+    ! kill -0 "$dlk_p" 2>/dev/null || continue
+    if [ -s "$dlk_d/pending" ] && [ -f "$dlk_d/run" ]; then
+      dl_kept_finish "$dlk_d" || return $?
+    fi
+    rm -rf "$dlk_d" 2>/dev/null
+  done
+  return 0
+}
+
+dl_kept_finish() {
+  read -r dkf_pkg dkf_drv dkf_ver < "$1/run" || return 0
+  [ "$(cfg_effective_driver "$DL_WS/.contexture")" = "$dkf_drv" ] || return 0
+  dkf_stamp=$(sed -n '1p' "$1/stamp" 2>/dev/null)
+  dkf_said=""
+  if grep -qx retire "$1/pending"; then
+    dl_count posix "$DL_SCR/kept.counts" || { dl_err "the namespaces cannot be listed, so a stopped run's old copy step cannot be finished"; return 2; }
+    dl_ask "$DL_SCR/kept.counts" "a stopped run of '$dkf_pkg' left the old posix copy of the record it moved into '$dkf_drv'" || return $?
+    dl_take posix "$dkf_drv" || { dl_err "a stopped run's old copy step cannot be finished: the freeze cannot be taken ($(dl_first "$DL_SCR/take.err"))"; return 2; }
+    dkf_why=""
+    if grep -qx check "$1/pending"; then
+      if dl_move "$1/in" check posix; then
+        grep -vx check "$1/pending" > "$1/pending.new"; mv -f "$1/pending.new" "$1/pending"
+        dkf_said="its check passed again"
+      else
+        dkf_why=$(dl_first "$DL_SCR/move.err")
+      fi
+    fi
+    if [ -n "$dkf_why" ]; then
+      dl_move "$1/in" retire posix backup "$dkf_stamp" --rescan
+    else
+      dl_move "$1/in" retire posix "${DL_ANSWER:-backup}" "$dkf_stamp"
+    fi || {
+      dl_release
+      dl_err "a stopped run's old copy step cannot be finished ($(dl_first "$DL_SCR/move.err")); its run state stays for the next driver package run"
+      return 2
+    }
+    dl_release
+    dkf_said="${dkf_said:+$dkf_said; }$(sed -n '$p' "$DL_SCR/move.out")"
+    grep -vx -e check -e retire "$1/pending" > "$1/pending.new"; mv -f "$1/pending.new" "$1/pending"
+    [ -z "$dkf_why" ] \
+      || dl_err "warning: a run of '$dkf_pkg' stopped after its switch, and its check run again no longer passes ($dkf_why), so the '$dkf_drv' driver took writes after the stop: the old posix copy was saved from a fresh scan of posix into the backup stamped $dkf_stamp, kept whatever the answer, then retired"
+  fi
+  if grep -qx finish "$1/pending"; then
+    dl_hook "$DL_WS/.contexture/extensions/storage/drivers/$dkf_drv" finish "$dkf_ver" in || {
+      dl_err "a stopped run's driver finish cannot be completed ($DL_LINE)"
+      return 2
+    }
+    dkf_said="${dkf_said:+$dkf_said; }the driver's finish ran"
+  fi
+  printf "%s: finished what a stopped run of '%s' left after its verify: %s\n" "$DL_LABEL" "$dkf_pkg" "${dkf_said:-nothing remained}"
 }

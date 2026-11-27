@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { data } from '../support/data';
@@ -85,11 +85,11 @@ describe.concurrent('a unit verb reaches the store through the data script, the 
   });
 });
 
-const STORE = ['list', 'get', 'put', 'delete', 'changes', 'batch', 'scan'];
+const STORE = ['list', 'get', 'put', 'delete', 'batch', 'scan'];
 
 function plantDriver(sb: string, name: string, without?: string): string {
   const log = join(sb, `${name}.calls`);
-  const card = JSON.stringify({ driver: name, version: '3.0.0', contract: '3', store: STORE.filter((s) => s !== without), search_modes: [{ name: 'exact', description: 'the exact rule' }], optional: [] });
+  const card = JSON.stringify({ driver: name, version: '4.0.0', contract: '4', store: STORE.filter((s) => s !== without), search_modes: [{ name: 'exact', description: 'the exact rule' }], optional: [] });
   put(
     join(sb, '.contexture/extensions/storage/drivers', name, 'driver'),
     [
@@ -110,19 +110,22 @@ describe.concurrent('a verb on a driver that fails the capability handshake (the
   it('[the-engine-r8, the-engine-r19] bootstrap on a planted driver missing put refuses rc2 naming the family, creates nothing, and never reaches its store', async () => {
     const sb = stage('posix', 'z-bad');
     const log = plantDriver(sb, 'z-bad', 'put');
-    const r = await run(sb, ['unit', 'bootstrap', 'z-unit', 'handshake unit'], { env: { CTX_STORAGE_DRIVER: 'z-bad' } });
+    writeFileSync(join(sb, '.contexture/config'), 'storage.driver: z-bad\n');
+    const r = await run(sb, ['unit', 'bootstrap', 'z-unit', 'handshake unit']);
+    rmSync(join(sb, '.contexture/config'));
     expect(r.code).toBe(2);
-    expect(r.stdout + r.stderr).toContain('not the seven data names in the fixed order (ERR_DRIVER_PROTOCOL)');
+    expect(r.stdout + r.stderr).toContain('not the six data names in the fixed order (list get put delete batch scan) (ERR_DRIVER_PROTOCOL)');
     expect(existsSync(join(sb, RECORD_ROOT, 'z-unit'))).toBe(false);
     expect((await data(sb, 'session.load', ['z-unit'])).code).toBe(1);
     expect(calls(log).length).toBeGreaterThan(0);
     expect(calls(log).filter((c) => c !== 'capability')).toEqual([]);
   });
 
-  it('[the-engine-r8, the-engine-r19] the same plant carrying all seven names serves the bootstrap through its store', async () => {
+  it('[the-engine-r8, the-engine-r19] the same plant carrying all six names serves the bootstrap through its store', async () => {
     const sb = stage('posix', 'z-good');
     const log = plantDriver(sb, 'z-good');
-    const r = await run(sb, ['unit', 'bootstrap', 'z-unit', 'handshake unit'], { env: { CTX_STORAGE_DRIVER: 'z-good' } });
+    writeFileSync(join(sb, '.contexture/config'), 'storage.driver: z-good\n');
+    const r = await run(sb, ['unit', 'bootstrap', 'z-unit', 'handshake unit']);
     expect(r.code, r.stderr).toBe(0);
     expect(calls(log).filter((c) => c !== 'capability').length).toBeGreaterThan(0);
     expect(existsSync(join(sb, RECORD_ROOT, 'z-unit/state.md'))).toBe(true);

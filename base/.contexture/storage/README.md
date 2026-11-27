@@ -3,14 +3,24 @@
 The storage core sits beside the engine at `.contexture/storage/`. It is not a module:
 the engine does not discover it, `ctx help` does not list it, and a package never writes
 it. It owns the driver resolver, the generic storage layer contract, the module-facing
-library, and the posix driver.
+library, the move engine, and the posix driver.
 
 ```text
 storage/
-  scripts/driver-resolver   the resolver: selection, the capability handshake, dispatch
-  scripts/store-data        the private reader and validator of a module's data file, and its listing
-  scripts/store-search      the private exact and document-derivation search engine
-  scripts/store-search.awk  the engine's parser, extractor, matcher, and SQL deriver
+  scripts/driver-resolver   the resolver: selection, the capability handshake, dispatch, and
+                            the storage moving freeze (move-freeze, move-release, move-state)
+  scripts/driver-behavior   the private differential behavior test a driver meets: posix and the
+                            candidate in two scratch workspaces, one step set compared
+  scripts/store-data        the private reader and validator of a module's data file, and its
+                            listings (every declaration, the kept data ones among them)
+  scripts/store-clear       the private counter and deleter of one named namespace's keys,
+                            through the resolver in bounded batches (the uninstall's delete)
+  scripts/store-move        the private move engine: every namespace from one driver to another
+                            (preflight, copy and verify, check, unwind, retire), through the resolver
+  scripts/store-key.awk     the one key rule: the awk functions the dispatch gate and every bundled
+                            driver read (the key, the prefixes, the leading run fold set)
+  scripts/store-search      the private exact search engine
+  scripts/store-search.awk  the engine's parser, extractor, and matcher
   scripts/store-b64         the private base64 encoder of a stored value
   scripts/store-pack        the private codec of a batched store.get answer: pack, unpack
   scripts/store-fields.awk  the private field validator engine the library's fields functions
@@ -25,22 +35,31 @@ storage/
 
 ## The store contract
 
-The store-only driver card is contract 3: the driver answers `capability` and
-`storage.health <namespace>` as its own methods and the seven data functions plus the
-search entry, and the record's operations live in the unit module's data script over
+The store-only driver card is contract 4, which describes posix exactly: the driver
+answers `capability` and `storage.health <namespace>` as its own methods and the six data
+functions plus the search entry, and the record's operations live in the unit module's data script over
 the store. The health probes the named namespace's store, validated through `store-data`
 like any store function (a missing, extra, or malformed argument refuses rc 1
 `ERR_INVALID_ARGUMENT`, an undeclared namespace rc 1 `ERR_ENTITY_NOT_FOUND`, a
 declaration the core cannot read rc 2 `ERR_STORAGE_READ`), by one table on both drivers:
 the store not made (posix: the declared root and the declared fallback root both absent;
-fts5: no database file, or a file holding no table) reads `degraded`, absent; made but
+sqlite: no database file, or a file holding no table) reads `degraded`, absent; made but
 unreadable (posix: either existing root) reads `error`, absent; presence is then counted
 (posix: the first key the namespace's pattern admits under its root or its fallback root,
-never a stray file; fts5: the namespace's rows alone); unwritable (posix: either existing
-root) reads `error` with that presence, as do the fts5 checks (another schema reads
+never a stray file; sqlite: the namespace's rows alone); unwritable (posix: either existing
+root) reads `error` with that presence, as do the sqlite checks (another schema reads
 present, a failed integrity check, an sqlite3 older than 3.44 with the store by the
 file's existence); `locked` replaces `ok` whatever the presence; the detail names no
 folder, and the probe prints no fallback notice.
+
+The resolver holds every driver but the bundled posix one to the card at dispatch: the
+contract `4`, the six store names in the fixed order (`list get put delete batch scan`),
+the one search mode `exact`, and the optional tokens `store` and `store.promote` alone,
+each refusal rc 2 `ERR_DRIVER_PROTOCOL` naming the expectation; the version is never
+checked. Its verdict is cached under the drawer's scratch, one file per driver path, and
+stands only while it is newer than the driver, the workspace configuration, and the
+resolver itself, so a core update (a copy stamps the resolver anew) verifies every driver
+against the contract it brings at its next call.
 
 The posix driver answers a third method of its own, `storage.leftovers <namespace>`: what
 the named namespace's declared root and fallback root hold beyond the documents its
@@ -57,7 +76,8 @@ probe rc 2 `ERR_STORAGE_READ`, a name never continued across lines. A regular fi
 pattern admits is a key (the storage layer's own list rule: the suffix, the key rule, the
 pattern), a document when a document rule or an `unsearched` line of the declaration
 names it (every key a document when the namespace declares neither), else a key outside
-the document rules, which is a leftover; each folder above a key is a key folder, each
+the document rules, which is a leftover; each folder above a key, or above a refused key
+(below), is a key folder, each
 folder above an unreadable folder or a name holding a newline is opened, and every other
 entry belongs to the topmost folder above it that holds no key, or stands loose in a key
 folder, an opened folder, or the root. A loose folder is an unreadable folder (one with no
@@ -65,9 +85,13 @@ listed entry that cannot be read or entered), a lock remnant (named `.lock` or `
 as an older release's lock folder inside the deprecated root), a folder outside the key
 shape (it holds a file, a link, or a special file), or an empty folder (as `ctx store
 delete containers/<name>` left a dropped container's folder before the delete pruned the
-folders it empties); a loose file is a lock or write remnant (a lock name, or a key file's
-name with a six character `mktemp` tail, a killed put's temp), else a stray file (a wrong
-suffix, outside the pattern, or a name the key rule refuses); a link and a fifo, socket,
+folders it empties); a loose file is a lock or write remnant (a lock name, or a killed
+put's temp: a dot, the key file's name, and a six character `mktemp` tail, or the older
+shape of the key file's name, a dot, and the tail), a refused key (a regular file whose
+suffix and segment count the pattern admits while the key rule refuses its name, a name
+opening with a dot aside; each folder above one is opened like a key folder, outside the
+sweep's `--loose` scope, which takes a top folder holding only refused keys whole), else a
+stray file (a wrong suffix, outside the pattern, or a name opening with a dot); a link and a fifo, socket,
 or device count apart; a name holding a newline counts as its own kind, its bytes the
 regular files at or below it; in the fallback root a key the root also holds is a shadowed
 key, never a key. The answer is one compact object `{"driver","namespace",
@@ -75,11 +99,11 @@ key, never a key. The answer is one compact object `{"driver","namespace",
 link, which the storage layer never walks), `unreadable`, or `none` (the namespace declares no
 fallback root), else `{"state":"walked","entries","keys","documents","kinds"}`, the
 kinds `stray_files`, `nonkey_folders`, `empty_folders`, `links`, `special_files`,
-`unreadable_folders`, `remnants`, `shadowed_keys`, `outside_keys`, and `newline_names` in
-that order, each `{"count","bytes"}` (`keys` is `documents` plus the `outside_keys`
-count; `entries` counts each name holding a newline once) (a leftover folder counts once,
+`unreadable_folders`, `remnants`, `shadowed_keys`, `outside_keys`, `refused_keys`, and
+`newline_names` in that order, each `{"count","bytes"}` (`keys` is `documents` plus the
+`outside_keys` count, a refused key never a key; `entries` counts each name holding a newline once) (a leftover folder counts once,
 its regular files' bytes rolled in; a file `wc` cannot read and an unreadable folder count
-0 bytes). The fts5 driver keeps one database and no key file tree, so
+0 bytes). The sqlite driver keeps one database and no key file tree, so
 it answers its unknown function line rc 2 `ERR_CAPABILITY_UNSUPPORTED`. A walk costs what
 the roots hold, every entry once: it is the whole walk the leftovers explain, so it runs
 only where a caller asks for it (`ctx unit diagnose --leftovers`, `ctx store check
@@ -129,7 +153,7 @@ the entries at the top of each root that hold no key; neither sweeps both roots 
 refusals included. The answer is one compact object `{"driver","namespace","mode",
 "dry_run","stamp","root","fallback"}`, `mode` `move` or `delete`, `stamp` the backup's
 (`null` for `--delete`, a dry run, and a run that moved nothing), each root `{"state"}`
-as the probe's or `{"state":"walked","kinds","emptied","left"}`, the ten kinds of what it
+as the probe's or `{"state":"walked","kinds","emptied","left"}`, the eleven kinds of what it
 swept, the key folders holding no document it cleared, and the unreadable folders it left
 untouched; it names no folder. The first item it cannot move or remove, a backup place
 already taken, an item gone or changed since the plan, or the guard stops it rc 2
@@ -140,49 +164,109 @@ sweep would move the folder it moves into, or the lock it holds); a root that is
 another namespace's root or fallback root (as `store-data --list` names them) refuses rc 1
 `ERR_INVALID_ARGUMENT` naming both namespaces, a listing that cannot be read whole rc 2
 `ERR_STORAGE_READ`; a missing, unknown, or repeated argument, a malformed stamp or
-prefix, and both scopes refuse rc 1. The fts5 driver answers its unknown function line rc
+prefix, and both scopes refuse rc 1. The sqlite driver answers its unknown function line rc
 2. Its callers are `ctx unit migrate --sweep`
 (per unit under its unit lock, `--prefix=<unit>/`, then `--loose` under `--all`) and
 `ctx store check --leftovers --sweep` (the store namespace whole).
 
-Seven data functions and the optional promotion, called through the resolver:
+Six data functions and the optional promotion, called through the resolver:
 
 | function | argv | stdin | answer |
 |---|---|---|---|
 | `store.list` | `<namespace> [<prefix>]` | none | `{"namespace","keys"}`: every key the module pattern admits, bytewise; the optional literal key prefix narrows it |
 | `store.get` | `<namespace> <key> [<key>...]` | none | one key: the raw bytes of the key, no JSON; absent rc 1 `ERR_ENTITY_NOT_FOUND`. Two or more: `{"namespace","items":[...]}`, one item per asked key in the asked order: `{"key","value"}`, `{"key","value_b64"}` for a value holding a NUL byte, or `{"key","missing":true}` |
-| `store.put` | `<namespace> <key> [--op=<op>] [--head=<sha\|none>]` | the raw bytes | `{"namespace","key","op"}`; atomic per key |
-| `store.delete` | `<namespace> <key> [--op=<op>] [--head=<sha\|none>]` | none | `{"namespace","key","op"}`; posix removes the folders it empties, never the root |
-| `store.changes` | `<namespace>` | `head=<sha\|none>` lines | `{"namespace","changes":[...]}` oldest first |
-| `store.batch` | `<namespace>` | the action lines (`action=put\|delete`, `key=<escaped>`, `head=<sha\|none>`, `value_b64=<base64>` for a put) | `{"namespace","actions":N}`; all or none |
+| `store.put` | `<namespace> <key>` | the raw bytes | `{"namespace","key"}`; atomic per key; an extra argument refuses rc 1 `ERR_INVALID_ARGUMENT` |
+| `store.delete` | `<namespace> <key>` | none | `{"namespace","key"}`; posix removes the folders it empties, never the root; an extra argument refuses rc 1 |
+| `store.batch` | `<namespace>` | the action lines (`action=put\|delete`, `key=<escaped>`, `value_b64=<base64>` for a put; any other line refuses as an unknown payload line) | `{"namespace","actions":N}`; all or none |
 | `store.scan` | `<namespace>` | none | `{"namespace","items":[{"key","value_b64"}]}`: every admitted key, bytewise, its raw value in base64 |
 | `store.search` | `<namespace> <mode> [<limit>]` | `query=<escaped>` | `{"namespace","query","mode","total_matches","results":[{key,entity_type,entity_id,section,snippet,score}]}`; limit 0 answers every result |
 | `store.promote` | `<namespace> <prefix>` | none | `{"namespace","prefix","state"}`: optional (the `store.promote` token); moves the prefix (whole key segments ending in a slash) from the fallback root to the root; `moved`, or `none` when the fallback holds nothing for it or none is declared; a move that empties the fallback root, or a `none` answer over an empty one, removes that root; the root already holding it refuses rc 1 `ERR_ENTITY_EXISTS` |
 
 The batched `store.get` is the one key read made once for many keys: every key passes the
-key rule and the pattern first, and the first that fails refuses the whole call rc 1 with
-the one key form's line; an absent key is an item marked missing, never a refusal; a present
+key rule (at the dispatch gate, then again in the driver) and the pattern first, and the
+first that fails refuses the whole call rc 1 with the one key form's line; an absent key is an item marked missing, never a refusal; a present
 key that cannot be read refuses the whole call rc 2 with the one key form's line; a key read
 from a deprecated fallback root prints the one notice. The value travels as a JSON string:
 the backslash, the double quote, the tab, the carriage return, and the newline between
 lines escaped, every other byte below 0x20 as `\u00XX`, and the bytes from 0x80 as stored, so
 the posix driver encodes per line and the reader decodes per escape; a value holding a NUL
-byte, which awk cannot carry, travels in base64 instead. Inside a value every double quote
-is escaped, so the item separator and a key's closing quote cannot occur in one. Both
-drivers pack the line with `store-pack`, so their answers are byte identical; the posix
-driver finds the asked keys by listing their own folders alone, one level each, as the
-walk of their common folder would list them (the exact stored spelling, the root's copy
-first), so a read across many units never walks the namespace, and fts5 writes them in one
+byte, which awk cannot carry, travels in base64 instead, encoded by `store-b64` before the
+line is packed, so a value it cannot read whole refuses the call as unreadable. Inside a
+value every double quote is escaped, so the item separator and a key's closing quote cannot
+occur in one. Both drivers pack the line with `store-pack`, which hands the value paths to
+`wc` and `cat` in runs of at most 32768 bytes, so a batched get of any size answers, and
+their answers are byte identical; the posix
+driver finds the asked keys by listing their own folders alone, one level each, in runs
+bounded below the system's argument limit, as the walk of their common folder would list
+them (the exact stored spelling, the root's copy first), so a read across many units never
+walks the namespace, and sqlite writes them in one
 `sqlite3` call.
 
-Keys are exact: a key that ASCII-case-folds onto another in the namespace refuses, a
-read or delete acts on the exact key alone, list is bytewise, and no key holds a blank, a
-control character, a leading slash, a backslash, or a `.` or `..` segment. The module
+Keys are exact and meet one key and value rule, the text of `scripts/store-key.awk`, so
+every key any caller can write is one every driver, posix included, can hold on any
+volume. A key is one or more segments joined by a slash; each segment opens with a letter
+or a digit and holds only letters, digits, dot, underscore, and dash, at most 200 bytes; the
+whole key is at most 512 bytes (so a posix path stays inside a 1024 byte `PATH_MAX`); and in
+a namespace whose key pattern ends in a `<name...>` placeholder no segment but the last ends
+with the namespace's suffix (`u/a` beside `u/a.md/x` under `.md` would make one key's folder
+another key's file). A value is any bytes, empty allowed, at most 16 MiB (16777216 bytes).
+The resolver checks the rule at its dispatch, one function (`kv_gate`) in the `exec` and
+the dotted arm, before it resolves or runs any driver: every key of `store.get`, the key of
+`store.put` and `store.delete`, the prefix of `store.list`, `store.promote`, and
+`storage.sweep --prefix=`, and every `key=` and `value_b64=` line of a `store.batch`
+payload. A list prefix may end inside a segment or on a slash, its whole segments under the
+rule and its trailing part from the same alphabet opening with a letter or a digit; a
+promote or sweep prefix is whole segments ending in a slash. A refusal is rc 1
+`ERR_INVALID_ARGUMENT` with the dispatched function's own line, `<function>: error:
+malformed key '<key>'`, `malformed key prefix '<prefix>'`, a batch action as `store.batch:
+error: action <n> (<op> '<key>'): malformed key '<key>'`, or a value past the cap naming
+the key, its size, and the cap, the key written with the payload escape (a backslash, a
+newline, a tab, or a carriage return as `\\`, `\n`, `\t`, `\r`) so the line stays one;
+nothing reaches stdout and no driver runs. The gate stages a put's and a batch's stdin in
+the per verb scratch root (else the drawer's scratch, the system temp only when the drawer
+cannot hold it), a batch payload without its NUL bytes (an awk may cut a line at one while a
+shell read drops it, so the gate checks the lines the driver reads), checks it there, and
+hands the staged file to the driver as its stdin, unlinked before the exec, so nothing stays
+behind; a hangup, interrupt, or termination while it stages removes the file and exits 129,
+130, or 143 at once, even while the caller still holds stdin open (under bash 3.2 alone, a
+signal landing just as the gate starts waiting on its copy of stdin is held until stdin
+ends, the one window left). A batch value's decoded size is read with its trailing padding run aside, so no
+decoder yields more, and a line outside the wire's shape (an unknown or repeated line, a line
+outside an action, an unknown action, an action with no key) ends the gate's batch check,
+so the driver names it. The suffix clause reads the namespace's suffix and key pattern
+through `store-data` when a checked key or prefix has a non final segment, and once for
+every batch; a declaration it cannot read leaves the refusal to the driver. The gate's refusals come before the driver's argument
+count, bounded flags, declaration, and pattern refusals. A direct driver call skips the
+gate (the one bypass), and every bundled driver reads the same text for its own argument
+checks and for its list, scan, and leftovers classification, so a listing never names a key
+a read refuses. A put whose leading run of segments, the whole key included, folds under
+ASCII case onto the same length run of a stored key with another spelling refuses rc 1
+`ERR_ENTITY_EXISTS` on every driver and volume (`A/x` beside `a/y`); the driver checks it
+under the namespace lock in one pass per call, the live key list folded once into its
+leading runs and each put of a batch checked and added in action order, the first failing
+action named. The posix batch reads that live list from the folders its keys touch alone
+(`batch_live`): a `find` pair (folders, then files) per root lists the namespace root's
+entries and each folder's along every action key's leading runs, one level each
+(`store_entries`, the listing the batched get reads), its folders handed over in runs of at
+most 32768 bytes, so no call meets the system's argument limit however many or deep the
+keys (one pair for any ordinary batch), a folder's entries counting only when each folder
+above it is listed in its own exact spelling. Where every run the actions fold
+onto has one spelling (the actions', the stored folders', the stored keys') no twin can fire
+and no count reaches the answer, so the pass reads only the live keys among them; a run
+holding a second spelling (a twin, a case mismatch on a folding volume, legacy twins on a
+case sensitive one) has each of its stored folders walked whole and the list sorted, so the
+pass answers as over the whole namespace. So a one action unit write runs the same
+processes at 0 and at 33510 keys, and never a `find` over the namespace root (a `store.put`
+alone still lists the namespace for its twin check). A read or delete acts on the exact key alone, and list is bytewise. The module
 pattern filters list and scan and refuses a key outside it; `store.list` takes an optional
 literal bytewise key prefix (possibly ending on a slash) so a module reads its own keys
 without walking the namespace. The posix mapping is
-`<root>/<key><suffix>` under the workspace root, written by a same-directory temp moved
-over the key under one namespace scope lock, so a put lands whole or not at all. A
+`<root>/<key><suffix>` under the workspace root, written by a same-directory temp (a dot,
+the key file's name, and the `mktemp` tail, a name the key rule refuses, so a killed put
+leaves a remnant and never a key) moved over the key under one namespace scope lock, so a
+put lands whole or not at all. A file a posix root holds whose name the key rule refuses is
+never listed, read, or written: the leftovers probe counts it as a refused key, and the
+sweep moves it into a backup on the human's word. A
 namespace that declares a `fallback_root` is read from its root first, then from the
 fallback: `store.get`, `store.list` (the union, each key once, the root's copy
 shadowing), `store.scan`, `store.search`, and the key probe; `store.put` and
@@ -210,7 +294,7 @@ first, a killed writer's residue moving with the folder), the card declaring the
 `store.promote` token; a move that empties the fallback root removes it as the write
 path's does, and a `none` answer over an empty fallback root removes that root too, so a
 sweep after every prefix has moved leaves no empty deprecated root, while the storage
-layer keeps its empty root when it holds no unit, the sweep then promoting nothing; fts5 keeps namespace and key
+layer keeps its empty root when it holds no unit, the sweep then promoting nothing; sqlite keeps namespace and key
 with no root, never reads a fallback, and does not declare it. The batch holds that lock once, validates the whole action list against the live keys, stages
 a value per put, and commits every key under one store-scope undo log; its first failure
 prints `store.batch: error: action <n> (<op> '<key>'): <message> (<CODE>)`, 1-based, and
@@ -229,10 +313,106 @@ so the live holder keeps its lock and no third writer enters beside it. While a 
 holds the named namespace's lock (`store-<namespace>.lock`), `storage.health <namespace>`
 reports `locked` in place of `ok` on either driver, and another namespace's lock leaves it
 unlocked; a pid-less lock counts as held, a lock whose holder pid
-is gone does not, since the next writer removes it. The scan answers the namespace's admitted keys with the raw value in
-base64, no limit; the module decodes and stops after the keys it needs. The change log is
-optional per namespace; a namespace declaring `changes: false`, or a driver without the
-log, refuses `store.changes` rc 1 `ERR_CAPABILITY_UNSUPPORTED`.
+is gone does not, since the next writer removes it.
+
+A storage move stops every writer at once through the resolver's own marker,
+`.contexture/tmp/locks/storage-moving`, a folder beside the lock families named to meet
+none of them, and never in the system temp. `driver-resolver move-freeze <pid> <target>`
+takes it for the holder pid (mkdir, exclusive), writing the target, the source (the driver
+the take's own call resolves), then the pid, and answers rc 0 only once the writes already
+past the check have drained: it polls `storage.health` through the source driver for every
+namespace `store-data --list` names until none reads `locked` for 20 polls in a row 0.1 s
+apart (a namespace found locked is probed first from then on); one still locked past the
+shared 600 polls removes the marker and refuses rc 2 `ERR_STORAGE_LOCKED` naming the
+namespace, and a listing or a probe that fails removes it and refuses rc 2
+`ERR_STORAGE_READ`. A malformed holder pid (not a positive number), a dead one, or a target
+name outside the driver name rule refuses rc 1 `ERR_INVALID_ARGUMENT`, a target found nowhere
+rc 2 `ERR_DRIVER_NOT_FOUND`, a live holder's marker rc 2 `ERR_STORAGE_LOCKED` at once (one move
+at a time), and a lock folder that cannot be written rc 2 `ERR_STORAGE_WRITE`, nothing
+frozen. A dead holder's marker is reported on stderr naming its target,
+`driver-resolver: notice: a crashed move to driver '<target>' left its freeze, removed now;
+that move needs its recovery`, then removed, and a pid-less one after ten polls of grace.
+`move-release <pid>` removes the marker only when its pid is the named one (an absent
+marker answers rc 0; another holder's stays, rc 1 `ERR_INVALID_ARGUMENT`), and the read
+only `move-state` answers one line: `free`, `held <target>`, or `stale <target>` (a holder
+pid that is gone; a pid-less marker reads held). While a live holder's marker stands, every
+dispatched function but the reads (`store.list`, `store.get`, `store.scan`,
+`store.search`, `storage.health`, `storage.leftovers`, `capability`, and `storage.sweep`
+with `--dry-run`) refuses at once, before the key gate reads any stdin and before any
+driver runs, whichever driver it addresses; a function a later contract adds is a write
+until it is listed. A put or a batch meets the marker test a second time once the key gate
+has staged its stdin, so a write that passed the first test before a take and was still
+reading its stdin when the take answered refuses too, its staged payload removed; the drain
+covers the writers past both tests, which hold or wait on a namespace lock. The move's own
+calls pass: the holder pid in `CTX_STORAGE_MOVE` (the
+token the holder exports into the move's own runs alone) with the resolved driver its
+target, or with the resolved driver its source for a `store.batch` whose staged actions
+are deletes alone. A marker whose holder pid is gone freezes nothing (a writer passes it
+and leaves it for the next take, which could otherwise remove a new move's marker); a
+pid-less one counts as held. With no marker a put and a batch pay two `[ -d ]` tests
+(before the key gate and after its staging), every other write one, and a read nothing; a
+marker is read with the `read` and `kill` builtins alone. A HUP, INT, or TERM
+to a draining take stops its probe, removes its marker, and exits 129, 130, or 143. A
+caller that runs the take in the background from a non-interactive shell hands it INT
+ignored on entry, which no shell can trap or reset, so that caller stops it with HUP or
+TERM.
+
+The scan answers the namespace's admitted keys with the raw value in
+base64, no limit; the module decodes and stops after the keys it needs. The posix scan reads
+the namespace in one pass: the root's keys as the listing walk reads them and each key only
+the fallback root lists placed where a get reads it, merged bytewise into runs of paths of at
+most 32768 bytes (so no call meets the system's argument limit), each run sized by `wc -c`,
+read by one `od -tx1` into one `awk` that splits the stream back into the values by those
+sizes and encodes three bytes at a time from a buffer of at most one `od` line and two bytes (linear
+in a value's size on every supported awk), then sized again; its external commands grow with
+its runs, never with its keys. A run whose file cannot be sized or read, or changed size while
+the run read it (a write landing beside the unlocked scan), drops the pass, and the scan is
+read again key by key through `store-b64`, which skips a key gone since the listing and names
+the key it cannot read, so one value's bytes never land in another's. `store-b64` prints a
+value only when its `od` succeeded and read as many bytes as the file held, sized before or
+after the read (a value renamed over the file between the two answers one version whole), so
+a failed or short read refuses the scan rc 2 naming the key, never answering part of the
+value. Every caller reads that exit code before it uses the answer, the encoder's own line
+sent to `/dev/null` where the caller prints its own refusal: the scan's key by key read, the
+codec's NUL values (below), the behavior test's fixtures, the store module's block write and
+the declaration its record delete and container drop rewrite (rc 2 `ERR_STORAGE_READ`,
+nothing written), and the unit module's batch values, which it encodes through this one
+encoder found beside the library it loaded (rc 2 `ERR_STORAGE_WRITE` naming the key, nothing
+written). The governance encoder census (`tests/governance/encoder-status.test.ts`) holds
+every encoder call in the shipped code to it: a call of `store-b64`, of a variable assigned
+from it, or of `od` (by name or by path), at a command position after any assignment words
+and a `command`, `env`, or shell word, reads its status (a `||` after it with nothing between
+but redirections, the substitution's or a group's close, and further `&&` members, or the
+condition of an `if` or a loop before its `then` or `do`), an encoding embedded in another
+command's argument or in backticks reads red whatever its context, and the
+three calls that read no stored value whole by design stand on an exact allow list (this
+one pass `od`, whose stream the `awk` counts against the sizes, and the two `od` reads of
+random bytes for a generated id and a seed). A run's `od` and `awk`
+run in the background under the `wait` builtin, so a hangup, interrupt, or termination stops
+them at once, the `od` ending on its pipe. No driver keeps a
+change log: a module's delta is its own (the docs module's is git), and `store.changes` is
+an unknown function rc 2.
+
+A guarded scratch write empties its file with `true` (or `printf ''`) in a group whose
+stderr goes to `/dev/null`, never with a special builtin such as `:`: a special builtin whose
+own redirect cannot open its file ends a dash shell then and there, so the `||` after it never
+prints its refusal line (bash goes on), and a shell reports a failing redirect before a
+trailing `2>/dev/null` applies, so the group carries the silence. The drivers' `scratch_new`,
+the unit data script's `u_new`, the store module's `scr_new`, the configuration writer, the
+driver run's configuration save, the move engine, the codec, the field validator, and the
+behavior test's fixtures all take that form. The governance special builtin guard census
+(`tests/governance/builtin-guards.test.ts`) holds the shipped shell to it: a special builtin's
+own file redirect (a device or a descriptor dup left out) read by a `||` or `&&` with nothing
+between but redirections, a group's close, and further `&&` members, or as the condition of
+an `if`, `elif`, or loop before its `then` or `do`, reads red, a case arm's command after its
+pattern, a redirect with no blank after the builtin, a clobber, and a file redirect after a
+descriptor dup included, a subshell's or a substitution's close between them standing (dash
+ends only the subshell, and the parent reads it); the configuration library's two
+`exec < "$CTX_PACKAGE_TTY" || exit 2` lines inside the asking subshells stand on an exact
+allow list, since dash's own exit there gives the answer their silent guard gives. It reads
+logical lines, so its static limit is a reader on a later line than the builtin: a multi line
+group whose close and `||` sit below it reads green, and such a guard keeps to the one line
+form.
 
 Search answers one shape on every driver: `{"namespace","query","mode","total_matches",
 "results":[{"key","entity_type","entity_id","section","snippet","score"}]}`. `exact` is
@@ -247,19 +427,16 @@ unlimited read a module uses to sort into its own text order and cap there. The 
 text is the stored value: the canonical source is the module's canonical render, which the
 module writes through the storage layer, and the core never re-renders a module's grammar (a
 legacy value is searched as stored). The document set comes from the search schema: the
-flat form indexes one document per key (section `body`), the document-set form derives one
-document per entity at write time and ranks those documents in the fts5 store index; a
-module with no schema falls back to the generic raw value for exact. Search modes are
-registered by the driver, never declared by a module: the descriptor's `search_modes` is a
-list of `{name, description}` objects, `driver-resolver modes` prints the registry one
-`name<TAB>description` line per mode, and the library's `store_modes [--own]`
-answers it, or with `--own` the modes the caller's own namespace can answer. A ranked mode answers
-only where the configured driver registers it (fts5: `hybrid` and `trigram`) and only over
-a namespace whose data file declares a search schema; posix registers exact alone and
-refuses any other mode naming its registry. The driver declares the optional
-`search.schema` token when it consumes a declared schema. Posix declares the optional
-tokens `store` and `store.promote`; the resolver refuses any optional token outside
-`store`, `store.changelog`, `search.schema`, and `store.promote`.
+flat form reads one document per key (section `body`), the document-set form one document
+per entity; a module with no schema falls back to the generic raw value. The search mode
+is registered by the driver, never declared by a module: the descriptor's `search_modes`
+is a list of `{name, description}` objects, `exact` alone at contract 4, `driver-resolver
+modes` prints the registry one `name<TAB>description` line per mode, and the library's
+`store_modes` answers it (any argument refuses, and a registry it cannot write whole refuses
+rc 2 `ERR_STORAGE_WRITE`, `cannot write the mode list`). Every driver refuses any other mode
+naming its registry, `exact`. Posix declares the optional tokens `store` and
+`store.promote`; the resolver refuses any optional token outside `store` and
+`store.promote`.
 
 ## Errors
 
@@ -268,7 +445,11 @@ caller's input or the module's rules) or rc 2 (storage or driver failure), nothi
 stdout, and exactly one stderr line `<function>: error: <message> (<CODE>)` over the
 existing core codes. The batch names its 1-based failing action:
 `store.batch: error: action <n> (<op> '<key>'): <message> (<CODE>)`; only the first failure
-prints, and nothing is written. The scan uses the storage layer's codes (a malformed namespace or
+prints, and nothing is written. The resolver's key and value gate refuses in that same
+shape, under the dispatched function's own name, before any driver runs, and so does the
+storage moving freeze, rc 2 at once: `<function>: error: storage is being moved to another
+driver; retry after the move ends (ERR_STORAGE_LOCKED)`; each module re-frames it under its
+own label (`entry.record: error: ...`, `store put: error: ...`, `ctx docs header: ...`). The scan uses the storage layer's codes (a malformed namespace or
 data declaration is `ERR_INVALID_ARGUMENT`, an undeclared namespace
 `ERR_ENTITY_NOT_FOUND`, an unreadable key or store `ERR_STORAGE_READ`) and stages its
 answer, so a read failure midway prints no partial line. The library's caller lookup
@@ -280,7 +461,8 @@ breaks a container's declaration, and the docs module for a write its grammar re
 field its edit engine checks, or a result that fails its grammar audit), rc 1 and nothing
 written. A module may still mint its own tier 1 code; core codes are
 never redefined. The resolver's `driver-resolver: ERROR: ...` line is the one shape exception,
-and the library passes it through unchanged.
+its own commands' refusals among them (`move-freeze`, `move-release`, `move-state`), and the
+library passes it through unchanged.
 
 Help mode writes nothing: while `CTX_HELP=1` (the engine sets it for a verb's help hook and its
 whole process tree), the resolver refuses `store.put`, `store.delete`, `store.batch`,
@@ -295,24 +477,24 @@ check with a read before writing again.
 
 A module declares its data in a `data` file beside its `module` file, one `field: value`
 line per field and a line starting with `#` a comment. Only `key` is required; `root`,
-`fallback_root`, `suffix`, `changes`, the search keys, and the repeated `field` lines are
-optional. The namespace is never declared: it is the module's folder name, its installed
-module name, so a `namespace:` line refuses as an unknown field naming the fix (remove the
-line):
+`fallback_root`, `suffix`, the search keys, the repeated `unsearched` lines, and the
+repeated `field` lines are optional. The namespace is never declared: it is the module's
+folder name, its installed module name, so a `namespace:` line refuses as an unknown field
+naming the fix (remove the line), as does a `changes:` line (the change log left the
+storage contract at contract 4):
 
 ```text
 key: <segment>/<segment>            # or a final <segment...> for a variable-depth key
 root: <workspace-relative folder>   # optional; default: the namespace
 fallback_root: <folder>             # optional; a deprecated root read after the root
 suffix: <suffix>                    # optional; default: empty
-changes: true                       # optional; default: false
 search: flat|documents              # optional; the search schema form
 format: text|json                   # optional; flat only; default text
-fields: <field>, <field>            # optional; flat only; the JSON fields to rank
+fields: <field>, <field>            # optional; flat only; validated, read by no search
 title: <field>|key|head             # optional; flat default key, documents default head
 snippet: line                       # optional; default line
 document: <key-pattern> <section> <entity-type> <head-marker|->   # repeatable
-unsearched: <key-pattern>           # repeatable; a document the search schema leaves out
+unsearched: <key-pattern>           # repeatable; a document no search schema names
 field: <name>: <required|optional> <line|block> [list] [one-of <A|B|...>] [default <value>]   # repeatable
 ```
 
@@ -333,10 +515,12 @@ malformed line, a reserved name, or a name declared twice rc 1 naming the data f
 `store-data: line <N>: <the validator's reason>`; a data file without a field line never
 runs the validator. The `fields` key above is the flat search schema's, a different key.
 
-An `unsearched` line names the key pattern of a document the module reads that its search
-schema leaves out (placeholders and literal segments, as a document rule's pattern): the
-unit module declares `unsearched: <unit>/state`, since every unit verb reads the state
-while no search returns it. The leftovers probe and the sweep count a key a document rule
+An `unsearched` line names the key pattern of a document the module reads that no search
+schema names (placeholders and literal segments, as a document rule's pattern): the unit
+module declares its whole document set this way, seven lines (`<unit>/state`,
+`<unit>/backlog`, `<unit>/knowledge`, `<unit>/journal`, and a lane's
+`<unit>/lanes/<lane>/recipe`, `journal`, and `report`), since its search is its own exact
+rule over the canonical render. The leftovers probe and the sweep count a key a document rule
 or an `unsearched` line names as a document; every other key the pattern admits is a key
 outside the document rules, which the sweep moves. A namespace declaring neither counts
 every key a document.
@@ -354,25 +538,37 @@ module's own name: an extension module an install record names as installed unde
 alias (its `module <installed name> <original name>` line holding two names) answers its
 namespace as the root and no fallback root, so two installs of one module never share a
 store, and an install record area that exists but cannot be read refuses such a module
-rc 2. The suffix defaults to empty; `changes` is `true` or `false`
-and defaults to `false`. The search form is `flat` (one document per key, section `body`;
-`format`, `fields`, and `title` shape the ranked document) or `documents` (the repeated
+rc 2. The suffix defaults to empty, holds at most 48 bytes, and is empty only beside a
+fixed depth key pattern: the reader refuses rc 1 naming the key line a data file whose
+suffix is empty while its pattern ends in a `<name...>` placeholder (one key could be
+another key's folder) and naming the suffix line a suffix past 48 bytes (a 200 byte
+segment, the suffix, and the put temp's 7 bytes fit a 255 byte file name). The search
+form is `flat` (one document per key, section `body`; `format`, `fields`, and `title`
+shape the document) or `documents` (the repeated
 `document` rule names the key pattern, the section, the entity type, and the optional
 column-0 head marker that starts an entity; a key no rule covers stays searchable as one
 generic document). The reader refuses an unknown field. The namespace `<ns>` is served by
 the data file of the module folder named `<ns>`, the workspace modules root first, then
 the extension root, as discovery resolves a module name (a workspace module shadows an
-extension module of its name). `store-data <namespace>` answers one namespace on eleven fixed lines, then the document
+extension module of its name), then the kept data: a package uninstall answered keep
+retains a data carrying module's declaration under its installed name in the install
+record area, `.contexture/extensions/.state/retained/<ns>/`, holding `data` (a byte copy
+of the module's data file) and `origin` (the `package <name>`, `version <v>`, and
+`module <installed name> <original name>` lines), so the namespace stays declared,
+listed, and movable while no module serves it; the reader hands the origin to its alias
+rule, so an aliased kept namespace keeps its namespace as its root and no fallback root,
+and an origin it cannot read refuses rc 2 naming no path. No file named `module` ever sits
+there, so the library's caller lookup never answers a kept namespace; the same package's
+install takes the declaration back. `store-data <namespace>` answers one namespace on ten fixed lines, then the document
 rules, and never the fallback root, so a parser reading by position ignores the field;
-`store-data <namespace> --with-fallback` answers the fallback root as line 12 (an empty
-line when none applies) and the rules from line 13, the form the posix driver reads;
+`store-data <namespace> --with-fallback` answers the fallback root as line 11 (an empty
+line when none applies) and the rules from line 12, the form the posix driver reads;
 `store-data <namespace> --with-fields` (alone or beside `--with-fallback`, in either
 order) answers, after the rules, one tagged line per declared field,
 `@field<TAB><name>: <spec>`, in declaration order, the form the library's `fields_own`
 reads; no document rule starts with `@`, and a reader that does not ask never sees the
-family, so the plain and fallback answers stay byte for byte as before (the fts5 driver
-hashes every line past the fixed ones into its search schema signature, so a field line
-never reaches it); `store-data <namespace> --with-unsearched`, beside the other flags in
+family, so the plain and fallback answers stay byte for byte as before (the sqlite driver
+reads only its fixed lines, so a field line never reaches it); `store-data <namespace> --with-unsearched`, beside the other flags in
 any order, answers after the rules and before any field line one tagged line per
 `unsearched` line, `<TAB><pattern>`, in declaration order, the form the posix
 driver's leftovers probe and sweep read, every other answer byte for byte as without it;
@@ -385,32 +581,300 @@ cannot be written, when a field line needs them, refuses rc 2. `store-data --lis
 every valid declaration of both module roots, one `<namespace><TAB><root>` line each (the root the
 namespace when none is declared or the module is installed under an alias, then
 `<TAB><fallback root>` when one applies), sorted
-by namespace, a name both roots hold answered once (the workspace module's), and leaves
-out a declaration it cannot read (a malformed one, or an extension module's whose install
-record area cannot be read) and a module folder whose name is no namespace token, one
-stderr line each, then exits 1 with the rows it read, so a reader never takes a partial
-listing for the whole (rc 0 when nothing is left out, rc 2 with no module drawer).
+by namespace, the kept declarations among them in the same row shape, a name both roots
+hold answered once (the workspace module's), and leaves out a declaration it cannot read
+(a malformed one, or an extension module's whose install record area cannot be read), a
+module folder whose name is no namespace token, a kept declaration a module root's name
+shadows, and kept data it cannot walk, one stderr line each, then exits 1 with the rows it
+read, so a reader never takes a partial listing for the whole (rc 0 when nothing is left
+out, rc 2 with no module drawer). `store-data --retained` answers one
+`<namespace><TAB><package><TAB><original module name>` line per kept declaration no
+module root shadows, read from its origin, sorted by namespace, leaving out a shadowed one
+or an unreadable origin with one stderr line each and then exiting 1, so an enumeration
+names a namespace kept and the package that kept it.
+
+`scripts/store-clear` is the one place a namespace no module serves is emptied: `store-clear
+count [--driver=<name>] <namespace>` prints the number of keys the namespace lists,
+`store-clear namespace [--driver=<name>] <namespace>` deletes every key it lists, and
+`store-clear keys [--driver=<name>] <namespace> <key file>` deletes each key the file names
+(one per line, in the payload escape a listing answers) that the namespace still lists,
+each printing the number deleted. Every call goes through the resolver from the workspace
+root (`CTX_ROOT`, else the nearest drawer above the working folder) with `CTX_DIR` unset
+and the caller's environment otherwise passed through (a move's token among it, never
+demanded), the driver the one `--driver` names or the configured one; the deletes go in
+`store.batch` calls of at most 200 delete actions in listing order (posix deletes about 14
+ms a key at any batch size from 50 to 1000, so the bound sizes the all or none unit and the
+staging), and a key the namespace no longer lists is skipped, so a run that stopped part
+way finishes when run again. A refusal is one line, `store-clear <command>: error: <message>
+(<CODE>)`: rc 1 a bad argument, a failed listing or batch keeping its own rc and code with
+the message naming the namespace and, for a batch, the keys deleted before it; its scratch
+is one folder under the per verb scratch root, else the drawer's scratch, removed on exit,
+and a hangup, interrupt, or termination stops the resolver call in flight (129, 130, 143).
+The package uninstaller counts and deletes a package's namespaces through it.
+
+## Moving the records to another driver
+
+`scripts/store-move` is the move engine the package installer drives when the storage
+driver changes (no summary line, so never a verb; the installer's whole run, its answers,
+hooks, unwind, and crash recovery, is docs/the-engine.md's Moving a record between backends). It moves every namespace
+`store-data --list` names, the kept ones included, from one driver to another through the
+resolver, the driver named by `--driver=<name>` on every call and the namespace as the
+store function's argument, from the workspace root with `CTX_DIR` unset, so the key and
+value gate, the storage moving freeze, and the write rule all apply. The installer runs it
+under the freeze it holds and exports the freeze token (`CTX_STORAGE_MOVE`) into each
+command; the engine passes it through and never demands it.
+
+```text
+store-move preflight <source> <target>      every check, nothing written
+store-move copy <source> <target>           the preflight, then the copy and its verify per namespace
+store-move check <source>                   after the storage.driver switch: the source against the configured driver
+store-move unwind <target>                  deletes the keys this run wrote that the target still lists
+store-move retire <source> <backup|delete> [<stamp>] [--rescan]  after a passed check: the old copy backed up or not, then deleted
+```
+
+Every command first refuses rc 1 `ERR_INVALID_ARGUMENT` while a `CTX_STORAGE_` variable
+other than the token is set (a `CTX_STORAGE_DRIVER` override, or a location variable a
+custom driver reads, would point a driver at another store), and a namespace listing that
+exits non zero refuses rc 2
+`ERR_STORAGE_READ` quoting its first reason. The preflight reads every namespace, then
+refuses in this order: rc 2 `ERR_STORAGE_READ` a source namespace whose `store.list` reads
+no key while its `storage.health` reads the store present (a blind source); rc 1
+`ERR_INVALID_ARGUMENT` each source key outside the core key rule (`store-key.awk`) or
+outside the declaration's document patterns (its `document` and `unsearched` lines, read
+from `store-data <ns> --with-unsearched`, every key a document when it declares neither),
+one indented line per key; on a source named `posix`, rc 1 `ERR_INVALID_ARGUMENT` when
+`storage.leftovers` counts refused keys or keys outside the document rules in either root,
+one line per namespace with the counts and the way to clear them (`ctx unit migrate --sweep
+--dry-run --all` for unit, `ctx store check --leftovers --sweep --dry-run` for store, the
+human's own act elsewhere), every other leftover kind a `note:` line on stderr and left in
+place (a killed writer's dot named temp among them, which no listing names, so it is never
+copied); and rc 1 `ERR_ENTITY_EXISTS` a target namespace that already lists a key, with its
+count, since a move never merges.
+
+The copy runs the preflight, then for each namespace scans the source once into scratch,
+splits the scan line on the item brace (`tr '{' '\n'`, so no awk record holds the whole
+namespace), turns each item into `action=put`, `key=<the scan's key string>`,
+`value_b64=<the scan's base64>` with no decode, and writes the target in `store.batch` calls
+of at most 200 puts and 8 MiB of decoded values, a larger value alone. Each batch's keys are
+appended to the namespace's written keys file before the batch is sent, so the unwind
+covers a batch that landed while a signal stopped the engine. The verify scans the target,
+compares the two scans with `cmp` (its exit code read alone), and counts five ways, the
+source list, the source scan's items, the sum of the batch answers' `actions`, the target
+scan's items, and the target list, all equal, with `storage.health` reading the store
+present on each side exactly when its count is above zero: two empty dumps compare equal,
+so the counts catch a source whose scan is blind, and the health catches one blind to both
+its list and its scan. The source's scan is trusted for its values: a source whose scan
+answers wrong values beside a true list copies them, and the check reads them again alike,
+so the behavior test, which holds a driver's scan to posix before the driver holds data, is
+that guard. A failure refuses rc 2 `ERR_STORAGE_WRITE`, the diagnosis from the
+two dumps on indented lines (`<key>: missing in the target`, `<key>: extra in the target`,
+`<key>: the value differs`), with no further driver call; a refused batch stops rc 2
+`ERR_STORAGE_WRITE` naming the namespace and the keys written so far.
+
+The check, run after the installer switches `storage.driver`, refuses rc 1 while the
+configured driver still resolves to the source or the run holds no copy from it, then scans
+the source again through `--driver=<source>` and the configured driver with no override,
+compared and counted the same way (the copy's answer sum the third count), so a source write
+that slipped in after the copy's scan, or a configured driver reading another store, fails rc
+2 before the move is trusted. The unwind deletes, through `store-clear keys
+--driver=<target>`, the keys the run's written keys files name that the target still lists,
+so a key the run did not write stays and a rerun finds nothing to do; it refuses rc 1 a
+driver that is not the run's target, and any unwind once the run holds a passed check
+(`checked`), since the configured driver then holds the record. The retire, after a passed check and once the configured
+driver no longer resolves to the source, removes the run's written keys files first (no
+unwind can then empty the only copy), on `backup` saves each namespace's checked source dump
+to `.contexture/backups/move-<stamp>/<namespace>/scan` with its key count in `count` beside
+it (an optional third argument gives the stamp: the installer passes its run's one stamp, so
+the backup may already hold the run's other parts, such as a format change's
+`@<driver>/` folder of the driver's own storage, and a rerun in the same run folder writes
+the namespace folders again; without it the retire makes a fresh stamp), then deletes the keys each dump names through `store-clear keys --driver=<source>` (delete
+only batches, which pass the freeze toward the source with the token) and requires
+`store-clear count` to read 0. A trailing `--rescan`, with `backup` alone, serves a run
+whose check can no longer pass because the configured driver took writes after a crash:
+it needs only the run's copy from the source, takes the source's fresh scans in place of
+the check's dumps, and reuses a namespace's `scan` the stamp's backup already holds, so a
+rerun after a stopped retire never replaces the old copy's backup with what that retire
+left. The output names the backup by its stamp alone. A saved dump
+restores by one batch of puts built from it as the copy builds its payload:
+
+```sh
+tr '{' '\n' < .contexture/backups/move-<stamp>/<namespace>/scan \
+  | awk 'index($0, "\"key\":\"") == 1 { s = substr($0, 8); i = index(s, "\",\"value_b64\":\""); v = substr(s, i + 15); sub(/".*$/, "", v); printf "action=put\nkey=%s\nvalue_b64=%s\n", substr(s, 1, i - 1), v }' \
+  | .contexture/storage/scripts/driver-resolver store.batch <namespace>
+```
+
+The run's state lives in the run folder, `CTX_SCRATCH_ROOT` when exported (the installer
+exports one folder into every command of a run), else `.contexture/tmp/store-move`: `move`
+(the source and the target), `written.<namespace>` (the keys the copy wrote, one per line in
+the payload escape), `copied.<namespace>` (the batch answers' sum), `checked.<namespace>`
+(the check's verified source dump), and `checked` (the source a passed check named). Each
+command works in one `work.XXXXXX` folder inside it, exported as `CTX_SCRATCH_ROOT` to every
+call so a driver's staged scan goes with it, removed on exit; a hangup, interrupt, or
+termination stops the resolver call in flight (TERM to the background child) and exits 129,
+130, or 143, the written keys kept for the unwind. A run folder that cannot be written
+refuses rc 2 `ERR_STORAGE_WRITE`; the system temp is never used. The scratch peaks near four
+times the largest namespace's bytes (the two base64 dumps and the driver's staged scan), and
+the check keeps every namespace's source dump until the retire.
+
+Output is one stdout line per namespace and one summary line:
+
+```text
+docs: 20 keys copied, dumps equal
+notebook: 20 keys copied, dumps equal, kept by package 'pkg-a'
+copied 40 keys in 2 namespaces
+```
+
+`preflight` prints `<ns>: <n> keys to copy` and `ready to copy <n> keys in <m> namespaces`,
+`check` `<ns>: <n> keys, dumps equal through the configured driver` and `checked <n> keys in
+<m> namespaces`, `unwind` `<ns>: <n> keys unwound` and `unwound <n> keys in <m> namespaces`,
+and `retire` `<ns>: <n> keys retired` and `retired <n> keys in <m> namespaces` closed by
+`backup stamped <stamp>`, `no backup kept`, or `nothing to back up`. A refusal is one stderr
+line, `store-move <command>: error: <message> (<CODE>)`, rc 1 semantic and rc 2 storage over
+the existing codes, its keys, counts, or diagnosis on indented lines after it; nothing printed
+names a storage, scratch, or driver path. Measured on one host through the storage-sqlite
+install and uninstall at 3428 records (37.9 MB of unit values): the copy into sqlite takes
+about 106 s (the posix scans 13 s, the sqlite batches 76 s), its check 29 s, and its retire
+57 s; the copy back into posix about 104 s (the posix batches 76 s, the posix verify scan
+13 s) and its check 29 s. A posix scan of that unit namespace takes about 12.5 s, 3.7 ms a
+key, where a key by key scan took about 60 s.
+
+## The behavior test a driver meets
+
+The handshake reads a driver's card; `scripts/driver-behavior` holds its behavior to posix.
+It is a private script (no summary line, so never a verb) in plain POSIX sh and awk with the
+utilities the core already uses (`cat`, `cmp`, `cp`, `dd`, `env`, `mkdir`, `mktemp`, `mv`,
+`rm`, `rmdir`, `wc`, and `od` through `store-b64`), so an adopter needs no test harness. Its
+caller is the package installer, which runs it in the foreground on an
+incoming driver part after the package files land and before the driver's prepare hook, rc 0
+letting the install go on and any other answer unwinding it, its one line relayed. A driver author runs it by
+installing the driver package into a throwaway workspace (`ctx package install <package
+root>`); no guide names the script as a command to run. Until the installer's call lands,
+the drivers project runs it upstream (`tests/drivers/driver-behavior.test.ts`).
+
+The argument is the driver part as a package ships it, `storage/drivers/<name>`: a folder
+holding an executable `driver`, or the executable itself, its base name the driver name
+under the installer's driver name rule (letters, digits, dot, underscore, dash, not opening
+with a dot), `posix` refused; `--all` prints every differing step. A bad argument refuses
+rc 1 with one line, `driver-behavior: error: <message> (ERR_INVALID_ARGUMENT)`.
+
+What it stages: one work root by `mktemp -d` in the drawer's scratch folder (a drawer that
+cannot hold it answers cannot run, never the system temp) holding two scratch workspaces,
+each a copy of this storage folder, the configuration library, and two synthetic namespaces
+declared by data files alone: `flat` (`key: <a>/<b>`, no suffix) and `deep` (`key: <p...>`
+with a 48 byte suffix, so a 200 byte final segment meets posix's 255 byte name limit
+exactly, the suffix and the 7 byte temp tail added). The reference keeps the core posix
+driver; the candidate holds the part at `.contexture/extensions/storage/drivers/<name>` with
+`storage.driver: <name>`, its configured driver, never an override or a path, and a
+candidate that does not resolve there (a core driver of its name shadowing it) answers
+cannot run. Every call runs that workspace's own `driver-resolver` from its root under
+`env -i` with `PATH`, `HOME`, `USER`, `TZ`, `LC_ALL=C`, `TMPDIR` and `CTX_SCRATCH_ROOT`
+inside the root, and `CTX_ROOT` the root, so an exported `CTX_ROOT`, a `CTX_DIR`, a
+`CTX_STORAGE_DRIVER` override, and any other `CTX_STORAGE_` variable never reach it. The
+two sides run as two background jobs over the same steps, every one through the resolver's
+dispatch (the handshake and the key and value gate before the driver) and none sending an
+input the gate refuses, since that compares the core with itself.
+
+| ids | group |
+|---|---|
+| `k01` | the card through the resolver's `check`, first |
+| `h01` `l01` `c00` `g00` | the empty store: health (degraded, absent), list, scan, an absent get |
+| `p01` to `g06`, `h02` | values by put and get: one, an overwrite without a final newline, empty, NUL bytes, invalid UTF-8, every byte value; health with keys (ok, present) |
+| `p07` to `p10` | every allowed key character and a leading digit |
+| `q01` to `q08`, `l02` to `l09` | list order across dash, dot, slash, digit, upper case, underscore, lower case; prefixes ending mid segment, on a slash, a dot, an underscore (literal), and a dash, a whole key, and the other case (nothing) |
+| `p20` to `l11` | the longest keys: a 200 byte final segment, a 512 byte key of three segments, a 512 byte key of 256 segments, the lists below them; the three segment key sits below the 200 byte key, a key below another key as `o/a` below `o` |
+| `t01` to `t09` | ASCII case twins refused: the whole key, a get in another case, a leading segment, in a batch against a stored key and within one batch, nothing written |
+| `b01` to `b19` | batches: in order with a delete of a key put earlier, a failing third action, a twin, a put and a delete of one key, NUL, invalid UTF-8, and empty values, a malformed base64 value, an unknown payload line, a key put twice; each failing batch leaving nothing |
+| `m01` | a batched get: present, empty, NUL, invalid UTF-8, missing, repeated, in the asked order |
+| `s01` to `s06` | the exact search: case insensitive, never on a `#` line, the limit after the walk, a ranked mode refused |
+| `c01` `c02` | the scan of both namespaces |
+| `r01` to `r05` | the driver's own refusals: a key outside the pattern, an undeclared namespace, an unknown function, an extra argument, a missing key |
+| `h03` | health locked while a live namespace lock is planted in the workspace's lock folder |
+| `v01` to `v03` | the value at the cap: 16777216 bytes holding every byte value with a newline every 65281 bytes, by put, get, and delete alone, never in a scan or a batched get |
+| `x01` to `x07`, `h04` | the deletes: a key, the same key again, a get of it, a batch per namespace deleting every key the run wrote, both lists empty, health ok with the store absent |
+
+The comparison: the exit code, the stdout bytes by `cmp -s` on captured files (never a
+shell variable or awk), and the stderr shape, nothing on rc 0 and on a refusal one line on
+both sides with the same function before `: error: ` (the resolver's `driver-resolver:
+ERROR:` line counting as its function) and the same code in its last parentheses, the
+message free. `k01` compares the exit code and the stderr shape alone; the health steps
+compare the `health` and `store` fields of an answer in its shape, one stdout line holding
+exactly the keys `driver`, `health`, `detail`, and `store` in that order, the driver name
+and detail free (an answer outside that shape reads as such and differs from posix's). posix is the
+reference, so no answer is kept here: each step carries its intent alone, hold or refuse,
+and a reference that refuses a step it must hold, holds one it must refuse, writes to stderr
+while it holds one, or refuses without one line naming its function and code answers cannot
+run, never same.
+
+The answer, one stdout line naming no path:
+
+```text
+driver behavior: same: <name> answers the 100 steps as posix does          rc 0
+driver behavior: differs at step <id> (<title>): <what differed>           rc 1
+driver behavior: cannot run: <reason>                                      rc 2
+```
+
+A difference names the first differing step; with `--all` every differing step's line comes
+first and the answer line last. A hangup, interrupt, or termination stops both sides (each
+sends a termination to its call in flight and waits for it), removes the work root, and
+exits 129, 130, or 143; every run leaves the drawer's scratch folder as it found it and no
+process behind. No per step watchdog runs: a hung candidate waits until interrupted.
+
+The isolation requirement a driver meets: run from a scratch workspace root as that
+workspace's configured driver with only the environment above, it keeps every byte it
+writes under that root (a file or database driver at its default place in the workspace's
+drawer). A driver that cannot, one that needs a location from anywhere else among them,
+cannot be tested, and so cannot be installed. The test cannot see a write outside the
+root; upstream, the drivers project proves the requirement for the bundled
+drivers with a fingerprint of a mock live workspace.
 
 ## Discovery and selection
 
 `storage.driver` in `.contexture/config` selects the driver (declared in
-`base/.contexture/storage/config` and managed via `ctx store config`); `CTX_STORAGE_DRIVER`
-overrides it, and the baseline is `posix`. `driver-resolver` reads configuration through the
-shared internal config library (`base/.contexture/config-lib`, unified `:` / `=` grammar, exact
-key matching, quote unwrapping, inline `#` comment stripping, first non-empty value wins). The
+`base/.contexture/storage/config`; a driver package's install writes it once the record has
+moved into its driver and its uninstall removes it once the record is back in posix, the
+move described above). The setting is the installer's: `ctx store config set driver` and
+`unset driver` refuse naming `ctx package install` and `ctx package uninstall` (an unset
+lands only while the configured driver resolves nothing, so nothing is reachable through it),
+and an installed driver package's own settings refuse a change while its driver holds data.
+The baseline is `posix`. `driver-resolver` reads configuration through the shared internal
+config library (`base/.contexture/config-lib`, unified `:` / `=` grammar, exact key
+matching, quote unwrapping, inline `#` comment stripping, first non-empty value wins). The
 legacy `.contexture/storage.conf` and the `session.storage.driver` key stay readable as
-transitional compatibility. The resolver searches, in order:
+transitional compatibility.
 
-1. the workspace custom drivers, `.contexture/drivers/<name>/driver` (transitional);
-2. the storage core's drivers, `.contexture/storage/drivers/<name>/driver`;
-3. the extension root's package drivers,
-   `.contexture/extensions/storage/drivers/<name>/driver` (the settled home; the fts5
-   driver is installed there);
-4. the module-owned drivers, `.contexture/modules/*/drivers/<name>/driver` (transitional);
-5. the base mirror's core, extension, and module drivers (transitional);
-6. PATH executables named `ctx-storage-<name>` (transitional).
+The one off overrides, `--driver=<name>` or `-d <name>` on the resolver and
+`CTX_STORAGE_DRIVER`, read only: they select the driver for every read (`store.list`,
+`store.get`, `store.scan`, `store.search`, `storage.health`, `storage.leftovers`,
+`capability`, and `storage.sweep` with `--dry-run`, the freeze's read list) and for the
+resolver's own commands, while every other dispatched function is a write, and a write
+through an override whose driver differs from the configured one refuses rc 1
+`ERR_INVALID_ARGUMENT` with `<function>: error: the driver override '<name>' reads only;
+writes go through the configured driver '<configured>' (ERR_INVALID_ARGUMENT)`, nothing
+written and no driver run. The check, `move_override`, sits in both dispatch forms between
+the freeze's `move_check` and the key and value gate, reads the configuration only for a
+write that carries an override, and passes the move's own writes through the freeze's pass
+rule (`move_own`, and the holder's delete only batch to the move's source that
+`move_staged` checks), so a token outside a live freeze passes nothing.
 
-The adoption retires the transitional tiers.
+The resolver finds a driver in two places alone, after the installer's driver name rule
+(letters, digits, dot, underscore, hyphen; not empty; not opening with a dot) refuses any
+other name rc 1 `ERR_INVALID_ARGUMENT` before any path is built:
+
+1. `posix`: the storage core's `.contexture/storage/drivers/posix/driver`, then, for a
+   drawer without its storage core beside a `base/` folder (this repository's layout), the
+   base mirror's `base/.contexture/storage/drivers/posix/driver`;
+2. any other name: the extension root's package driver,
+   `.contexture/extensions/storage/drivers/<name>/driver` or the single file
+   `.contexture/extensions/storage/drivers/<name>`, read by its path with no install record
+   read (the sqlite driver is installed there; the behavior test and the test harness stage
+   candidates there).
+
+A name found in neither refuses rc 2 `ERR_DRIVER_NOT_FOUND` with the resolver's own line
+naming the core posix driver and the installed driver packages. The workspace custom drivers
+(`.contexture/drivers/`), the storage core's other names, the module owned drivers, the
+base mirror's other names and places, `ctx-storage-<name>` executables on PATH, and a driver
+named by its path are retired, and a workspace driver named `posix` no longer shadows the
+core one: a driver reaches a workspace only as a driver package.
 
 ## The library
 
@@ -431,15 +895,18 @@ is reached only through that module's `ctx` verbs (`get`, `search`). The library
 
 - `store_namespace`, the caller lookup's answer on stdout;
 - `store_list [<prefix>]`, `store_get <key>...`, `store_put <key>`, `store_delete <key>`,
-  `store_changes`, `store_batch`, `store_scan`, `store_search <query> <mode> [<limit>]`,
-  each over the caller's namespace;
-- `store_modes [--own]`, the mode registry, or with `--own` the modes the caller's
-  namespace can answer;
+  `store_batch`, `store_scan`, `store_search <query> <mode> [<limit>]`, each over the
+  caller's namespace;
+- `store_modes`, the mode registry, `exact` alone (any argument refuses, a registry it
+  cannot write whole rc 2 `ERR_STORAGE_WRITE`);
 - `store_get_into <targets>`, the batched read into files: the targets file
   holds one `<key><TAB><path>` line per key in the asked order; one `store.get` call answers
   every key (the one key form for a single key), each present value lands in its path byte
   for byte through `store-pack unpack`, and one `1<TAB><key>` or `0<TAB><key>` line per key
-  prints on stdout; a refused call passes its rc and its one line through;
+  prints on stdout; a refused call passes its rc and its one line through; an answer line it
+  cannot write (a full disk under the caller's answer file) refuses rc 2 `ERR_STORAGE_WRITE`
+  with one line (`store.get: error: cannot write the answer`, or the codec's `store-pack:
+  error: cannot write the answer` for two or more keys), never rc 0 with a short answer;
 - `store_promote <prefix>`, the optional promotion (ask `store_has
   store.promote` first);
 - `store_require <capability>...` and `store_has <capability>`;
@@ -449,7 +916,8 @@ is reached only through that module's `ctx` verbs (`get`, `search`). The library
   line after its root; the whole list or none: rc 2 with one `store.roots: error:` line,
   `ERR_DRIVER_NOT_FOUND` when no data reader is found and `ERR_STORAGE_READ` quoting the
   reader's first reason when the listing left a module out (a data file it cannot read)
-  or failed (no module drawer), never a partial list;
+  or failed (no module drawer), never a partial list; it reads its reader's exit inside an
+  or list, so a caller under `set -e` still gets the refusal line;
 - `store_leftovers`, the driver's `storage.leftovers` over the caller's own namespace, its
   one JSON line on stdout (a driver without the method passes its unknown function line
   through, rc 2), and `store_leftovers_text <answer> <summary|kinds>`, the one text form

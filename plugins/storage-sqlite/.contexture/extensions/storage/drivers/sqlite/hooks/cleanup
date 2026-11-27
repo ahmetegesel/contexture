@@ -1,0 +1,23 @@
+#!/bin/sh
+# cleanup: the sqlite driver's cleanup hook. The package installer runs it from the workspace
+# root when a move into the driver fails after a passed prepare, and in crash recovery; since
+# prepare found the location empty, what the move made is the database and its -wal and -shm
+# side files, which it removes. Idempotent: an absent file is no failure. rc 2 when one
+# cannot be removed, its one stderr line naming no path.
+set -u
+
+MODULE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." 2>/dev/null && pwd) || {
+  printf 'the sqlite driver part cannot be located\n' >&2
+  exit 2
+}
+. "$MODULE_DIR/location.sh"
+
+for f in "$DB_PATH" "$DB_PATH-wal" "$DB_PATH-shm"; do
+  [ -e "$f" ] || [ -h "$f" ] || continue
+  rm -f "$f" 2>/dev/null
+  if [ -e "$f" ] || [ -h "$f" ]; then
+    printf 'a database file the move made cannot be removed\n' >&2
+    exit 2
+  fi
+done
+exit 0

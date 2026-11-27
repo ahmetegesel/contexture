@@ -6,13 +6,13 @@ import { exec } from '../support/exec';
 import { compose, count, layer, layerBytes, lineOf } from '../support/laws';
 import { catalogCopy, extPath, install, isExec, out, uninstall } from '../support/packages';
 import { ROOT } from '../support/root';
-import { stage } from '../support/stage';
-import { firstByteDifference, put } from '../support/tree';
+import { sqliteAvailable, stage } from '../support/stage';
+import { firstByteDifference } from '../support/tree';
 
 const sandbox = () => stage('posix', 'pkg-catalog');
-const PLUGINS = ['docs-discipline', 'ast-doc-graph', 'storage-fts5', 'toolchain-filters', 'starter-rhythms', 'git'] as const;
+const PLUGINS = ['docs-discipline', 'ast-doc-graph', 'storage-sqlite', 'toolchain-filters', 'starter-rhythms', 'git'] as const;
 const manifest = (p: string): string => join(ROOT, 'plugins', p, 'manifest');
-const FTS5 = join(ROOT, 'plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5');
+const SQLITE = join(ROOT, 'plugins/storage-sqlite/.contexture/extensions/storage/drivers/sqlite');
 const SELECT = "select: match the request against each use when; a propose match is proposed and waits for the human's confirm, an auto match applies and says so; no match runs the design loop (@rhythms default); read a rhythm with ctx rhythm show <name>";
 
 describe.concurrent('the real catalog installs by catalog name through ctx package', () => {
@@ -27,10 +27,11 @@ describe.concurrent('the real catalog installs by catalog name through ctx packa
     expect(existsSync(extPath(sb, 'rhythms/docs-authoring.md'))).toBe(true);
     expect(existsSync(extPath(sb, 'rhythms/docs-drift.md'))).toBe(true);
     expect(existsSync(extPath(sb, 'rhythms/work.md'))).toBe(false);
-    expect(existsSync(join(sb, 'docs/workspace/conventions.md'))).toBe(false);
+    expect(existsSync(join(sb, '.contexture/docs/workspace/conventions.md'))).toBe(false);
+    expect(existsSync(join(sb, 'docs/workspace'))).toBe(false);
     const sd = (await exec('./.contexture/storage/scripts/store-data', ['docs'], { cwd: sb })).stdout.split('\n');
-    expect(sd.slice(0, 5)).toEqual(['docs', 'docs', '.md', '<repo>/<slug>', 'true']);
-    expect(sd[5]).toBe(join(realpathSync(sb), '.contexture/extensions/modules/docs/data'));
+    expect(sd.slice(0, 4)).toEqual(['docs', '.contexture/docs', '.md', '<repo>/<slug>']);
+    expect(sd[4]).toBe(join(realpathSync(sb), '.contexture/extensions/modules/docs/data'));
     expect((await ctx(sb, 'docs', 'query', 'workspace', 'conventions')).code).toBe(1);
     const starter = catalogCopy(sb, 'starter-rhythms');
     expect((await install(sb, starter)).code).toBe(0);
@@ -38,8 +39,23 @@ describe.concurrent('the real catalog installs by catalog name through ctx packa
     expect(readFileSync(extPath(sb, 'rhythms/work.md'), 'utf8')).toContain('a work request arrives');
     expect((await uninstall(sb, starter)).code).toBe(0);
     expect(existsSync(extPath(sb, 'rhythms/work.md'))).toBe(false);
-    expect((await uninstall(sb, docs)).code).toBe(0);
+    const asked = await uninstall(sb, docs);
+    expect([asked.code, asked.stdout]).toEqual([1, '']);
+    expect(asked.stderr).toBe("package-uninstall: uninstalling 'docs-discipline' leaves its data: docs (1 key); this needs the human's answer, keep (--keep-data) or delete (--delete-data): relay the question and run it again with the flag the human chooses (the answer is the human's, never a default)\n");
+    expect(existsSync(extPath(sb, 'modules/docs/module'))).toBe(true);
+    const kept = await uninstall(sb, docs, '--keep-data');
+    expect(kept.code).toBe(0);
+    expect(kept.stdout).toContain('package-uninstall: kept the data of docs (1 key); install docs-discipline again to use it\n');
     expect(existsSync(extPath(sb, 'modules/docs/module'))).toBe(false);
+    expect(existsSync(join(sb, '.contexture/docs/workspace/conventions.md'))).toBe(true);
+    const back = await install(sb, docs);
+    expect(back.code).toBe(0);
+    expect(back.stdout).toContain('took back the kept data of docs');
+    expect((await ctx(sb, 'docs', 'query', 'workspace', 'conventions')).stdout).toContain('conventions: conventions');
+    const deleted = await uninstall(sb, docs, '--delete-data');
+    expect(deleted.code).toBe(0);
+    expect(deleted.stdout).toContain('package-uninstall: deleted 1 key of docs\n');
+    expect(existsSync(join(sb, '.contexture/docs/workspace/conventions.md'))).toBe(false);
   });
 
   it('[plugins-r6, modules-r20] starter-rhythms puts work and debug in the rhythm list with their use-when and activation', async () => {
@@ -55,17 +71,18 @@ describe.concurrent('the real catalog installs by catalog name through ctx packa
     ]);
   });
 
-  it('[the-engine-r19, the-engine-r23, plugins-r6] storage-fts5 resolves from the extension root ahead of the transitional module tier, never lists, and uninstalls', async () => {
+  it.skipIf(!sqliteAvailable())('[the-engine-r19, the-engine-r23, plugins-r6] storage-sqlite installs, moving the record in, resolves from the extension root, never lists, and uninstalls, moving it back, while the retired driver name fts5 resolves nothing', { timeout: 900_000 }, async () => {
     const sb = sandbox();
-    const fts5 = catalogCopy(sb, 'storage-fts5');
-    expect((await install(sb, fts5)).code).toBe(0);
-    expect(isExec(extPath(sb, 'storage/drivers/fts5/driver'))).toBe(true);
-    put(join(sb, '.contexture/modules/storage-fts5/drivers/fts5'), '#!/bin/sh\nexit 0\n', 0o755);
-    const got = await exec('./.contexture/storage/scripts/driver-resolver', ['resolve'], { cwd: sb, env: { CTX_STORAGE_DRIVER: 'fts5' } });
-    expect(out(got)).toBe(join(realpathSync(sb), '.contexture/extensions/storage/drivers/fts5/driver'));
-    expect((await ctx(sb, 'help', '--all')).stdout).not.toContain('storage-fts5');
-    expect((await uninstall(sb, fts5)).code).toBe(0);
-    expect(existsSync(extPath(sb, 'storage/drivers/fts5/driver'))).toBe(false);
+    const sqlitePkg = catalogCopy(sb, 'storage-sqlite');
+    expect((await install(sb, sqlitePkg)).code).toBe(0);
+    expect(isExec(extPath(sb, 'storage/drivers/sqlite/driver'))).toBe(true);
+    const got = await exec('./.contexture/storage/scripts/driver-resolver', ['resolve'], { cwd: sb, env: { CTX_STORAGE_DRIVER: 'sqlite' } });
+    expect(out(got)).toBe(join(realpathSync(sb), '.contexture/extensions/storage/drivers/sqlite/driver'));
+    const retired = await exec('./.contexture/storage/scripts/driver-resolver', ['resolve'], { cwd: sb, env: { CTX_STORAGE_DRIVER: 'fts5' } });
+    expect([retired.code === 0, retired.stdout]).toEqual([false, '']);
+    expect((await ctx(sb, 'help', '--all')).stdout).not.toContain('storage-sqlite');
+    expect((await uninstall(sb, sqlitePkg)).code).toBe(0);
+    expect(existsSync(extPath(sb, 'storage/drivers/sqlite/driver'))).toBe(false);
   });
 
   it.each([
@@ -114,7 +131,7 @@ describe.concurrent('the real package manifests', () => {
     expect((await ctx(sb, '_package', manifest(p), 'validate')).code).toBe(0);
   });
 
-  it('[plugins-r9, modules-r16] the kinds, parts, and driver name read as declared', async () => {
+  it('[plugins-r9, modules-r16] the kinds, parts, driver name, and storage format read as declared', async () => {
     expect(await pkgv('docs-discipline', 'kind')).toBe('feature');
     expect(await pkgv('docs-discipline', 'parts')).toBe('module modules/docs\nrhythms rhythms');
     expect(await pkgv('ast-doc-graph', 'kind')).toBe('feature');
@@ -122,18 +139,20 @@ describe.concurrent('the real package manifests', () => {
     expect(await pkgv('starter-rhythms', 'parts')).toBe('rhythms rhythms');
     expect(await pkgv('git', 'kind')).toBe('feature');
     expect(await pkgv('git', 'parts')).toBe('module modules/git');
-    expect(await pkgv('storage-fts5', 'kind')).toBe('driver');
-    expect(await pkgv('storage-fts5', 'driver')).toBe('fts5');
-    expect(await pkgv('storage-fts5', 'parts')).toBe('driver storage/drivers/fts5');
+    expect(await pkgv('storage-sqlite', 'kind')).toBe('driver');
+    expect(await pkgv('storage-sqlite', 'driver')).toBe('sqlite');
+    expect(await pkgv('storage-sqlite', 'format')).toBe('6');
+    expect(await pkgv('storage-sqlite', 'parts')).toBe('driver storage/drivers/sqlite');
+    for (const p of PLUGINS.filter((n) => n !== 'storage-sqlite')) expect(await pkgv(p, 'format')).toBe('');
   });
 
-  it('[plugins-r9, the-engine-r23] the fts5 driver sits at its extension-relative driver path with no module file and declares fts5, 3.0.0, contract 3', async () => {
-    expect(existsSync(join(FTS5, 'module'))).toBe(false);
-    expect(isExec(join(FTS5, 'driver'))).toBe(true);
-    const cap = (await exec('sh', [join(FTS5, 'driver'), 'capability'], { cwd: sb })).stdout;
-    expect(cap).toContain('"driver":"fts5"');
-    expect(cap).toContain('"version":"3.0.0"');
-    expect(cap).toContain('"contract":"3"');
+  it('[plugins-r9, the-engine-r23] the sqlite driver sits at its extension-relative driver path with no module file and declares sqlite, 4.0.0, contract 4', async () => {
+    expect(existsSync(join(SQLITE, 'module'))).toBe(false);
+    expect(isExec(join(SQLITE, 'driver'))).toBe(true);
+    const cap = (await exec('sh', [join(SQLITE, 'driver'), 'capability'], { cwd: sb })).stdout;
+    expect(cap).toContain('"driver":"sqlite"');
+    expect(cap).toContain('"version":"4.0.0"');
+    expect(cap).toContain('"contract":"4"');
   });
 
   it('[plugins-r9, modules-r16] every real catalog plugin carries rich optional metadata and passes ctx package catalog and info', async () => {

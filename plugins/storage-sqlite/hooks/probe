@@ -1,0 +1,23 @@
+#!/bin/sh
+# readiness probe for storage-sqlite (read-only, :memory: only; POSIX sh)
+set -u
+
+if ! command -v sqlite3 >/dev/null 2>&1; then
+  printf 'sqlite3 not found on PATH (needs 3.44 or later)\n'
+  exit 1
+fi
+
+ver=$(sqlite3 :memory: "SELECT sqlite_version();" 2>/dev/null || true)
+if [ -z "$ver" ]; then
+  printf 'sqlite3 failed to report version\n'
+  exit 1
+fi
+
+ver_n=$(printf '%s\n' "$ver" | awk -F. '{ printf "%d", ($1 * 1000000) + ($2 * 1000) + $3 }')
+if [ "${ver_n:-0}" -lt 3044000 ]; then
+  printf 'sqlite3 %s found; needs 3.44 or later\n' "$ver"
+  exit 1
+fi
+
+printf 'sqlite3 %s ready\n' "$ver"
+exit 0

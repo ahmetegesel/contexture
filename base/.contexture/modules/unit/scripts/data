@@ -11,11 +11,8 @@
 #
 # The cross-unit reads use store.list with the per-unit key prefix; the active listing
 # (session.active) reads every unit's state, then each ACTIVE unit's backlog, never a
-# journal; session.list (the diagnose count) reads every unit's state and journal. The exact search is the record
-# rule over the canonical render (lib/search.awk); a ranked mode is the store's search
-# over the document-set schema, filtered to the unit and capped after the walk, its
-# default-document identity (the artifact key) mapped to the record id (the unit or the
-# lane, a lane entry keeping its lane prefix).
+# journal; session.list (the diagnose count) reads every unit's state and journal. The
+# search is exact alone, the record rule over the canonical render (lib/search.awk).
 #
 # The ref check: a new write's refs are full addresses, <owner>#<path>, checked for their
 # shape before the unit lock (a retired short owner refuses); the verbs check each target
@@ -59,6 +56,7 @@ if [ -z "$U_LIB" ]; then
   printf 'unit: error: the storage core library is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
   exit 2
 fi
+U_B64=${U_LIB%/library}/store-b64
 
 U_SCR=""
 U_LOCK=""
@@ -106,13 +104,15 @@ u_store_refuse() {
 # u_new <file>...: each of this run's scratch files made empty; u_put <file> <format>
 # [<args>...]: one printf appended to such a file. Both are silent (a shell reports a
 # failing redirect before a trailing 2>/dev/null applies, so the group carries it) and
-# refuse rc 2 ERR_STORAGE_WRITE when the write fails. A command whose own stderr may carry
-# a refusal writes into a file u_new made, so its status, never a failing redirect (which
-# answers 1 and would read as absent), decides: a lost line would let a write read an
-# artifact as absent, a unit as new, or commit part of its artifacts
+# refuse rc 2 ERR_STORAGE_WRITE when the write fails; a file is emptied by true, never by
+# the special builtin colon, whose failing redirect ends a dash shell with no refusal line.
+# A command whose own stderr may carry a refusal writes into a file u_new made, so its
+# status, never a failing redirect (which answers 1 and would read as absent), decides: a
+# lost line would let a write read an artifact as absent, a unit as new, or commit part of
+# its artifacts
 u_new() {
   for un_f in "$@"; do
-    { : > "$un_f"; } 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
+    { true > "$un_f"; } 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
   done
 }
 
@@ -914,11 +914,10 @@ u_mig_rewrite() {
   u_new "$U_SCR/batch" "$U_SCR/batch.out" "$U_SCR/batch.err"
   while IFS='	' read -r um_part um_key um_o um_f um_kind um_lane; do
     grep -qxF "$um_part" "$U_SCR/mg.changed" 2>/dev/null || continue
-    um_b64=$("$ULIB/b64" "$um_o") || u_refuse 2 ERR_STORAGE_WRITE "cannot encode $um_part"
+    um_b64=$("$U_B64" "$um_o" 2>/dev/null) || u_refuse 2 ERR_STORAGE_WRITE "cannot encode the staged value of '$um_key': its encoder did not read it whole"
     { {
       printf 'action=put\n' &&
       printf 'key=%s\n' "$(store_lib_escape "$um_key")" &&
-      printf 'head=none\n' &&
       printf 'value_b64=%s\n' "$um_b64"
     } >> "$U_SCR/batch"; } 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
   done < "$U_SCR/mg.keys"
@@ -1013,11 +1012,10 @@ u_commit() {
     uc_src="$U_STAGE/$uc_n"
     [ -f "$uc_src" ] || u_refuse 2 ERR_STORAGE_WRITE "the staged write of $uc_rel is missing"
     uc_key="${uc_unit:-$U_UNIT}/${uc_rel%.md}"
-    uc_b64=$("$ULIB/b64" "$uc_src") || u_refuse 2 ERR_STORAGE_WRITE "cannot encode $uc_rel"
+    uc_b64=$("$U_B64" "$uc_src" 2>/dev/null) || u_refuse 2 ERR_STORAGE_WRITE "cannot encode the staged value of '$uc_key': its encoder did not read it whole"
     { {
       printf 'action=put\n' &&
       printf 'key=%s\n' "$(store_lib_escape "$uc_key")" &&
-      printf 'head=none\n' &&
       printf 'value_b64=%s\n' "$uc_b64"
     } >> "$U_SCR/batch"; } 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
   done < "$U_STAGE/manifest"
@@ -1362,71 +1360,30 @@ u_search() {
   case "$sq_mode" in
     ""|[!a-z]*|*[!a-z0-9_-]*) u_refuse 1 ERR_INVALID_ARGUMENT "malformed mode '$sq_mode'" ;;
   esac
+  # exact is the storage contract's one search mode, so any other refuses before a store call
+  if [ "$sq_mode" != exact ]; then
+    printf '%s: error: mode '\''%s'\'' is not supported; answerable modes: exact (ERR_CAPABILITY_UNSUPPORTED)\n' "$FN" "$sq_mode" >&2
+    exit 1
+  fi
   u_scratch
-  if [ "$sq_mode" = exact ]; then
-    # exact is answerable everywhere, and the listed artifacts prove the unit held, so the
-    # exact read asks neither the held probe nor the mode registry
-    u_want_unit "$U_UNIT"
-    u_payload
-  else
-    u_want_held "$U_UNIT"
-    u_payload
-  fi
-  # the modes this namespace can answer: the driver's registry filtered by the unit's
-  # declared search schema, read through the storage core's library
-  u_sq_modes=""
-  [ "$sq_mode" = exact ] || u_sq_modes=$(store_modes --own 2>/dev/null | cut -f 1 | LC_ALL=C awk '{ o = o (NR > 1 ? ", " : "") $0 } END { print o }')
-  if [ -n "$u_sq_modes" ]; then
-    u_sq_ok=0
-    for u_sq_m in $(printf '%s' "$u_sq_modes" | tr ',' ' '); do
-      [ "$u_sq_m" = "$sq_mode" ] && u_sq_ok=1
-    done
-    if [ "$u_sq_ok" -eq 0 ]; then
-      printf '%s: error: mode '\''%s'\'' is not supported; answerable modes: %s (ERR_CAPABILITY_UNSUPPORTED)\n' "$FN" "$sq_mode" "$u_sq_modes" >&2
-      exit 1
+  # the listed artifacts prove the unit held, so the exact read asks no held probe
+  u_want_unit "$U_UNIT"
+  u_payload
+  u_manifest_reset
+  u_fetch_unit "$U_UNIT" "all" 2
+  u_sizes
+  u_new "$U_SCR/answer"
+  PX_MAN="$U_SCR/man" PX_SIZES="$U_SCR/sizes" PX_PAY="$U_PAY" PX_ERR="$U_SCR/err" \
+    SQ_UNIT="$U_UNIT" SQ_LIMIT="$sq_limit" SQ_ENTITY="$sq_entity" SQ_MODE="$sq_mode" \
+    awk -f "$ULIB/canon.awk" -f "$ULIB/model.awk" -f "$ULIB/search.awk" > "$U_SCR/answer"
+  sq_rc=$?
+  if [ "$sq_rc" -ne 0 ]; then
+    if [ -s "$U_SCR/err" ]; then cat "$U_SCR/err" >&2; else
+      printf '%s: error: the search failed (rc %s) (ERR_STORAGE_READ)\n' "$FN" "$sq_rc" >&2
+      sq_rc=2
     fi
-  fi
-  if [ "$sq_mode" = "exact" ]; then
-    u_manifest_reset
-    u_fetch_unit "$U_UNIT" "all" 2
-    u_sizes
-    u_new "$U_SCR/answer"
-    PX_MAN="$U_SCR/man" PX_SIZES="$U_SCR/sizes" PX_PAY="$U_PAY" PX_ERR="$U_SCR/err" \
-      SQ_UNIT="$U_UNIT" SQ_LIMIT="$sq_limit" SQ_ENTITY="$sq_entity" SQ_MODE="$sq_mode" \
-      awk -f "$ULIB/canon.awk" -f "$ULIB/model.awk" -f "$ULIB/search.awk" > "$U_SCR/answer"
-    sq_rc=$?
-    if [ "$sq_rc" -ne 0 ]; then
-      if [ -s "$U_SCR/err" ]; then cat "$U_SCR/err" >&2; else
-        printf '%s: error: the search failed (rc %s) (ERR_STORAGE_READ)\n' "$FN" "$sq_rc" >&2
-        sq_rc=2
-      fi
-      exit "$sq_rc"
-    fi
-    cat "$U_SCR/answer"
-    return 0
-  fi
-  sq_q=$(u_pay_field query)
-  u_new "$U_SCR/store.ans" "$U_SCR/store.err" "$U_SCR/flat" "$U_SCR/flat.err" "$U_SCR/answer"
-  if ! store_search "$sq_q" "$sq_mode" 0 > "$U_SCR/store.ans" 2> "$U_SCR/store.err"; then
-    sq_rc=$?
-    sq_msg=$(head -n 1 "$U_SCR/store.err" 2>/dev/null)
-    case "$sq_msg" in
-      store.search:\ error:\ *) sq_msg=${sq_msg#store.search: error: } ;;
-    esac
-    [ -n "$sq_msg" ] || sq_msg="the storage layer search failed (ERR_STORAGE_READ)"
-    printf '%s: error: %s\n' "$FN" "$sq_msg" >&2
     exit "$sq_rc"
   fi
-  awk -f "${U_LIB%/library}/json.awk" < "$U_SCR/store.ans" > "$U_SCR/flat" 2> "$U_SCR/flat.err" || {
-    sq_rc=$?
-    [ -s "$U_SCR/flat.err" ] && cat "$U_SCR/flat.err" >&2
-    printf '%s: error: the storage layer search answer is malformed (ERR_STORAGE_READ)\n' "$FN" >&2
-    exit 2
-  }
-  RQ_UNIT="$U_UNIT" RQ_QUERY="$sq_q" RQ_MODE="$sq_mode" RQ_LIMIT="$sq_limit" RQ_ENTITY="$sq_entity" \
-    awk -f "$ULIB/canon.awk" -f "$ULIB/model.awk" -f "$ULIB/ranked.awk" < "$U_SCR/flat" > "$U_SCR/answer"
-  sq_rc=$?
-  [ "$sq_rc" -eq 0 ] || exit "$sq_rc"
   cat "$U_SCR/answer"
 }
 

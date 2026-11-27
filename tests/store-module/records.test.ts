@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { holdMove } from '../support/locks';
 import { declare, EXISTS, INV, MISSING, refused, snapshot, store, storeState, SV } from './support';
 
 const today = (): string => spawnSync('date', ['+%Y-%m-%d'], { encoding: 'utf8' }).stdout.trim();
@@ -98,5 +99,17 @@ describe.concurrent('the store records: put, set, delete, get', () => {
     const retired = storeState(sb);
     refused(await store(sb, ['put', 'ideas/ALPHA', '--stdin=what'], 'x\n'), 'put', EXISTS, "id 'ALPHA' is retired in container 'ideas' (a deleted id is never handed out again)");
     expect(storeState(sb)).toBe(retired);
+  });
+
+  it('[store-r4, the-engine-r-mvf01] while storage is being moved, put and set refuse rc 2 under their own names with the freeze\'s message and code, and every view reads unchanged', async () => {
+    const sb = sandbox();
+    await store(sb, ['put', 'ideas/one', '--stdin=what'], 'one\n');
+    const before = [storeState(sb), (await store(sb, ['get', 'ideas/one'])).stdout, (await store(sb, ['list', 'ideas'])).stdout];
+    holdMove(sb, 'sqlite', 'live');
+    for (const [verb, args] of [['put', ['put', 'ideas/two', '--stdin=what']], ['set', ['set', 'ideas/one', '--status=PICKED']]] as const) {
+      const r = await store(sb, args, 'two\n');
+      expect([r.code, r.stdout, r.stderr], verb).toEqual([2, '', `store ${verb}: error: storage is being moved to another driver; retry after the move ends (ERR_STORAGE_LOCKED)\n`]);
+    }
+    expect([storeState(sb), (await store(sb, ['get', 'ideas/one'])).stdout, (await store(sb, ['list', 'ideas'])).stdout]).toEqual(before);
   });
 });
