@@ -1,5 +1,5 @@
 # summary: the unit module: the record's operations over the storage layer, one value per artifact
-# version: 0.2.0
+# version: 0.3.0
 # description:
 # The unit module owns the record: the state, the backlog, the journal, the knowledge,
 # and the lane artifacts, one record value per artifact. It answers the record's
