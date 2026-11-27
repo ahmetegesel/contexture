@@ -225,6 +225,27 @@ describe.concurrent('the root installer install.sh', () => {
     expect(readFileSync(join(sbMulti, '.contexture/config'), 'utf8')).toContain('package.git:');
   });
 
+  it('--non-interactive --plugins=docs-discipline installs the docs module and seeds no corpus doc, so ctx docs gate refuses the empty corpus until a first doc lands', async () => {
+    const sb = sandbox('install-docs');
+    const caller = sandbox('install-docs-caller');
+    const r = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sb, '--non-interactive', '--plugins=docs-discipline'], { cwd: caller });
+    expect(r.code, r.stderr).toBe(0);
+    expect(r.stdout).toContain('plugins installed: docs-discipline');
+    expect(readFileSync(join(sb, '.contexture/config'), 'utf8')).toContain('package.docs-discipline:');
+    expect(readFileSync(join(sb, 'AGENTS.generated.md'), 'utf8')).toContain('@module docs');
+
+    expect((await ctx(sb, 'docs', 'query', 'workspace', 'conventions')).code).toBe(1);
+    const index = await ctx(sb, 'docs', 'query', '--index');
+    expect(index.code).toBe(1);
+    expect(index.stderr).toContain('ctx docs query: the corpus is empty');
+    const audit = await ctx(sb, 'docs', 'audit');
+    expect(audit.code).toBe(1);
+    expect(audit.stderr).toContain('the corpus is empty');
+    const gate = await ctx(sb, 'docs', 'gate');
+    expect(gate.code).toBe(1);
+    expect(gate.stderr).toContain('ctx docs gate: the corpus is empty');
+  });
+
   it('--plugins=none installs core only rc 0 while invalid or unknown --plugins refuses rc 1 without installing any plugin', async () => {
     const sbNone = sandbox('install-none');
     const caller = sandbox('install-none-caller');
