@@ -133,7 +133,10 @@ describe.concurrent('the unit and lane verb surface', () => {
     await ok(unit(w, 'objective', 'help', 'the reworded objective'), 'objective');
     expect(await ok(unit(w, 'refs', 'help'), 'refs')).toContain('ref_sessions');
     expect(await ok(unit(w, 'refs-to', 'help'), 'refs-to')).toContain(`unit#help/entry/${slug}`);
+    await ok(unit(w, 'bootstrap', 'help-split', 'the split of the unit named help'), 'bootstrap the split');
+    expect(await ok(unit(w, 'transfer', 'help', 'help-split', '--finding=HELP_FINDING'), 'transfer')).toContain('transferred: 0 tasks, 1 findings, 0 entries from help to help-split');
     expect(await ok(run(w, ['lane', 'create', 'help', 'help', '--goal=g', '--branch=b', '--writes=w', '--scope=s', '--report=R :: r']), 'lane create')).toContain('lane help of unit help');
+    expect(await ok(run(w, ['lane', 'create', 'help', 'help', '--goal=g2', '--branch=b', '--writes=w', '--scope=s', '--report=R :: r', '--replace']), 'lane create --replace')).toContain('lane replaced: help in help');
     await ok(lane(w, 'record', 'help', 'help', '--what=a lane event'), 'lane record');
     await ok(run(w, ['lane', 'report', 'help', 'help', '--body=@report help']), 'lane report');
     expect(await ok(lane(w, 'show', 'help', 'help', 'journal'), 'lane show')).toContain('a lane event');

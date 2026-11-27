@@ -128,7 +128,7 @@ describe.concurrent('ctx unit transfer, the verb', () => {
     }
   });
 
-  it('[the-record-r-xfer1] --help and ctx unit help transfer print the help table rc 0', async () => {
+  it('[the-record-r-xfer1, the-engine-r7] a sole --help or -h, answered by the engine, and ctx unit help transfer print the same help table rc 0', async () => {
     const table = await unit(sb0, 'help', 'transfer');
     expect(table.code).toBe(0);
     expect(table.stdout).toMatch(/^ctx unit transfer: /);
