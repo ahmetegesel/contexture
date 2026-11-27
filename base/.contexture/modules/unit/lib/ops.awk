@@ -1011,7 +1011,7 @@ function f_unit_transfer(   src, tgt, dry, kbS, kkS, kjS, kbT, kkT, kjT, TS, nts
   nk = 0
   while ((getline line < ENVIRON["PX_MAN"]) > 0) {
     if (line !~ /^F\t/) continue
-    split(line, P, "\t")
+    split(line, P, /\t/)
     if (!(P[2] in KSEEN)) { KSEEN[P[2]] = 1; KEYS[++nk] = P[2] }
   }
   close(ENVIRON["PX_MAN"])
@@ -1042,7 +1042,7 @@ function f_unit_transfer(   src, tgt, dry, kbS, kkS, kjS, kbT, kkT, kjT, TS, nts
   o = ""; first = 1
   if (ENVIRON["PX_ROWS"] != "") {
     while ((getline line < ENVIRON["PX_ROWS"]) > 0) {
-      split(line, P, "\t")
+      split(line, P, /\t/)
       if (!(P[4] in MV)) continue
       o = o (first ? "" : ",") "{\"unit\":" jstr(P[1]) ",\"kind\":" jstr(P[2]) ",\"id\":" jstr(P[3]) ",\"ref\":" jstr(P[4]) "}"
       first = 0

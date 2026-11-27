@@ -74,7 +74,7 @@ describe.concurrent('the refusals through the unit data script', () => {
       ['lane.record', [u, 'l52'], payload().kv('what', 'closed').kv('thread', 'none').kv('date', DATE).kv('epoch', '1790000522').toString()],
       ['lane.write_report', [u, 'l52'], REPORT],
     ];
-    expect(writes.length).toBe(17);
+    expect(writes.length).toBe(18);
     for (const [fn, args, input] of writes) {
       refused(await data(sb, fn, args, input), fn, 1, 'ERR_UNIT_CLOSED', "unit 'tc52-u' is CLOSED; a closed unit takes no writes");
     }
