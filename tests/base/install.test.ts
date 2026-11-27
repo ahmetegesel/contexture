@@ -196,7 +196,7 @@ describe.concurrent('the root installer install.sh', () => {
     const r = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sb, '--non-interactive', '--plugins=starter-rhythms,git'], { cwd: caller });
     expect(r.code, r.stderr).toBe(0);
     expect(r.stdout).toContain('starter-rhythms git');
-    expect(r.stdout).not.toContain('.contexture/ctx store config set driver sqlite');
+    expect(r.stdout).not.toContain('storage driver:');
 
     const cfg = readFileSync(join(sb, '.contexture/config'), 'utf8');
     expect(cfg).toContain('package.starter-rhythms:');
@@ -208,23 +208,47 @@ describe.concurrent('the root installer install.sh', () => {
     expect(list.stdout).toContain('0 drift');
   });
 
-  it.skipIf(!sqliteAvailable())('--non-interactive --plugins=storage-sqlite (alone or with other plugins) installs the driver package, moving the empty record into it, and prints the storage-sqlite activation notice naming .contexture/ctx store config set driver sqlite', { timeout: 600_000 }, async () => {
+  it.skipIf(!sqliteAvailable())('--non-interactive --plugins=storage-sqlite (alone or after another plugin) installs the driver package first, moving the empty record into it, and closes naming the active storage driver with no activation step', { timeout: 600_000 }, async () => {
     const sbSolo = sandbox('install-sqlite-solo');
     const caller = sandbox('install-sqlite-caller');
     const rSolo = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sbSolo, '--non-interactive', '--plugins=storage-sqlite'], { cwd: caller, timeout: 300_000 });
     expect(rSolo.code, rSolo.stderr).toBe(0);
     expect(rSolo.stdout).toContain('plugins installed: storage-sqlite');
-    expect(rSolo.stdout).toContain('storage-sqlite installed: activate with .contexture/ctx store config set driver sqlite');
+    expect(rSolo.stdout).toContain('storage driver: sqlite (its package install moved the record into it)');
+    expect(rSolo.stdout).not.toContain('store config set driver');
+    expect(rSolo.stdout).not.toContain('installed: activate');
     expect(readFileSync(join(sbSolo, '.contexture/config'), 'utf8')).toContain('package.storage-sqlite:');
     expect(readFileSync(join(sbSolo, '.contexture/config'), 'utf8')).toMatch(/^storage\.driver: sqlite$/m);
 
     const sbMulti = sandbox('install-sqlite-multi');
     const rMulti = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sbMulti, '--non-interactive', '--plugins=git,storage-sqlite'], { cwd: caller, timeout: 300_000 });
     expect(rMulti.code, rMulti.stderr).toBe(0);
-    expect(rMulti.stdout).toContain('plugins installed: git storage-sqlite');
-    expect(rMulti.stdout).toContain('storage-sqlite installed: activate with .contexture/ctx store config set driver sqlite');
+    expect(rMulti.stdout).toContain('plugins installed: storage-sqlite git');
+    expect(rMulti.stdout).toContain('storage driver: sqlite (its package install moved the record into it)');
+    expect(rMulti.stdout).not.toContain('store config set driver');
+    expect(readFileSync(join(sbMulti, '.contexture/config'), 'utf8')).toMatch(/^storage\.driver: sqlite$/m);
     expect(readFileSync(join(sbMulti, '.contexture/config'), 'utf8')).toContain('package.storage-sqlite:');
     expect(readFileSync(join(sbMulti, '.contexture/config'), 'utf8')).toContain('package.git:');
+  });
+
+  it.skipIf(!sqliteAvailable())('--non-interactive --plugins=docs-discipline,storage-sqlite installs storage-sqlite before the package that seeds data, so the move needs no old copy answer, and the seeded corpus answers from the sqlite store', { timeout: 600_000 }, async () => {
+    const sb = sandbox('install-sqlite-docs');
+    const caller = sandbox('install-sqlite-docs-caller');
+    const r = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sb, '--non-interactive', '--plugins=docs-discipline,storage-sqlite'], { cwd: caller, timeout: 300_000 });
+    expect(r.code, r.stderr).toBe(0);
+    expect(r.stdout).toContain('plugins installed: storage-sqlite docs-discipline');
+    expect(r.stdout).toContain('storage driver: sqlite (its package install moved the record into it)');
+    expect(r.stdout).not.toContain('store config set driver');
+    expect(r.stdout).not.toContain('installed: activate');
+    const cfg = readFileSync(join(sb, '.contexture/config'), 'utf8');
+    expect(cfg).toMatch(/^storage\.driver: sqlite$/m);
+    expect(cfg).toContain('package.storage-sqlite:');
+    expect(cfg).toContain('package.docs-discipline:');
+
+    const conventions = await ctx(sb, 'docs', 'query', 'workspace', 'conventions');
+    expect(conventions.code, conventions.stderr).toBe(0);
+    expect(conventions.stdout).toContain('conventions');
+    expect((await ctx(sb, 'store', 'config', 'get', 'driver')).stdout.trim()).toBe('sqlite');
   });
 
   it('--plugins=none installs core only rc 0 while invalid or unknown --plugins refuses rc 1 without installing any plugin', async () => {
@@ -232,7 +256,7 @@ describe.concurrent('the root installer install.sh', () => {
     const caller = sandbox('install-none-caller');
     const ok = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sbNone, '--non-interactive', '--plugins=none'], { cwd: caller });
     expect(ok.code, ok.stderr).toBe(0);
-    expect(ok.stdout).not.toContain('.contexture/ctx store config set driver sqlite');
+    expect(ok.stdout).not.toContain('storage driver:');
     expect(existsSync(join(sbNone, '.contexture/extensions'))).toBe(false);
 
     for (const bad of ['bogus', '../x', 'starter-rhythms,bogus', 'git,git', 'all', '']) {
