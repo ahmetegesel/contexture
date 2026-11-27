@@ -305,7 +305,7 @@ describe.concurrent('ctx unit transfer through the data function unit.transfer',
   it.skipIf(ROOT_USER)('[the-record-r-xfer1] the move is one store batch over both units: a batch that loses a line after its first action leaves both units byte equal', async () => {
     const sb = fresh(sb0);
     const was = await both(sb);
-    const b64 = join(sb, '.contexture/modules/unit/lib/b64');
+    const b64 = join(sb, '.contexture/storage/scripts/store-b64');
     copyFileSync(b64, `${b64}.real`);
     writeFileSync(b64, `#!/bin/sh\nfor b in .contexture/tmp/unit.*/batch; do\n  [ -s "$b" ] && chmod 400 "$b"\ndone\nexec "${b64}.real" "$@"\n`, { mode: 0o755 });
     const r = await transfer(sb, [S, T], move(MAIN));

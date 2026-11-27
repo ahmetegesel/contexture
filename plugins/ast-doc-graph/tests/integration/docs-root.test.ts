@@ -1,4 +1,4 @@
-import { appendFileSync, cpSync, existsSync, mkdirSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { exec } from '@support/exec';
@@ -143,6 +143,8 @@ describe.skipIf(!sqliteFts5 || !compilerApi() || !sqliteAvailable())('the docs w
     const repo = stage('sqlite', 'root-store');
     const install = await exec('./.contexture/ctx', ['package', 'install', join(ROOT, 'plugins/docs-discipline')], { cwd: repo });
     expect(install.code, install.stdout + install.stderr).toBe(0);
+    const written = await exec('./.contexture/ctx', ['docs', 'write', 'workspace', 'conventions'], { cwd: repo, input: readFileSync(join(ROOT, 'plugins/docs-discipline/tests/sample/docs/workspace/conventions.md'), 'utf8') });
+    expect(written.code, written.stderr).toBe(0);
     expect((await exec('./.contexture/ctx', ['docs', 'query', '--index'], { cwd: repo })).stdout).toContain('index complete: 1 entries');
     cpSync(join(FIXTURES, 'mini-repo/src'), join(repo, 'src'), { recursive: true });
     mkdirSync(join(repo, 'node_modules'));
