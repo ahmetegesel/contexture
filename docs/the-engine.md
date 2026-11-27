@@ -702,7 +702,8 @@ plugins/             the tracked catalog of packaged overlays (fallback when .co
   rhythms/           your process patterns
   units/             the units of work (sessions/, the deprecated root, holds a unit until it moves and is removed once it is empty)
   store/             the store module's records: one file per record, under its container
-  docs/              the docs module's corpus under the files driver (docs-discipline): one file per doc, under its repo
+  backups/           the stamped backups a leftovers sweep and a driver package's move keep, never deleted automatically
+  docs/              the docs module's corpus under posix (docs-discipline): one file per doc, under its repo
   tmp/               gitignored scratch: engines and agents prefer it over system temp (created on demand; each verb stages under its own root, removed on return and swept by the next dispatch after a kill)
 ```
 
@@ -720,7 +721,7 @@ Placement follows the class of the file, never convenience:
 |---|---|---|
 | update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,config-lib,package-install,package-uninstall,storage,laws,modules/lane,modules/rhythm,modules/run,modules/store,modules/unit,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
 | catalog | `.contexture/plugins/` (and `plugins/` fallback): packaged overlays | copied into a workspace when wanted; never deleted at adoption close |
-| live workspace | the untracked root: `AGENTS.md`, `.contexture/units/` (and the deprecated `.contexture/sessions/` while units remain in it), `.contexture/store/`, `.contexture/docs/` (the docs module's corpus under the files driver), the records of a workspace-added module at its declared data root, `.contexture/backups/`, `.contexture/rhythms/`, `.contexture/tmp/`, workspace-added modules under `.contexture/modules/`, and the drawer's top files: the configuration `.contexture/config` (and the legacy `.contexture/storage.conf`), a sqlite store's database `.contexture/sessions.db` with its `-wal` and `-shm` files, and a macOS Finder `.DS_Store` | never touched by an update |
+| live workspace | the untracked root: `AGENTS.md`, `.contexture/units/` (and the deprecated `.contexture/sessions/` while units remain in it), `.contexture/store/`, `.contexture/docs/` (the docs module's corpus under posix), the records of a workspace-added module at its declared data root, `.contexture/backups/`, `.contexture/rhythms/`, `.contexture/tmp/`, workspace-added modules under `.contexture/modules/`, and the drawer's top files: the configuration `.contexture/config` (and the legacy `.contexture/storage.conf`), a sqlite store's database `.contexture/sessions.db` with its `-wal` and `-shm` files, and a macOS Finder `.DS_Store` | never touched by an update |
 
 The classes exist because the files have different lives. The payload evolves with the convention and must stay identical across every workspace: it is tracked in one mirrored tree and applied onto the live root as-is, so what the tag tracks under `base/` is exactly what lands. The catalog holds the optional overlays: a workspace installs one when it wants it, and the folder is no longer deleted at adoption close. The record (units, and the deprecated sessions folder while units remain in it), the store module's records, a workspace-added module's records at its declared data root, the stamped backups a leftovers sweep keeps, rhythms, tmp, workspace-added modules, and the drawer's top files are the workspace's own state, and no update may touch them. `.contexture/ONBOARDING.md` rides the payload as adoption material; it is used once and removed when the adoption closes.
 

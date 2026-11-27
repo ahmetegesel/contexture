@@ -239,8 +239,8 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   claimant and triggers no blanket.
 - What a clean verdict cannot see: coverage is glob membership over the
   header sources, so a broad glob (`plugins/**`, `tests/**`) covers every path
-  under it and the check never names the glob that matched; and under the
-  files driver a riding doc whose slug is `architecture` or `overview`
+  under it and the check never names the glob that matched; and under
+  posix a riding doc whose slug is `architecture` or `overview`
   freshens every claimed file of its repo, and any riding doc of the
   workspace repo freshens every claimed file of every repo; the slug and the
   repo decide, never the doc kind. Both print `FRESH (BLANKET)` and an
@@ -265,7 +265,7 @@ core drawer or the base mirror), never by a relative climb from the module
 folder, so the docs module works under the modules root and the extension root
 alike; the grammar asset is the one path resolved beside the module. The gate's git
 aggregation reads from that root; the corpus reads go through the driver
-(under the files driver the corpus is `<root>/.contexture/docs/<repo>/<slug>.md`, the
+(under posix the corpus is `<root>/.contexture/docs/<repo>/<slug>.md`, the
 docs namespace's declared root; the repository's own `docs/` folder belongs to
 people and is never read as the corpus).
 `DOCS_PRODUCT_REPOS_DIR` (default `projects/`) selects the multi-repo product
@@ -278,7 +278,7 @@ directory.
   at a shared template. The suite stages the module whole, carrying the asset.
 - The seed conventions: the plugin's `docs/workspace/conventions.md`, written
   into the corpus by adoption through `ctx docs write workspace conventions`
-  (under the files driver the doc lands at `.contexture/docs/workspace/conventions.md`).
+  (under posix the doc lands at `.contexture/docs/workspace/conventions.md`).
   The install hook seeds only when the corpus lacks the conventions doc; under
   posix, when the corpus is empty while a corpus doc written at the old root
   (a `docs/<repo>/<slug>.md` whose first line is the `@doc` line naming its

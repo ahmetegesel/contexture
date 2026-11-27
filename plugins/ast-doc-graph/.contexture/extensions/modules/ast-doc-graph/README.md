@@ -92,8 +92,8 @@ The docs extractor reads the corpus as files: `bin/ast-doc-index` reads the
 docs namespace's declared root through the drawer's storage library
 (`store_roots`, the drawer's copy, then the base mirror, in a plain `sh` child
 apart from the index's own bash options) and lists the regular markdown files
-under it when it lies inside the repository root (`.contexture/docs/` under the
-docs-discipline files driver); a root outside the repository root (`--repo-root`
+under it when it lies inside the repository root (`.contexture/docs/` for
+docs-discipline under posix); a root outside the repository root (`--repo-root`
 naming a child repository) leaves the docs side empty with one stderr notice,
 roots the library cannot list stop the index rc 2 before any write, and a
 drawer declaring no docs namespace (no docs module, or no storage core) walks
