@@ -5,7 +5,7 @@
 # one table of keys and values; db-init.sh opens it, lays the schema in a new or empty file,
 # and refuses a store at any other version). The driver is store-only: it answers
 # capability and storage.health as its own methods and the six generic store functions
-# (list, get, put, delete, batch, scan) plus the exact store.search entry; the record's 35
+# (list, get, put, delete, batch, scan) plus the exact store.search entry; the record's
 # operations live in the unit module's data script over this store, and the docs corpus
 # reaches the driver through the store too.
 #

@@ -22,7 +22,7 @@ guide and reference; this page is the off-path maintainer map.
 The unit module owns the record: its data script stores one value per artifact under the
 namespace `unit`, parses and renders the canonical record text, and reaches this driver
 only through the generic store. The driver never parses markdown; it keeps the bytes
-opaque. The record's 35 operations, its rules, and its canonical layout are the unit
+opaque. The record's operations, its rules, and its canonical layout are the unit
 module's, not this driver's.
 
 ## The store
