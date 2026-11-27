@@ -5,30 +5,41 @@
 # table's allow list under its class.
 #
 # It reads a shell file as logical units (backslash continuations, open quotes, substitutions,
-# and here-document bodies joined or skipped), a .awk file and every single quoted text of a
-# shell file as awk, and a .ts file as TypeScript; comment lines are skipped. A write primitive:
-#   shell: a redirect (>, >>, >|, <>, &>) into anything but a null, std, tty, or fd device or a
-#     descriptor dup; at a command position (after any assignment words and command, env, exec,
-#     nohup, time, or xargs) mkdir, mv, cp, ln, tee, touch, install, dd, mktemp, rm, rmdir,
-#     chmod, sed -i, tar extraction or creation, gzip or gunzip, curl -o or -O, wget, sqlite3
-#     or a sqlite binary variable on a database other than :memory:, the library calls that
-#     write a caller's file (store_get_into, fields_apply, fields_own, fields_put, fields_set,
-#     fields_get), and a call of a function the table names as writing an operand, each with
-#     its destination operands;
+# and here-document bodies joined or skipped, a delimiter being the whole word after the
+# operator with its quotes and backslashes removed, opening with a letter or an underscore so a
+# shift in a bash arithmetic command is no here-document), a .awk file, every single quoted text of a
+# shell file, and an awk program the shell hands awk in double quotes as awk, and a .ts file as
+# TypeScript; comment lines are skipped. A write primitive:
+#   shell: a redirect (>, >>, >|, <>, &>, and >& into a word that is no descriptor) into
+#     anything but a null, std, tty, or fd device or a descriptor dup; at a command position
+#     (after any assignment words and command, env, exec, nohup, time, or xargs with their
+#     options; command -v and -V run nothing) mkdir, mv, cp, ln, tee, touch, install, dd,
+#     mktemp, rm, rmdir, chmod, sed -i, sort -o, tar extraction or creation, gzip or gunzip,
+#     curl -o (in a cluster, attached, or --output) or -O, wget, sqlite3 or a sqlite binary
+#     variable on a database other than :memory:, the library calls that write a caller's file
+#     (store_get_into, fields_apply, fields_own, fields_put, fields_set, fields_get), and a call
+#     of a function the table names as writing an operand, each with its destination operands
+#     (a destination command after xargs also writes the operands xargs reads, which no line
+#     shows);
 #   awk: a print or printf redirect, and a print or printf pipe or a system() whose command text
 #     writes (its literal text read by the shell rules, a command held in a variable read as a
 #     destination of its own);
-#   TypeScript: an fs write, rename, copy, or remove call, a database open, and a sqlite3 run.
+#   TypeScript: an fs write, rename, copy, link, truncate, remove, or open for writing, through
+#     fs, fs.promises, a namespace or default import of node:fs or fs/promises, or a named
+#     import's local name (a bare synchronous name too), a database open, and a sqlite3 run.
 # A destination is scratch when it roots at the per verb scratch root (CTX_SCRATCH_ROOT), the
 # drawer's scratch folder (.contexture/tmp, or $CTX_DIR/tmp), a mktemp of such a template, the
-# absolute form of such a path (cd and pwd), or a name the table gives its file. A scratch
-# variable is judged where it roots a destination: every assignment of it in that scope (the
-# shell file, or the one awk program) is a judged line, rooted at scratch the same way (a for
-# loop over scratch words, a ${NAME:=...} default, a function's printed value, an awk -v or
-# ENVIRON value included; a read is never proven), else on its exact listed line of the system
-# temp fallback; an assignment that fails is a remainder no listing absolves. A judged line is
-# scratch when every destination and assignment on it is scratch, listed when the table lists
-# its exact text under its file, and a remainder otherwise.
+# absolute form of such a path (cd and pwd), or a name the table gives its file, and its path
+# text after that root holds no dot dot segment. A scratch variable is judged where it roots a
+# destination: every assignment of it in that scope (the shell file, or the one awk program) is
+# a judged line, rooted at scratch the same way (a for loop over scratch words or over the
+# operands, a ${NAME:=...} default, a local, export, readonly, declare, or typeset word, a
+# function's printed value, an awk -v or ENVIRON value included; a read is never proven), else
+# on its exact listed line of the system temp fallback; an assignment that fails is a remainder
+# no listing absolves; a variable a from entry takes from a sourced file has every assignment in
+# the file that takes it judged the same way. A judged line is scratch when every destination
+# and assignment on it is scratch, listed when the table lists its exact text under its file
+# (one entry for each line of that text), and a remainder otherwise.
 #
 # The table: '#' comments and blank lines skipped; every other line holds four tab separated
 # fields, the kind, the file, a subject, and the rest:
@@ -41,10 +52,11 @@
 #   bound    <file> <N|NAME|F:NAME> <reason>   a script's own operand N, or a variable (inside F
 #                                        only, with F:) holding a path its caller names, which
 #                                        the line reader cannot follow: taken on its reason
-#   <class>  <file> <reason> <the line as written>   an allow list entry
+#   <class>  <file> <reason> <the line as written>   an allow list entry, allowing one line
 # with the classes store, config, laws, overlay, backups, graph, payload, and tmp-fallback.
 #
-# Prints every REMAINDER line, every DEAD entry (a listed line or a name the census never met),
+# Prints every REMAINDER line, every DEAD entry (a listed text met on fewer lines than it has
+# entries, or a name the census never met),
 # every UNPROVEN name (a scratch variable with no assignment in a scope it roots, or a from
 # entry whose source does not prove it), the listed count per class, the name counts, and one
 # summary:
@@ -52,8 +64,9 @@
 # exit 0 only when R is 0, nothing is dead or unproven, N equals S + L + R, and N is not 0.
 BEGIN {
   CLASSES = " store config laws overlay backups graph payload tmp-fallback "
-  CMDS = " mkdir mv cp ln tee touch install dd mktemp rm rmdir chmod sed tar gzip gunzip curl wget sqlite3 store_get_into fields_apply fields_own fields_put fields_set fields_get "
+  CMDS = " mkdir mv cp ln tee touch install dd mktemp rm rmdir chmod sed sort tar gzip gunzip curl wget sqlite3 store_get_into fields_apply fields_own fields_put fields_set fields_get "
   PREFIXES = " command env exec nohup time xargs "
+  FSW = " writeFileSync appendFileSync mkdirSync mkdtempSync renameSync copyFileSync cpSync rmSync unlinkSync rmdirSync symlinkSync linkSync truncateSync openSync createWriteStream writeFile appendFile mkdir mkdtemp rename copyFile cp rm unlink rmdir symlink link truncate open "
   DEBUG = ENVIRON["CENSUS_DEBUG"]
   ROOT = ENVIRON["CENSUS_ROOT"]
   table(ENVIRON["CENSUS_TABLE"])
@@ -82,7 +95,7 @@ function table(f,   l, t, kind, file, subj, rest, n, ok, parts) {
       t = index(subj, ":"); CALLOP[substr(subj, 1, t - 1)] = CALLOP[substr(subj, 1, t - 1)] " " substr(subj, t + 1)
     }
     else if (kind == "bound" && subj ~ /^([1-9@]|[A-Za-z_][A-Za-z0-9_]*:([A-Za-z_][A-Za-z0-9_]*|[1-9@])|[A-Za-z_][A-Za-z0-9_]*)$/) BD[file SUBSEP subj] = 1
-    else if (index(CLASSES, " " kind " ")) ALLOW[file SUBSEP rest] = kind
+    else if (index(CLASSES, " " kind " ")) { ALLOW[file SUBSEP rest] = kind; ALLOWN[file SUBSEP rest]++ }
     else ok = 0
     if (!ok) { bad = 1; printf "durable-writes.awk: table line %d names an unknown kind or a malformed subject: %s\n", n, l > "/dev/stderr" }
   }
@@ -98,7 +111,7 @@ FNR == 1 {
 END { if (NR > 0) finish(); report() }
 
 function report(   k, c, parts, src, n, i) {
-  for (k in ALLOW) if (!(k in USED)) { split(k, parts, /\034/); dead++; printf "DEAD listed %s: %s\n", parts[1], parts[2] }
+  for (k in ALLOW) if (USEN[k] < ALLOWN[k]) { split(k, parts, /\034/); dead++; printf "DEAD listed %s: %s\n", parts[1], parts[2] }
   for (k in SV) if (!(k in USEDS)) { split(k, parts, /\034/); dead++; printf "DEAD scratch %s: %s\n", parts[1], parts[2] }
   for (k in FROM) {
     split(k, parts, /\034/)
@@ -147,6 +160,13 @@ function finish(   i, k, v, names, n, again) {
       else { BAD[ASGD[i]] = 1; judge(ASGL[i], "bad", "assignment " ASGV[i] "=" ASGR[i]) }
     }
   }
+  for (i = 1; i <= NA; i++) {
+    if (!ASGFR[i] || JUDGED[i]) continue
+    JUDGED[i] = 1; JSCOPE = ASGRS[i]; JFUNC = ASGF[i]
+    if (ASGOK[i]) judge(ASGL[i], "durable", "system temp assignment " ASGV[i] "=" ASGR[i])
+    else if (asg_scratch(i)) judge(ASGL[i], "scratch")
+    else judge(ASGL[i], "bad", "assignment " ASGV[i] "=" ASGR[i] " of a name its sourced file proves")
+  }
   for (k in ROOTED) {
     split(k, names, /\034/)
     if (!(k in HELD)) { unproven++; printf "UNPROVEN scratch %s: %s roots a destination where nothing assigns it (name it bound, from, or an operand)\n", FILE, names[1] }
@@ -159,9 +179,10 @@ function finish(   i, k, v, names, n, again) {
     if (DEBUG != "") for (i = 1; i <= NA; i++) if (ASGD[i] == v && JUDGED[i] && ASGR[i] != "") { printf "PROOF %s\t%s\t%s\n", FILE, v, ASGR[i]; break }
   }
   for (i = 1; i <= NJ; i++) {
-    k = JLINE[i]
+    k = JLINE[i]; v = FILE SUBSEP PL[k]
     if (JV[k] == "scratch") nscratch++
-    else if (JV[k] == "durable" && ((FILE SUBSEP PL[k]) in ALLOW)) { USED[FILE SUBSEP PL[k]] = 1; listed++; BYCLASS[ALLOW[FILE SUBSEP PL[k]]]++ }
+    else if (JV[k] == "durable" && (v in ALLOW) && USEN[v] < ALLOWN[v]) { USEN[v]++; listed++; BYCLASS[ALLOW[v]]++ }
+    else if (JV[k] == "durable" && (v in ALLOW)) { remainder++; printf "REMAINDER %s:%d: %s; its text's every allow list entry already holds another line: %s\n", FILE, k, JWHY[k], PL[k] }
     else { remainder++; printf "REMAINDER %s:%d: %s: %s\n", FILE, k, JWHY[k], PL[k] }
     flagged++
     if (DEBUG != "") printf "DEBUG %s %s:%d: [%s] %s: %s\n", JV[k], FILE, k, JFN[k], JWHY[k], PL[k]
@@ -187,12 +208,13 @@ function write(line, dest, what,   d) {
   NW++; WL[NW] = line; WD[NW] = d; WWHAT[NW] = what; WS[NW] = SCOPE; WF[NW] = FUNC
 }
 
-function assign(line, v, rhs, kind, scope,   d) {
+function assign(line, v, rhs, kind, scope,   d, fr) {
   if ((FILE SUBSEP v) in BD || (FUNC != "" && ((FILE SUBSEP FUNC ":" v) in BD))) return
   if (FUNC != "" && ((FILE SUBSEP FUNC ":" v) in SV)) { d = FUNC ":" v; scope = "f:" FUNC }
   else if ((FILE SUBSEP v) in SV) d = v
+  else if ((FILE SUBSEP v) in FROM) { d = v; fr = 1 }
   else return
-  NA++; ASGV[NA] = v; ASGD[NA] = d; ASGR[NA] = unquote(rhs); ASGL[NA] = line; ASGK[NA] = kind; ASGF[NA] = FUNC
+  NA++; ASGV[NA] = v; ASGD[NA] = d; ASGR[NA] = unquote(rhs); ASGL[NA] = line; ASGK[NA] = kind; ASGF[NA] = FUNC; ASGFR[NA] = fr
   ASGS[NA] = (scope == "" ? SCOPE : scope)
   ASGRS[NA] = (scope == "" ? ASGS[NA] : SCOPE)
   ASGOK[NA] = ((FILE SUBSEP PL[line]) in ALLOW) && ALLOW[FILE SUBSEP PL[line]] == "tmp-fallback"
@@ -235,16 +257,20 @@ function named(v, s,   k) {
   return 1
 }
 
+# up: a path text holding a dot dot segment, which climbs out of whatever root it names
+function up(s) { return s ~ /(^|\/)\.\.(\/|$)/ }
+
 # scratch: a destination rooted at the per verb scratch root, the drawer's scratch folder, a
 # mktemp of such a template, the absolute form of such a path, or a name of the table (a
-# device is no file)
+# device is no file); a dot dot segment after the root never stays below it
 function scratch(d,   v, alt, rest, m, inner, s, op) {
   if (device(d)) return 1
   if (d ~ /^mktemp( |$)/) return mktemp_scratch(d)
-  if (d ~ /^\.contexture\/tmp(\/|$)/) return 1
+  if (d ~ /^\.contexture\/tmp(\/|$)/) return !up(d)
   if (substr(d, 1, 2) == "$(") {
     m = sub_close(d)
     inner = substr(d, 3, m - 3); rest = substr(d, m + 1)
+    if (up(rest)) return 0
     if (rest ~ /^\/\.contexture\/tmp(\/|$)/) return 1
     if (inner ~ /^mktemp( |$)/) return mktemp_scratch(inner)
     if (inner ~ /^dirname /) return rest == "" && dirname_scratch(substr(inner, 9))
@@ -263,13 +289,14 @@ function scratch(d,   v, alt, rest, m, inner, s, op) {
     if (match(v, /^([A-Za-z_][A-Za-z0-9_]*|[1-9@])/) && RLENGTH < length(v)) {
       op = substr(v, RLENGTH + 1); v = substr(v, 1, RLENGTH)
       if (op ~ /^:?[-=]/) { sub(/^:?[-=]/, "", op); if (op != "" && !scratch(op rest)) return 0 }
-      else if (op ~ /^%%?\/\*$/) return rest == "" && dirname_scratch("$" v)
+      else if (op ~ /^%\/\*$/) return rest == "" && dirname_scratch("$" v)
       else return 0
     }
   } else {
     match(d, /^\$([A-Za-z_][A-Za-z0-9_]*|[1-9@])/)
     v = substr(d, 2, RLENGTH - 1); rest = substr(d, RLENGTH + 1)
   }
+  if (up(rest)) return 0
   if (v == "CTX_SCRATCH_ROOT") return 1
   if (v == "CTX_DIR" && rest ~ /^\/tmp(\/|$)/) return 1
   if (rest ~ /^\/\.contexture\/tmp(\/|$)/) return 1
@@ -403,9 +430,9 @@ function sh_line(s,   i, n, c, top, w) {
       w = substr(s, i + 2)
       HDPT = (substr(w, 1, 1) == "-")
       if (HDPT) w = substr(w, 2)
-      match(w, /^[ \t]*['"]?[A-Za-z_][A-Za-z0-9_]*['"]?/)
+      match(w, /^[ \t]*['"\\]?[A-Za-z_][^ \t;&|<>()]*/)
       if (RLENGTH > 0) {
-        HDP = substr(w, 1, RLENGTH); gsub(/[ \t'"]/, "", HDP)
+        HDP = substr(w, 1, RLENGTH); gsub(/[ \t'"\\]/, "", HDP)
         M = M blanks(2 + HDPT + RLENGTH); A = A blanks(2 + HDPT + RLENGTH); i += 1 + HDPT + RLENGTH
         continue
       }
@@ -483,10 +510,10 @@ function words(a, b,   k, c, n, in_w, r) {
   return n
 }
 
-function simple(a, b,   n, k, w, cmd, v, i, rest) {
+function simple(a, b,   n, k, w, cmd, v, i, rest, prog, hasf, sS) {
   if (b <= a) return
   n = words(a, b)
-  k = 1
+  k = 1; XARGS = 0
   # skip redirect words and their targets wherever they stand, keyword and prefix words first
   while (k <= n) {
     w = WM[k]
@@ -494,16 +521,18 @@ function simple(a, b,   n, k, w, cmd, v, i, rest) {
     if (w == "case") return
     if (w == "for") {
       if (k + 2 <= n && WM[k + 2] == "in") { rest = ""; for (i = k + 3; i <= n; i++) rest = rest " " WT[i]; assign(lineof(WA[k + 1]), WT[k + 1], rest, "for") }
+      else if (k + 1 <= n) assign(lineof(WA[k + 1]), WT[k + 1], "$@", "for")
       return
     }
-    if (w ~ /^(local|export|readonly)$/) { k++; for (; k <= n; k++) if (WM[k] ~ /^[A-Za-z_][A-Za-z0-9_]*=/) asg_word(k); return }
+    if (w ~ /^(local|export|readonly|declare|typeset)$/) { k++; for (; k <= n; k++) if (WM[k] ~ /^[A-Za-z_][A-Za-z0-9_]*=/) asg_word(k); return }
     if (w ~ /^[A-Za-z_][A-Za-z0-9_]*=/) { asg_word(k); k++; continue }
     if (w ~ /^[0-9]*(>|>>|>\||<|<>|&>)$/) { k += 2; continue }
     if (w ~ /^[0-9]*(>|>>|>\||<|<>|&>|>&|<&)/) { k++; continue }
     if (index(PREFIXES, " " w " ")) {
       k++
-      if (w == "xargs") while (k <= n && WM[k] ~ /^-/) { if (WM[k] ~ /^-[InLsPd]$/) k++; k++ }
-      if (w == "env") while (k <= n && (WM[k] ~ /^-/ || WM[k] ~ /^[A-Za-z_][A-Za-z0-9_]*=/)) k++
+      if (w == "xargs") { XARGS = 1; while (k <= n && WM[k] ~ /^-/) { if (WM[k] ~ /^-[InLsPd]$/) k++; k++ } }
+      if (w == "env") while (k <= n && (WM[k] ~ /^-/ || WM[k] ~ /^[A-Za-z_][A-Za-z0-9_]*=/)) { if (WM[k] ~ /^-[uCS]$/) k++; k++ }
+      if (w == "command") while (k <= n && WM[k] ~ /^-/) { if (WM[k] ~ /^-[vV]$/) return; k++ }
       continue
     }
     break
@@ -515,15 +544,41 @@ function simple(a, b,   n, k, w, cmd, v, i, rest) {
   if (cmd ~ /^\$\{?[A-Za-z_]*[Ss][Qq][Ll][Ii][Tt][Ee][A-Za-z_]*\}?$/) cmd = "sqlite3"
   sub(/^.*\//, "", cmd)
   if (cmd == "awk") {
+    prog = 0; hasf = 0
     for (i = k + 1; i <= n; i++) {
       if (WM[i] == "-v" && i < n) { i++; if (WM[i] ~ /^[A-Za-z_][A-Za-z0-9_]*=/) asg_word(i, AWKSCOPE) }
       else if (WM[i] ~ /^-v[A-Za-z_][A-Za-z0-9_]*=/) { WT[i] = substr(WT[i], 3); asg_word(i, AWKSCOPE) }
+      else if (WM[i] ~ /^-[fF]$/) { if (WM[i] == "-f") hasf = 1; i++ }
+      else if (WM[i] ~ /^-f/) hasf = 1
+      else if (WM[i] ~ /^[0-9]*(>|>>|>\||<|<>|&>)$/) i++
+      else if (WM[i] ~ /^-/ || WM[i] ~ /^[0-9]*(>|<)/) continue
+      else if (!prog && !hasf) prog = i
     }
+    if (prog && index(WM[prog], "\"")) { sS = SCOPE; SCOPE = AWKSCOPE; DQ = 1; awk_scan(dq_text(WT[prog]), WA[prog]); DQ = 0; SCOPE = sS }
     return
   }
   if (cmd in CALLOP) called(cmd, k, n)
   if (!index(CMDS, " " cmd " ")) return
   operands(cmd, k, n)
+}
+
+# dq_text: the double quoted text of shell word s, each character at its own offset and every
+# other character blank: an awk program the shell hands awk in double quotes
+function dq_text(s,   out, n, j, c, q) {
+  out = ""; n = length(s); q = ""
+  for (j = 1; j <= n; j++) {
+    c = substr(s, j, 1)
+    if (q == "'") { if (c == "'") q = ""; out = out (c == "\n" ? "\n" : " "); continue }
+    if (q == "\"") {
+      if (c == "\\" && j < n && substr(s, j + 1, 1) ~ /["\\$`]/) { out = out " " substr(s, j + 1, 1); j++; continue }
+      if (c == "\"") { q = ""; out = out " "; continue }
+      out = out c; continue
+    }
+    if (c == "\\") { out = out "  "; j++; continue }
+    if (c == "'" || c == "\"") q = c
+    out = out (c == "\n" ? "\n" : " ")
+  }
+  return out
 }
 
 # called: a call of a function the table names as writing an operand judges that operand
@@ -582,14 +637,20 @@ function operands(cmd, k, n,   i, w, ops, no, last, t, p, line, flags) {
       else if (cmd == "touch" && w ~ /^-[dtr]$/) i++
       else if (cmd == "mktemp" && w == "-p") { p = WT[i + 1]; i++ }
       else if (cmd == "sqlite3" && w ~ /^-(cmd|separator|nullvalue|newline|init)$/) i++
-      else if (cmd == "curl" && w ~ /^-(o|-output)$/) { write(line, WT[i + 1], "curl into"); i++ }
-      else if (cmd == "curl" && w ~ /^-[A-Za-z]*[HdXAeu]$/) i++
+      else if (cmd == "curl" && w == "--output") { write(line, WT[i + 1], "curl into"); i++ }
+      else if (cmd == "curl" && w ~ /^--output=/) write(line, substr(unquote(WT[i]), 10), "curl into")
+      else if (cmd == "curl" && w ~ /^-[A-Za-z]/) i += cluster(line, w, i, "oHdXAeuwTbcEKmrxyYzC", "curl into")
+      else if (cmd == "sort" && w ~ /^--output=/) write(line, substr(unquote(WT[i]), 10), "sort -o into")
+      else if (cmd == "sort" && w ~ /^-[A-Za-z]/) i += cluster(line, w, i, "oktTS", "sort -o into")
       else if (cmd == "wget" && w ~ /^-O/) { t = (w == "-O") ? WT[++i] : substr(WT[i], 3); if (unquote(t) != "-") write(line, t, "wget into") }
       else if (cmd == "tar" && w ~ /^-[Cf]$/) { if (w == "-C") p = WT[i + 1]; else t = WT[i + 1]; i++ }
       continue
     }
     no++; ops[no] = WT[i]
   }
+  if (XARGS && cmd ~ /^(mkdir|tee|touch|rm|rmdir|chmod|mv|cp|ln|install|gzip|gunzip)$/) write(line, "(operands xargs reads)", cmd " through xargs")
+  if (XARGS && cmd == "sed" && (flags ~ / -i/ || flags ~ / -[A-Za-z]*i/)) write(line, "(operands xargs reads)", "sed -i through xargs")
+  if (cmd == "sort") return
   if (cmd ~ /^(mkdir|tee|touch|rm|rmdir)$/) { for (i = 1; i <= no; i++) write(line, ops[i], cmd); return }
   if (cmd == "chmod") { for (i = 2; i <= no; i++) write(line, ops[i], cmd); return }
   if (cmd ~ /^(mv|cp|ln|install)$/) { if (no) write(line, ops[no], cmd " into"); return }
@@ -611,6 +672,24 @@ function operands(cmd, k, n,   i, w, ops, no, last, t, p, line, flags) {
   if (cmd == "fields_apply") { if (no >= 4) write(line, ops[4], cmd " into"); return }
 }
 
+# cluster: an option cluster w (word i) whose first letter taking an argument, among letters,
+# takes the rest of the cluster or else the next word; o names the output, a write; the words
+# consumed past w are returned
+function cluster(line, w, i, letters, what,   j, n, c, t) {
+  n = length(w)
+  for (j = 2; j <= n; j++) {
+    c = substr(w, j, 1)
+    if (!index(letters, c)) continue
+    if (c == "o") {
+      t = unquote(WT[i]); t = substr(t, index(t, "o") + 1)
+      if (t == "") { write(line, WT[i + 1], what); return 1 }
+      write(line, t, what); return 0
+    }
+    return j == n
+  }
+  return 0
+}
+
 # redirects: every redirect operator in M[a, b) with its target word
 function redirects(a, b,   k, c, op, t, rest, n, q, line) {
   for (k = a; k < b; k++) {
@@ -620,7 +699,11 @@ function redirects(a, b,   k, c, op, t, rest, n, q, line) {
     op = ">"
     if (substr(M, k + 1, 1) == ">") op = ">>"
     else if (substr(M, k + 1, 1) == "|") op = ">|"
-    else if (substr(M, k + 1, 1) == "&") { k++; continue }
+    else if (substr(M, k + 1, 1) == "&") {
+      rest = substr(M, k + 2); match(rest, /^[ \t]*/)
+      if (k + 2 + RLENGTH >= b || substr(rest, RLENGTH + 1, 1) ~ /[0-9-]/) { k++; continue }
+      op = ">&"
+    }
     if (substr(M, k - 1, 1) == "<") op = "<>"
     line = lineof(k)
     q = k + length(op) - (op == "<>" ? 1 : 0)
@@ -846,7 +929,7 @@ function awk_word(x,   out, c, k, n, e, f, a, m, i, p) {
   out = ""; n = length(x)
   for (k = 1; k <= n; k++) {
     c = substr(x, k, 1)
-    if (c == "\"") { e = str_end(x, k); out = out substr(x, k + 1, e - k - 1); k = e; continue }
+    if (c == "\"") { e = str_end(x, k); out = out (DQ ? shell_refs(substr(x, k + 1, e - k - 1)) : substr(x, k + 1, e - k - 1)); k = e; continue }
     if (substr(x, k) ~ /^ENVIRON\[/) {
       e = index(substr(x, k), "]")
       out = out "${" substr(x, k + 9, e - 11) "}"; k += e - 1; continue
@@ -856,6 +939,17 @@ function awk_word(x,   out, c, k, n, e, f, a, m, i, p) {
     out = out c
   }
   return out
+}
+
+# shell_refs: a string literal of an awk program the shell hands awk in double quotes, its
+# $NAME expansions the shell's, written ${NAME} so they are judged as the shell's variables
+function shell_refs(s,   out) {
+  out = ""
+  while (match(s, /\$[A-Za-z_][A-Za-z0-9_]*/)) {
+    out = out substr(s, 1, RSTART - 1) "${" substr(s, RSTART + 1, RLENGTH - 1) "}"
+    s = substr(s, RSTART + RLENGTH)
+  }
+  return out s
 }
 
 # cmd_text: an awk command expression (a pipe's or system()'s) read by the shell rules; a
@@ -889,6 +983,8 @@ function commands(   i, j, n, sS, sF) {
 
 function parse_ts(   i, s, d, t) {
   U = ""; UN = 0; d = 0
+  split("", TSNS); split("", TSNAMED); TSNS["fs"] = 1; TSNS["fsp"] = 1
+  for (i = 1; i <= NL; i++) ts_import(PL[i])
   for (i = 1; i <= NL; i++) {
     s = PL[i]
     if (UN == 0 && (s ~ /^[ \t]*(\/\/|\*|\/\*)/ || s ~ /^[ \t]*$/)) continue
@@ -919,16 +1015,52 @@ function ts_args(T, k,   n, d, c, start, e, q) {
   return n
 }
 
-function ts_scan(T,   s, p, k, call, n, name, line, w, i, a, m) {
+# ts_import: the names one import line of node:fs or fs/promises binds: a namespace or a
+# default import, a require, and each named import under its local name
+function ts_import(s,   t, n, parts, j, a, b) {
+  if (s !~ /['"](node:)?fs(\/promises)?['"]/) return
+  if (match(s, /\*[ \t]*as[ \t]+[A-Za-z_$][A-Za-z0-9_$]*/)) { t = substr(s, RSTART, RLENGTH); sub(/.*[ \t]/, "", t); TSNS[t] = 1 }
+  if (match(s, /import[ \t]+[A-Za-z_$][A-Za-z0-9_$]*[ \t]*(,|from[ \t])/)) { t = substr(s, RSTART + 6, RLENGTH - 6); sub(/^[ \t]+/, "", t); sub(/[ \t]*(,|from[ \t])$/, "", t); if (t != "type") TSNS[t] = 1 }
+  if (match(s, /(const|let|var)[ \t]+[A-Za-z_$][A-Za-z0-9_$]*[ \t]*=[ \t]*require/)) { t = substr(s, RSTART, RLENGTH); sub(/^(const|let|var)[ \t]+/, "", t); sub(/[ \t]*=.*$/, "", t); TSNS[t] = 1 }
+  if (match(s, /\{[^}]*\}/)) {
+    n = split(substr(s, RSTART + 1, RLENGTH - 2), parts, /,/)
+    for (j = 1; j <= n; j++) {
+      a = parts[j]; sub(/^[ \t]+/, "", a); sub(/[ \t]+$/, "", a); sub(/^type[ \t]+/, "", a)
+      if (a == "") continue
+      b = a
+      if (match(a, /[ \t]+as[ \t]+/)) { b = substr(a, RSTART + RLENGTH); a = substr(a, 1, RSTART - 1) }
+      TSNAMED[b] = a
+    }
+  }
+}
+
+# ts_fs: whether callee c (a dotted name) is an fs write: a name of FSW through an fs namespace
+# (fs.x, fs.promises.x, or a namespace an import binds), a local name a named import of fs
+# binds, or a bare synchronous name; TSF is set to the fs function's own name
+function ts_fs(c,   m, parts) {
+  m = split(c, parts, /\./)
+  if (m == 1) {
+    TSF = (c in TSNAMED) ? TSNAMED[c] : c
+    return index(FSW, " " TSF " ") && ((c in TSNAMED) || TSF ~ /Sync$/ || TSF == "createWriteStream")
+  }
+  TSF = parts[m]
+  if (!(parts[1] in TSNS) || !(m == 2 || (m == 3 && parts[2] == "promises"))) return 0
+  return index(FSW, " " TSF " ") > 0
+}
+
+function ts_scan(T,   s, p, k, call, n, name, line, w, i, a, m, isnew) {
   s = T
-  while (match(s, /(new DatabaseSync|((fs|fsp)\.(promises\.)?)?(writeFileSync|appendFileSync|mkdirSync|mkdtempSync|renameSync|copyFileSync|cpSync|rmSync|unlinkSync|rmdirSync|symlinkSync|createWriteStream)|(fs|fsp)\.(promises\.)?(writeFile|appendFile|mkdir|mkdtemp|rename|copyFile|cp|rm|unlink|rmdir|symlink)|execFileSync|execFile|spawnSync|spawn)[ \t]*\(/)) {
+  while (match(s, /(new[ \t]+)?[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*[ \t]*\(/)) {
     p = length(T) - length(s) + RSTART
     call = substr(s, RSTART, RLENGTH); sub(/[ \t]*\($/, "", call)
     k = p + RLENGTH - 1
     s = substr(s, RSTART + RLENGTH)
-    if (p > 1 && substr(T, p - 1, 1) ~ /[A-Za-z0-9_$.]/ && call !~ /^(fs|fsp)\./) continue
+    if (p > 1 && substr(T, p - 1, 1) ~ /[A-Za-z0-9_$.]/) continue
+    isnew = (call ~ /^new[ \t]/); sub(/^new[ \t]+/, "", call)
+    name = call; sub(/^.*\./, "", name)
+    if (isnew) { if (name != "DatabaseSync") continue }
+    else if (name !~ /^(execFileSync|execFile|spawnSync|spawn)$/) { if (!ts_fs(call)) continue; name = TSF }
     n = ts_args(T, k)
-    name = call; sub(/^.*\./, "", name); sub(/^new /, "", name)
     line = lineof(p)
     if (name ~ /^(execFileSync|execFile|spawnSync|spawn)$/) {
       if (n < 2 || TA[1] !~ /[Ss]qlite/) continue
@@ -942,7 +1074,8 @@ function ts_scan(T,   s, p, k, call, n, name, line, w, i, a, m) {
       continue
     }
     if (n < 1) continue
-    if (name ~ /^(renameSync|copyFileSync|cpSync|symlinkSync|rename|copyFile|cp|symlink)$/) { if (n >= 2) write(line, ts_word(TA[2]), name " into"); continue }
+    if (name ~ /^(renameSync|copyFileSync|cpSync|symlinkSync|linkSync|rename|copyFile|cp|symlink|link)$/) { if (n >= 2) write(line, ts_word(TA[2]), name " into"); continue }
+    if (name ~ /^open(Sync)?$/ && (n < 2 || ts_word(TA[2]) ~ /^(r|rs|sr)$/)) continue
     if (name == "DatabaseSync" && ts_word(TA[1]) == ":memory:") continue
     write(line, ts_word(TA[1]), name)
   }

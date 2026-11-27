@@ -27,8 +27,9 @@
 #   tmp-fallback  the system temp fallback scratch takes when the drawer cannot hold it, on its
 #                 assignment lines alone
 #
-# A dead entry (a name or a line the census never meets) reads red, so an edit to a listed
-# line or a removed writer updates this table in the same change.
+# Each allow list line allows one line of its text, so two lines of one text in a file take two
+# entries. A dead entry (a name or a line the census never meets) reads red, so an edit to a
+# listed line or a removed writer updates this table in the same change.
 
 # names
 scratch	base/.contexture/config-lib	DL_FLAG	assigned $DL_SCR/stopped
@@ -336,6 +337,7 @@ backups	plugins/storage-sqlite/.contexture/extensions/storage/drivers/sqlite/hoo
 
 # config
 config	base/.contexture/config-lib	the configuration library's locked writer: its lock, its temp beside the configuration, and the move onto it	            if rm -rf "$cwl_lock" 2>/dev/null; then
+config	base/.contexture/config-lib	the configuration library's locked writer: its lock, its temp beside the configuration, and the move onto it	            if rm -rf "$cwl_lock" 2>/dev/null; then
 config	base/.contexture/config-lib	the configuration library's locked writer: its lock, its temp beside the configuration, and the move onto it	          }' < /dev/null > "$cwl_tmp" 2>/dev/null || {
 config	base/.contexture/config-lib	the configuration library's locked writer: its lock, its temp beside the configuration, and the move onto it	        printf '%s: %s\n' "$cwl_key" "$cwl_val" > "$cwl_tmp" 2>/dev/null || {
 config	base/.contexture/config-lib	the configuration library's locked writer: its lock, its temp beside the configuration, and the move onto it	        rm -f "$cwl_conf" 2>/dev/null || {
@@ -390,6 +392,7 @@ graph	plugins/ast-doc-graph/.contexture/extensions/modules/ast-doc-graph/extract
 graph	plugins/ast-doc-graph/.contexture/extensions/modules/ast-doc-graph/extractors/ts/extract-ts.ts	the graph database and its caller owned cache folder, derived and rebuilt from code and the corpus	    fs.writeFileSync(outSymbolsPath, symbolsJsonl ? symbolsJsonl + '\n' : '', 'utf8');
 graph	plugins/ast-doc-graph/.contexture/extensions/modules/ast-doc-graph/loader/index-graph.ts	the graph database and its caller owned cache folder, derived and rebuilt from code and the corpus	      const res = execFileSync(sqliteBin, [dbPath, '-json', sql], { encoding: 'utf8', maxBuffer: Infinity });
 graph	plugins/ast-doc-graph/.contexture/extensions/modules/ast-doc-graph/loader/index-graph.ts	the graph database and its caller owned cache folder, derived and rebuilt from code and the corpus	      execFileSync(sqliteBin, ['-bail', dbPath], {
+graph	plugins/ast-doc-graph/.contexture/extensions/modules/ast-doc-graph/loader/index-graph.ts	the graph database and its caller owned cache folder, derived and rebuilt from code and the corpus	      execFileSync(sqliteBin, ['-bail', dbPath], {
 graph	plugins/ast-doc-graph/.contexture/extensions/modules/ast-doc-graph/loader/index-graph.ts	the graph database and its caller owned cache folder, derived and rebuilt from code and the corpus	    const db = new DatabaseSync(dbPath);
 graph	plugins/ast-doc-graph/.contexture/extensions/modules/ast-doc-graph/loader/index-graph.ts	the graph database and its caller owned cache folder, derived and rebuilt from code and the corpus	    fs.unlinkSync(dbPath);
 graph	plugins/ast-doc-graph/.contexture/extensions/modules/ast-doc-graph/loader/index-graph.ts	the graph database and its caller owned cache folder, derived and rebuilt from code and the corpus	    if (fs.existsSync(dbPath + '-shm')) fs.unlinkSync(dbPath + '-shm');
@@ -435,6 +438,7 @@ overlay	base/.contexture/package-install	the package installer's overlay: the ex
 overlay	base/.contexture/package-install	the package installer's overlay: the extension tree, the install record, the stashed uninstall hook, the kept declarations, and the install stage with its backups	mkdir -p "$stage" || rollback "cannot create the install staging folder"
 overlay	base/.contexture/package-install	the package installer's overlay: the extension tree, the install record, the stashed uninstall hook, the kept declarations, and the install stage with its backups	mkdir -p "$stage/.backup"
 overlay	base/.contexture/package-install	the package installer's overlay: the extension tree, the install record, the stashed uninstall hook, the kept declarations, and the install stage with its backups	mv -f "$stage/.record" "$state_file" || rollback "cannot write the install record"
+overlay	base/.contexture/package-install	the package installer's overlay: the extension tree, the install record, the stashed uninstall hook, the kept declarations, and the install stage with its backups	rm -rf "$stage"
 overlay	base/.contexture/package-install	the package installer's overlay: the extension tree, the install record, the stashed uninstall hook, the kept declarations, and the install stage with its backups	rm -rf "$stage"
 overlay	base/.contexture/package-install	the package installer's overlay: the extension tree, the install record, the stashed uninstall hook, the kept declarations, and the install stage with its backups	} > "$stage/.record" || rollback "cannot write the install record"
 overlay	base/.contexture/package-uninstall	the package uninstaller's overlay: the recorded files, the install record, the stashed uninstall hook, and the kept declarations	      [ -d "$kept_stage/$_k.old" ] && mv "$kept_stage/$_k.old" "$kept_root/$_k" 2>/dev/null
